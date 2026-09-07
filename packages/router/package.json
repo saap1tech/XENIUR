@@ -1,0 +1,17 @@
+{
+  "name": "@xeniur/router",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Capability Router \u2014 deterministic first, cheap model second, expensive generation last.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@xeniur/core": "*",
+    "@xeniur/graph": "*",
+    "@xeniur/permissions": "*",
+    "@xeniur/providers": "*"
+  }
+}

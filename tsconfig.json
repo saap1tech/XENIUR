@@ -1,0 +1,51 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@xeniur/core": [
+        "packages/core/src/index.ts"
+      ],
+      "@xeniur/graph": [
+        "packages/graph/src/index.ts"
+      ],
+      "@xeniur/tasks": [
+        "packages/tasks/src/index.ts"
+      ],
+      "@xeniur/permissions": [
+        "packages/permissions/src/index.ts"
+      ],
+      "@xeniur/sessions": [
+        "packages/sessions/src/index.ts"
+      ],
+      "@xeniur/providers": [
+        "packages/providers/src/index.ts"
+      ],
+      "@xeniur/router": [
+        "packages/router/src/index.ts"
+      ],
+      "@xeniur/brain": [
+        "packages/brain/src/index.ts"
+      ],
+      "@xeniur/hands": [
+        "packages/hands/src/index.ts"
+      ],
+      "@xeniur/sensemaking": ["packages/sensemaking/src/index.ts"],
+      "@xeniur/validators": ["packages/validators/src/index.ts"],
+      "@xeniur/ui": [
+        "packages/ui/src/index.ts"
+      ]
+    }
+  },
+  "include": [
+    "packages/*/src/**/*",
+    "apps/desktop/src/**/*",
+    "scripts/**/*",
+    "*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "**/dist",
+    "**/out"
+  ]
+}

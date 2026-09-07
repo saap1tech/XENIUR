@@ -1,0 +1,228 @@
+{
+  "$comment": [
+    "UNVERIFIED PRICING. Every model id, price and credit cost below was taken from the",
+    "XENIUR spec and has NOT been confirmed against a live provider pricing page.",
+    "Confirm each one before enabling a cloud provider and spending real credit.",
+    "Nothing in this file is read at import time; the Capability Router loads it at runtime,",
+    "so changing a model id or price never requires a code change."
+  ],
+  "brain": {
+    "default": "mock",
+    "escalateAfterFailures": 2,
+    "providers": {
+      "mock": {
+        "enabled": true,
+        "kind": "deterministic"
+      },
+      "openai": {
+        "enabled": false,
+        "requiresKey": "OPENAI_API_KEY",
+        "model": "gpt-5.6-luna",
+        "modelVerified": false,
+        "escalationModel": null,
+        "maxOutputTokens": 1200,
+        "price": {
+          "$comment": "Unverified is not free. XENIUR refuses to call a model whose price nobody has checked; set unverified to false and verifiedOn to the date you checked it against the provider's published pricing.",
+          "unverified": true,
+          "verifiedOn": null,
+          "inputPerMTok": 0.2,
+          "outputPerMTok": 1.2,
+          "currency": "USD"
+        }
+      }
+    },
+    "$comment": [
+      "The Brain is built and switched off. Two independent gates each stop a call on their",
+      "own: the provider must be enabled here, and its price must be marked verified. Both",
+      "are closed, and this milestone handles no API key at all."
+    ]
+  },
+  "capabilities": {
+    "think": {
+      "order": [
+        "mock",
+        "openai"
+      ]
+    },
+    "image": {
+      "order": [
+        "local.sharp",
+        "mock.image",
+        "openai.image"
+      ]
+    },
+    "video": {
+      "order": [
+        "local.blender",
+        "local.ffmpeg",
+        "mock.video",
+        "runway"
+      ]
+    },
+    "to3D": {
+      "order": [
+        "local.blender",
+        "mock.mesh",
+        "meshy"
+      ]
+    },
+    "code": {
+      "order": [
+        "local.template",
+        "mock.code",
+        "openai"
+      ]
+    },
+    "browser": {
+      "order": [
+        "local.playwright"
+      ]
+    },
+    "transform": {
+      "order": [
+        "local.import",
+        "local.sharp",
+        "local.ffmpeg",
+        "local.blender"
+      ]
+    },
+    "export": {
+      "order": [
+        "local.package",
+        "local.blender",
+        "local.ffmpeg",
+        "local.sharp"
+      ]
+    }
+  },
+  "providers": {
+    "local.sharp": {
+      "enabled": true,
+      "kind": "deterministic",
+      "cost": {
+        "usd": 0
+      }
+    },
+    "local.ffmpeg": {
+      "enabled": true,
+      "kind": "deterministic",
+      "cost": {
+        "usd": 0
+      },
+      "binary": "/opt/homebrew/bin/ffmpeg"
+    },
+    "local.blender": {
+      "enabled": true,
+      "kind": "deterministic",
+      "cost": {
+        "usd": 0
+      },
+      "binary": "/Applications/Blender.app/Contents/MacOS/Blender",
+      "worker": "blender/xeniur_worker.py"
+    },
+    "local.playwright": {
+      "enabled": true,
+      "kind": "deterministic",
+      "cost": {
+        "usd": 0
+      }
+    },
+    "local.template": {
+      "enabled": true,
+      "kind": "deterministic",
+      "cost": {
+        "usd": 0
+      }
+    },
+    "local.docker": {
+      "enabled": false,
+      "kind": "deterministic",
+      "cost": {
+        "usd": 0
+      },
+      "unavailableReason": "docker not found"
+    },
+    "mock.image": {
+      "enabled": true,
+      "kind": "mock",
+      "cost": {
+        "usd": 0
+      }
+    },
+    "mock.mesh": {
+      "enabled": true,
+      "kind": "mock",
+      "cost": {
+        "usd": 0
+      }
+    },
+    "mock.video": {
+      "enabled": true,
+      "kind": "mock",
+      "cost": {
+        "usd": 0
+      }
+    },
+    "mock.code": {
+      "enabled": true,
+      "kind": "mock",
+      "cost": {
+        "usd": 0
+      }
+    },
+    "openai.image": {
+      "enabled": false,
+      "kind": "generative",
+      "requiresKey": "OPENAI_API_KEY",
+      "model": "gpt-image-1",
+      "modelVerified": false,
+      "price": {
+        "unverified": true,
+        "perImageUsd": null
+      }
+    },
+    "meshy": {
+      "enabled": false,
+      "kind": "generative",
+      "requiresKey": "MESHY_API_KEY",
+      "model": "image-to-3d",
+      "modelVerified": false,
+      "price": {
+        "unverified": true,
+        "creditsPerGeneration": 20,
+        "usdPerCredit": null
+      }
+    },
+    "runway": {
+      "enabled": false,
+      "kind": "generative",
+      "requiresKey": "RUNWAY_API_KEY",
+      "model": "gen4_turbo",
+      "modelVerified": false,
+      "price": {
+        "unverified": true,
+        "usdPerCredit": 0.01
+      }
+    },
+    "local.import": {
+      "enabled": true,
+      "kind": "deterministic",
+      "cost": {
+        "usd": 0
+      }
+    },
+    "local.package": {
+      "enabled": true,
+      "kind": "deterministic",
+      "cost": {
+        "usd": 0
+      }
+    }
+  },
+  "budget": {
+    "$comment": "Hard stops. The router refuses a generative call that would exceed these.",
+    "perActionUsdMax": 1.0,
+    "perTaskUsdMax": 5.0,
+    "totalUsdMax": 100.0
+  }
+}

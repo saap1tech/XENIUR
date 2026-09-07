@@ -1,0 +1,18 @@
+{
+  "name": "@xeniur/ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The twelve fixed XENIUR components and the Scene JSON renderer.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@react-three/fiber": "^8.17.10",
+    "@xeniur/core": "*",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.170.0"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@xeniur/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "XENIUR desktop shell (Electron).",
+  "main": "./out/main/index.js",
+  "dependencies": {
+    "@xeniur/brain": "*",
+    "@xeniur/core": "*",
+    "@xeniur/graph": "*",
+    "@xeniur/hands": "*",
+    "@xeniur/permissions": "*",
+    "@xeniur/providers": "*",
+    "@xeniur/router": "*",
+    "@xeniur/sessions": "*",
+    "@xeniur/tasks": "*",
+    "@xeniur/ui": "*"
+  }
+}

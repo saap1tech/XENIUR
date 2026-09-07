@@ -1,0 +1,17 @@
+{
+  "name": "@xeniur/hands",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Guarded Playwright automation, exposed as six high-level functions.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@xeniur/core": "*",
+    "@xeniur/permissions": "*",
+    "@xeniur/sessions": "*",
+    "playwright": "^1.49.0"
+  }
+}

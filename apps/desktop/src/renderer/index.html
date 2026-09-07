@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      XENIUR's own interface loads nothing remote: no CDN, no font host, no analytics.
+      Everything it needs is bundled, so the policy can simply be 'self'.
+    -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
+                   img-src 'self' data: blob: xeniur-blob:; media-src 'self' blob: xeniur-blob:;
+                   connect-src 'self' xeniur-blob:; font-src 'self';
+                   object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'" />
+    <title>XENIUR</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

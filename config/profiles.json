@@ -1,0 +1,281 @@
+{
+  "$comment": [
+    "Readiness profiles. Data, not code, so a new one is a JSON edit rather than a release.",
+    "Two kinds: `artifact` profiles decide whether a deliverable is ready to hand over, and",
+    "`action` profiles gate what XENIUR is about to DO \u2014 the Permission Broker refuses a",
+    "guarded tool while its profile is unmet, in the same place it refuses to spend money.",
+    "A profile's `name` may claim only what its `requires` actually measure, and `verifies`",
+    "says in one sentence what it establishes and what it does not. A name like",
+    "'Ready for Godot' has to be earned by a validator that really imports into Godot;",
+    "until then the honest name is the one that describes the measurements."
+  ],
+  "profiles": [
+    {
+      "id": "godot",
+      "name": "Passes mesh checks for Godot import",
+      "gates": "artifact",
+      "description": "A game-ready mesh a Godot project can import without cleanup.",
+      "verifies": "That a GLB occupies the Godot delivery role, that its mesh is manifold, and that it is under 50,000 polygons. No Godot import is run, and nothing here checks UVs, materials, scale or animation.",
+      "requires": [
+        {
+          "form": {
+            "role": "delivery.godot",
+            "modality": "mesh",
+            "format": "glb"
+          }
+        },
+        {
+          "check": {
+            "validator": "mesh.manifold",
+            "status": "pass",
+            "formRole": "delivery.godot"
+          }
+        },
+        {
+          "check": {
+            "validator": "mesh.polycount",
+            "status": "pass",
+            "field": "polygons",
+            "max": 50000,
+            "formRole": "delivery.godot"
+          }
+        },
+        {
+          "fresh": true
+        }
+      ]
+    },
+    {
+      "id": "print3d",
+      "name": "Passes print geometry checks",
+      "gates": "artifact",
+      "description": "A watertight solid at a stated real-world size, which a slicer will accept.",
+      "verifies": "That an STL exists, that its geometry is watertight and manifold, and that a real-world size is recorded. Wall thickness, overhangs, supports and slicer behaviour are not measured.",
+      "requires": [
+        {
+          "form": {
+            "role": "print.stl",
+            "modality": "mesh",
+            "format": "stl"
+          }
+        },
+        {
+          "check": {
+            "validator": "mesh.watertight",
+            "status": "pass",
+            "formRole": "print.stl"
+          }
+        },
+        {
+          "check": {
+            "validator": "mesh.manifold",
+            "status": "pass",
+            "formRole": "print.stl"
+          }
+        },
+        {
+          "check": {
+            "validator": "object.units",
+            "status": "pass"
+          }
+        },
+        {
+          "fresh": true
+        }
+      ]
+    },
+    {
+      "id": "web",
+      "name": "Passes web weight checks",
+      "gates": "artifact",
+      "description": "Assets sized and encoded for the browser, without oversized downloads.",
+      "verifies": "That a web delivery form exists and is under 500 KB. Format support, colour profile, responsive sizes and load performance are not measured.",
+      "requires": [
+        {
+          "form": {
+            "role": "delivery.web"
+          }
+        },
+        {
+          "check": {
+            "validator": "image.filesize",
+            "status": "pass",
+            "field": "bytes",
+            "max": 512000,
+            "formRole": "delivery.web"
+          }
+        },
+        {
+          "fresh": true
+        }
+      ]
+    },
+    {
+      "id": "retail",
+      "name": "Passes print resolution and contrast checks",
+      "gates": "artifact",
+      "description": "Print-quality imagery with room to crop, and a legible contrast ratio.",
+      "verifies": "That a retail image exists, is at least 2000 px wide, and meets a contrast threshold. Colour space, bleed, ink coverage and how it looks on paper are not measured.",
+      "requires": [
+        {
+          "form": {
+            "role": "delivery.retail",
+            "modality": "image"
+          }
+        },
+        {
+          "check": {
+            "validator": "image.dimensions",
+            "status": "pass",
+            "field": "width",
+            "min": 2000,
+            "formRole": "delivery.retail"
+          }
+        },
+        {
+          "check": {
+            "validator": "image.contrast",
+            "status": "pass",
+            "formRole": "delivery.retail"
+          }
+        },
+        {
+          "fresh": true
+        }
+      ]
+    },
+    {
+      "id": "publication",
+      "name": "Passes figure resolution and origin checks",
+      "gates": "artifact",
+      "description": "A figure a journal will accept: high resolution, and honest about its origin.",
+      "verifies": "That a figure exists at 1800 px or wider, that no mock output is in its lineage, and that some of its material came from a person. Fonts, colour space, vector output and any journal's own requirements are not measured.",
+      "requires": [
+        {
+          "form": {
+            "role": "delivery.figure",
+            "modality": "image"
+          }
+        },
+        {
+          "check": {
+            "validator": "image.dimensions",
+            "status": "pass",
+            "field": "width",
+            "min": 1800,
+            "formRole": "delivery.figure"
+          }
+        },
+        {
+          "check": {
+            "validator": "provenance.no-mock",
+            "status": "pass"
+          }
+        },
+        {
+          "check": {
+            "validator": "humanSignal.present",
+            "status": "pass"
+          }
+        },
+        {
+          "fresh": true
+        }
+      ]
+    },
+    {
+      "id": "appstore",
+      "name": "Has store icon and project files",
+      "gates": "artifact",
+      "description": "A runnable build with the icon sizes a store listing demands.",
+      "verifies": "That a code project form and a 1024 px icon are both present. No bundle is built or validated, and nothing here reflects any store's review rules.",
+      "requires": [
+        {
+          "form": {
+            "role": "code.project",
+            "modality": "code"
+          }
+        },
+        {
+          "form": {
+            "role": "delivery.icon",
+            "modality": "image"
+          }
+        },
+        {
+          "check": {
+            "validator": "image.dimensions",
+            "status": "pass",
+            "field": "width",
+            "min": 1024,
+            "formRole": "delivery.icon"
+          }
+        },
+        {
+          "fresh": true
+        }
+      ]
+    },
+    {
+      "id": "client",
+      "name": "No mock output, nothing stale",
+      "gates": "artifact",
+      "description": "Nothing stale, nothing standing in for real work, and something of yours in it.",
+      "verifies": "That nothing in the lineage is placeholder output, that some material came from a person, and that every step is up to date with its inputs. Whether the work is any good is your judgement, not a measurement.",
+      "requires": [
+        {
+          "check": {
+            "validator": "provenance.no-mock",
+            "status": "pass"
+          }
+        },
+        {
+          "check": {
+            "validator": "humanSignal.present",
+            "status": "pass"
+          }
+        },
+        {
+          "fresh": true
+        }
+      ]
+    },
+    {
+      "id": "send",
+      "name": "Ready to Send",
+      "gates": "action",
+      "tools": [
+        "browser.submit",
+        "doc.write"
+      ],
+      "description": "Guards anything that leaves for a person. Nothing half-built goes out.",
+      "verifies": "That no placeholder output is in the lineage and nothing is out of date. It cannot tell whether the content is correct or appropriate for its recipient.",
+      "requires": [
+        {
+          "check": {
+            "validator": "provenance.no-mock",
+            "status": "pass"
+          }
+        },
+        {
+          "fresh": true
+        }
+      ]
+    },
+    {
+      "id": "purchase",
+      "name": "Ready to Purchase",
+      "gates": "action",
+      "tools": [
+        "browser.submit"
+      ],
+      "description": "Guards spending. A purchase decided from stale information is a mistake waiting to happen.",
+      "verifies": "That everything this decision rests on is up to date with its inputs. It says nothing about price, seller or whether the purchase is a good idea.",
+      "requires": [
+        {
+          "fresh": true
+        }
+      ]
+    }
+  ]
+}

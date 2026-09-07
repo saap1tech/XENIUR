@@ -1,0 +1,16 @@
+{
+  "name": "@xeniur/tasks",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SQLite-backed persistent worker queue and task event bus.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@xeniur/core": "*",
+    "@xeniur/graph": "*",
+    "better-sqlite3": "^11.6.0"
+  }
+}

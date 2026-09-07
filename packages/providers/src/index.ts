@@ -1,0 +1,18 @@
+export * from "./types.js";
+export { loadProvidersConfig, keyPresent } from "./config.js";
+export type { ProvidersConfig, ProviderEntry } from "./config.js";
+export { ProviderRegistry, ALL_PROVIDERS } from "./registry.js";
+export { sharpProvider } from "./local/sharp.js";
+export { ffmpegProvider } from "./local/ffmpeg.js";
+export { blenderProvider, runBlender } from "./local/blender.js";
+export type { BlenderJob, BlenderResult } from "./local/blender.js";
+export { templateProvider, parseProject, serialiseProject, emptyProject } from "./local/template.js";
+export type { VirtualProject } from "./local/template.js";
+export { dockerProvider, dockerAvailable } from "./local/docker.js";
+export { importProvider, kindOf } from "./local/import.js";
+export { mockImageProvider } from "./mock/image.js";
+export { mockMeshProvider } from "./mock/mesh.js";
+export { mockVideoProvider } from "./mock/video.js";
+export { openaiImageProvider, meshyProvider, runwayProvider } from "./cloud/stubs.js";
+export { run, binaryExists } from "./local/exec.js";
+export { probeBinary, probeBlender, probeFfmpeg, probeDocker, clearProbeCache } from "./local/probe.js";

@@ -1,0 +1,16 @@
+{
+  "name": "@xeniur/validators",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local deterministic validators: evidence about a form, never an opinion.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@xeniur/core": "*",
+    "@xeniur/providers": "*",
+    "sharp": "^0.33.5"
+  }
+}

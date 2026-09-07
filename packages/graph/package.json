@@ -1,0 +1,16 @@
+{
+  "name": "@xeniur/graph",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The canonical XENIUR Object Graph: SQLite, representation lineage, content-addressed blobs.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@xeniur/core": "*",
+    "better-sqlite3": "^11.6.0",
+    "zod": "^3.23.8"
+  }
+}

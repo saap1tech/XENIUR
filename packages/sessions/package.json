@@ -1,0 +1,15 @@
+{
+  "name": "@xeniur/sessions",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SessionBroker \u2014 identity as a scoped, revocable capability.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@xeniur/core": "*",
+    "playwright": "^1.49.0"
+  }
+}
