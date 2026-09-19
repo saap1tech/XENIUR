@@ -14,6 +14,10 @@ import {
   ImpactReview, CausalPath, DecisionCard, SourceViewer, PreviewCard, InspectorQuestions,
   CompareForms, ThinkingTable, IdeaDrawer,
 } from "./components/workspace.jsx";
+import {
+  ObjectOrbit, AffordanceRing, SpatialCanvas, ConstraintStrip, RangeMeter, PriorityBalance,
+  PeopleChips, Calendar, SchematicMap, ChoiceCards, Stepper, EvidenceMeter, EmptySlot, ReviewSheet,
+} from "./components/visual.jsx";
 
 export type LeafProps = { node: never; bindings: SceneBindings };
 
@@ -31,6 +35,8 @@ export const COMPONENT_REGISTRY: Readonly<Record<Exclude<SceneComponentName, "Ca
   ThinkingMap: ThinkingMapView, IngredientPanel, FocusView,
   ImpactReview, CausalPath, DecisionCard, SourceViewer, PreviewCard, InspectorQuestions,
   CompareForms, ThinkingTable, IdeaDrawer,
+  ObjectOrbit, AffordanceRing, SpatialCanvas, ConstraintStrip, RangeMeter, PriorityBalance,
+  PeopleChips, Calendar, SchematicMap, ChoiceCards, Stepper, EvidenceMeter, EmptySlot, ReviewSheet,
 };
 
 export interface Refusal { id: string; component: string; reason: string; }

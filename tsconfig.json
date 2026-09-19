@@ -3,6 +3,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
+      "@/*": ["apps/desktop/src/renderer/*"],
       "@xeniur/core": [
         "packages/core/src/index.ts"
       ],
@@ -34,6 +35,12 @@
       "@xeniur/validators": ["packages/validators/src/index.ts"],
       "@xeniur/ui": [
         "packages/ui/src/index.ts"
+      ],
+      "@xeniur/grammar": [
+        "packages/grammar/src/index.ts"
+      ],
+      "@xeniur/capabilities": [
+        "packages/capabilities/src/index.ts"
       ]
     }
   },

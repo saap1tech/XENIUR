@@ -9,6 +9,7 @@
     "@xeniur/brain": "*",
     "@xeniur/core": "*",
     "@xeniur/graph": "*",
+    "@xeniur/grammar": "*",
     "@xeniur/hands": "*",
     "@xeniur/permissions": "*",
     "@xeniur/providers": "*",

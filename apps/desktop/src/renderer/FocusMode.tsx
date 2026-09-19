@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ObjectDetail, Scene } from "@xeniur/core";
 import { SceneRenderer, type SceneBindings } from "@xeniur/ui";
+import { SituationSchema, compileSituation, layoutScene } from "@xeniur/grammar";
 
 /**
  * Focus Mode.
@@ -46,15 +47,21 @@ export function FocusMode({ objectId, minutes, onExit }: {
     onExitFocus: onExit,
   }), [detail, objectId, bridge, onExit]);
 
-  const scene: Scene | null = detail ? {
-    worldId: detail.state.object.worldId,
-    title: detail.state.properties.title,
-    reason: "focus",
-    root: {
-      id: "root", component: "Canvas", layout: "column",
-      children: [{ id: "focus", component: "FocusView", objectId, minutes } as never],
-    },
-  } : null;
+  const scene: Scene | null = detail ? (() => {
+    const semantic = compileSituation(SituationSchema.parse({
+      worldId: detail.state.object.worldId, title: detail.state.properties.title,
+      goal: { kind: "understand", description: `Focus on ${detail.state.properties.title}` },
+      scope: { worldId: detail.state.object.worldId, objectIds: [objectId], externalContextAllowed: false },
+      meaning: "relationship", interaction: "review", taskStates: ["selected"],
+      focus: { kind: "object", id: objectId, label: detail.state.properties.title },
+      objects: [{ id: objectId, title: detail.state.properties.title,
+        semanticType: detail.state.properties.semanticType,
+        traits: detail.state.properties.traits,
+        formRoles: detail.state.forms.map((form) => form.role), states: ["selected"] }],
+      changes: [], capabilities: [`focus:${minutes}`], constraints: [], choices: [], layer: 1,
+    }));
+    return layoutScene(semantic, { layoutId: semantic.layoutId });
+  })() : null;
 
   const mm = Math.floor(remaining / 60);
   const ss = String(remaining % 60).padStart(2, "0");

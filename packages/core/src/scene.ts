@@ -18,6 +18,10 @@ export const SCENE_COMPONENTS = [
   // The calm workspace
   "ImpactReview", "CausalPath", "DecisionCard", "SourceViewer", "PreviewCard",
   "InspectorQuestions", "CompareForms", "ThinkingTable", "IdeaDrawer",
+  // Visual intent grammar
+  "ObjectOrbit", "AffordanceRing", "SpatialCanvas", "ConstraintStrip", "RangeMeter",
+  "PriorityBalance", "PeopleChips", "Calendar", "SchematicMap", "ChoiceCards", "Stepper",
+  "EvidenceMeter", "EmptySlot", "ReviewSheet",
 ] as const;
 export const SceneComponentSchema = z.enum(SCENE_COMPONENTS);
 export type SceneComponentName = z.infer<typeof SceneComponentSchema>;
@@ -237,6 +241,77 @@ const IdeaDrawerNode = z.object({
   open: z.boolean().default(false),
 }).strict();
 
+const TaskStateSchema = z.enum(["selected", "missing", "changed", "ready", "blocked", "conflict"]);
+const DisclosureLayerSchema = z.number().int().min(1).max(4);
+
+const ObjectOrbitNode = z.object({
+  ...base, component: z.literal("ObjectOrbit"), focusId: UuidSchema,
+  relatedIds: z.array(UuidSchema).default([]),
+  state: TaskStateSchema.default("selected"), disclosure: DisclosureLayerSchema.default(2),
+}).strict();
+
+const AffordanceRingNode = z.object({
+  ...base, component: z.literal("AffordanceRing"), objectId: UuidSchema,
+  proposalIds: z.array(z.string().min(1)).default([]),
+}).strict();
+
+const SpatialEdgeSchema = z.object({
+  id: z.string().min(1), from: UuidSchema, to: UuidSchema,
+  relation: z.string().min(1), state: TaskStateSchema.optional(),
+}).strict();
+
+const SpatialCanvasNode = z.object({
+  ...base, component: z.literal("SpatialCanvas"), focusId: UuidSchema,
+  objectIds: z.array(UuidSchema).default([]), edges: z.array(SpatialEdgeSchema).default([]),
+  disclosure: DisclosureLayerSchema.default(2),
+}).strict();
+
+const ConstraintStripNode = z.object({
+  ...base, component: z.literal("ConstraintStrip"),
+  constraintIds: z.array(UuidSchema).default([]), disclosure: DisclosureLayerSchema.default(2),
+}).strict();
+
+const ConstraintControlNode = <T extends string>(component: T) => z.object({
+  ...base, component: z.literal(component), constraintId: UuidSchema,
+}).strict();
+
+const RangeMeterNode = ConstraintControlNode("RangeMeter");
+const PriorityBalanceNode = ConstraintControlNode("PriorityBalance");
+const PeopleChipsNode = ConstraintControlNode("PeopleChips");
+const CalendarNode = ConstraintControlNode("Calendar");
+const StepperNode = ConstraintControlNode("Stepper");
+
+const SchematicMapNode = z.object({
+  ...base, component: z.literal("SchematicMap"), constraintId: UuidSchema.nullable().default(null),
+  placeIds: z.array(z.string().min(1)).default([]), selectedPlaceId: z.string().nullable().default(null),
+}).strict();
+
+const ChoiceSchema = z.object({
+  id: z.string().min(1), label: z.string().min(1), detail: z.string().default(""),
+  selected: z.boolean().default(false), excluded: z.boolean().default(false),
+  cost: z.number().nonnegative().nullable().default(null),
+}).strict();
+
+const ChoiceCardsNode = z.object({
+  ...base, component: z.literal("ChoiceCards"), choices: z.array(ChoiceSchema).default([]),
+  meaning: z.string().min(1).default("choice"),
+}).strict();
+
+const EvidenceMeterNode = z.object({
+  ...base, component: z.literal("EvidenceMeter"), objectId: UuidSchema,
+  disclosure: DisclosureLayerSchema.default(3),
+}).strict();
+
+const EmptySlotNode = z.object({
+  ...base, component: z.literal("EmptySlot"), meaning: z.string().min(1),
+  label: z.string().min(1),
+}).strict();
+
+const ReviewSheetNode = z.object({
+  ...base, component: z.literal("ReviewSheet"), objectId: UuidSchema,
+  title: z.string().min(1), sections: z.array(z.string().min(1)).default([]),
+}).strict();
+
 const LeafNodeSchema = z.discriminatedUnion("component", [
   ObjectCardNode, InspectorNode, DocumentNode, TimelineNode, TaskProgressNode,
   ComparisonNode, BrowserNode, CodePreviewNode, Viewport3DNode, ApprovalDialogNode,
@@ -246,6 +321,9 @@ const LeafNodeSchema = z.discriminatedUnion("component", [
   ThinkingMapNode, IngredientPanelNode, FocusViewNode,
   ImpactReviewNode, CausalPathNode, DecisionCardNode, SourceViewerNode, PreviewCardNode,
   InspectorQuestionsNode, CompareFormsNode, ThinkingTableNode, IdeaDrawerNode,
+  ObjectOrbitNode, AffordanceRingNode, SpatialCanvasNode, ConstraintStripNode,
+  RangeMeterNode, PriorityBalanceNode, PeopleChipsNode, CalendarNode, SchematicMapNode,
+  ChoiceCardsNode, StepperNode, EvidenceMeterNode, EmptySlotNode, ReviewSheetNode,
 ]);
 export type LeafSceneNode = z.infer<typeof LeafNodeSchema>;
 
@@ -278,6 +356,14 @@ export const SceneSchema = z.object({
   title: z.string().default(""),
   /** Smallest appropriate interface: the Brain justifies why this shape, in one line. */
   reason: z.string().default(""),
+  /** Stable structural identity emitted by the layout compiler. */
+  layoutId: z.string().min(1).optional(),
+  /** A compiled scene always names the durable subject in its centre slot. */
+  focusId: UuidSchema.nullable().optional(),
+  disclosure: DisclosureLayerSchema.optional(),
+  slots: z.array(z.object({
+    id: z.string().min(1), nodeId: z.string().min(1), role: z.enum(["centre", "primary", "supporting"]),
+  }).strict()).optional(),
   root: SceneNodeSchema,
 });
 export type Scene = z.infer<typeof SceneSchema>;

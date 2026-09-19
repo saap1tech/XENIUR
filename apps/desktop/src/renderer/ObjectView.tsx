@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ImpactReport, ObjectDetail, Scene } from "@xeniur/core";
+import type { ConstraintRecord, ImpactReport, ObjectDetail, ProcessProof, Scene } from "@xeniur/core";
 import { SceneRenderer, type SceneBindings } from "@xeniur/ui";
+import { SituationSchema, compileSituation, layoutScene } from "@xeniur/grammar";
+import { BrandMark } from "./BrandMark.js";
+import { ProcessShare } from "./ProcessShare.js";
 
 export interface ObjectViewProps {
   detail: ObjectDetail;
@@ -19,6 +22,14 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: "how", label: "Show how this happened" },
 ];
 
+const TAB_INTENT = {
+  forms: { meaning: "relationship", interaction: "choose", layer: 2, goal: "transform" },
+  compare: { meaning: "relationship", interaction: "compare", layer: 3, goal: "understand" },
+  evidence: { meaning: "relationship", interaction: "review", layer: 3, goal: "validate" },
+  history: { meaning: "sequence", interaction: "connect", layer: 3, goal: "understand" },
+  how: { meaning: "relationship", interaction: "review", layer: 4, goal: "understand" },
+} as const;
+
 /**
  * Everything an Object *is*, in one place.
  *
@@ -33,9 +44,10 @@ const TABS: Array<{ id: Tab; label: string }> = [
 export function ObjectView({ detail, busy, onRefresh, onBack }: ObjectViewProps) {
   const [tab, setTab] = useState<Tab>("forms");
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
-  // Off until somebody asks. A form is a thing you made, not a file you have to manage.
-  const [showFileNames, setShowFileNames] = useState(false);
   const [impact, setImpact] = useState<ImpactReport | null>(null);
+  const [constraints, setConstraints] = useState<ConstraintRecord[]>([]);
+  const [proof, setProof] = useState<ProcessProof | null>(null);
+  const [sharing, setSharing] = useState(false);
 
   const bridge = window.xeniur;
   const objectId = detail.state.object.id;
@@ -52,6 +64,8 @@ export function ObjectView({ detail, busy, onRefresh, onBack }: ObjectViewProps)
     history: { [objectId]: detail.history },
     dna: { [objectId]: detail.dna },
     ...(impact ? { impact: { [objectId]: impact } } : {}),
+    constraints: Object.fromEntries(constraints.map((constraint) => [constraint.objectId, constraint])),
+    processProof: proof ? { [objectId]: proof } : {},
     lineage: detail.lineage
       ? { [detail.lineage.steps[0]?.representationId ?? ""]: detail.lineage as never }
       : {},
@@ -65,59 +79,56 @@ export function ObjectView({ detail, busy, onRefresh, onBack }: ObjectViewProps)
     onRelease: async (id, profileId) => { await bridge?.living.release(id, profileId); onRefresh(); },
     onAddObservation: () => setTab("forms"),
     onShowHow: () => setTab("how"),
-  }), [detail, objectId, bridge, onRefresh, impact]);
+    onConstraintChange: async (constraintId, value) => {
+      const updated = await bridge?.constraints?.setValue(constraintId, value);
+      if (updated) setConstraints((items) => items.map((item) => item.objectId === constraintId ? updated : item));
+      onRefresh();
+    },
+    onReviewApprove: async (id) => { await bridge?.living.release(id, "artifact"); onRefresh(); },
+  }), [detail, objectId, bridge, onRefresh, impact, constraints, proof]);
 
   // The rebuild/review split is per-Object and cheap; it is refetched whenever the Object
   // changes so the headline can never describe a state that has already moved on.
   useEffect(() => {
     void bridge?.living.impact(objectId).then(setImpact);
+    void bridge?.constraints?.list(detail.state.object.worldId).then((items) => setConstraints(items ?? []));
+    void bridge?.process?.proof(objectId).then((value) => setProof(value ?? null));
   }, [bridge, objectId, detail]);
 
   const scene: Scene = useMemo(() => {
-    const nodes: Array<Record<string, unknown>> = [];
-    switch (tab) {
-      case "forms":
-        nodes.push({ id: "strip", component: "FormStrip", objectId, selectedRole, showFileNames });
-        nodes.push({ id: "impact", component: "ImpactReview", objectId, compact: false });
-        nodes.push({ id: "readiness", component: "ReadinessBoard", objectId, showAll: false });
-        nodes.push({ id: "drawer", component: "IdeaDrawer", objectId, open: false });
-        break;
-      case "compare":
-        nodes.push({
-          id: "compare", component: "CompareForms", objectId,
-          formRole: selectedRole ?? detail.state.forms[0]?.role ?? "source.primary",
-          leftVersionId: null, rightVersionId: null,
-        });
-        break;
-      case "how":
-        nodes.push({ id: "recipe", component: "RecipeGraph", objectId });
-        if (detail.lineage?.steps[0]) {
-          nodes.push({
-            id: "lineage", component: "LineageGraph",
-            representationId: detail.lineage.steps[0].representationId,
-          });
-        }
-        break;
-      case "evidence":
-        nodes.push({ id: "checks", component: "ChecksPanel", objectId, formRole: selectedRole });
-        nodes.push({ id: "readiness", component: "ReadinessBoard", objectId, showAll: true });
-        break;
-      case "history":
-        nodes.push({ id: "timeline", component: "VersionTimeline", objectId });
-        break;
-    }
-    return {
-      worldId: detail.state.object.worldId,
-      title: detail.state.properties.title,
-      reason: `${tab} · v${detail.state.seq}`,
-      root: { id: "root", component: "Canvas", layout: "column", children: nodes as never },
-    };
-  }, [tab, objectId, selectedRole, showFileNames, detail]);
+    const intent = TAB_INTENT[tab];
+    const changes = [
+      ...(impact?.rebuild ?? []).map((item) => ({
+        objectId, kind: "rebuild" as const, subject: item.stepKey, because: item.because,
+      })),
+      ...(impact?.review ?? []).map((item) => ({
+        objectId: item.objectId, kind: "review" as const, subject: item.causeObjectId, because: item.because,
+      })),
+    ];
+    const taskStates: Array<"selected" | "changed" | "ready"> = ["selected"];
+    if (changes.length > 0) taskStates.push("changed");
+    if (tab === "evidence") taskStates.push("ready");
+    const semantic = compileSituation(SituationSchema.parse({
+      worldId: detail.state.object.worldId, title: detail.state.properties.title,
+      meaning: intent.meaning, interaction: intent.interaction, layer: intent.layer, taskStates,
+      goal: { kind: intent.goal, description: `${intent.goal} ${detail.state.properties.title}` },
+      scope: { worldId: detail.state.object.worldId, objectIds: [objectId], externalContextAllowed: false },
+      focus: { kind: detail.state.properties.semanticType === "decision" ? "decision" : "object",
+        id: objectId, label: detail.state.properties.title },
+      objects: [{ id: objectId, title: detail.state.properties.title,
+        semanticType: detail.state.properties.semanticType,
+        traits: detail.state.properties.traits,
+        formRoles: [selectedRole ?? detail.state.forms[0]?.role ?? "source.primary"], states: taskStates }],
+      changes, capabilities: [], constraints: constraints.filter((item) => item.objectId === objectId), choices: [],
+    }));
+    return layoutScene(semantic, { layoutId: semantic.layoutId });
+  }, [tab, objectId, selectedRole, detail, impact, constraints]);
 
   return (
     <main className="xr-object">
       <header className="xr-object__head">
         <button type="button" className="xr-back" onClick={onBack}>← World</button>
+        <BrandMark compact />
         <h1>{detail.state.properties.title}</h1>
         <span className="xr-object__type">{detail.state.properties.semanticType}</span>
         <span className="xr-object__version">
@@ -129,9 +140,8 @@ export function ObjectView({ detail, busy, onRefresh, onBack }: ObjectViewProps)
           </span>
         )}
         <div className="xr-object__actions">
-          <button type="button" className="xr-button"
-            onClick={() => setShowFileNames((on) => !on)}>
-            {showFileNames ? "Hide filenames" : "Show filenames"}
+          <button type="button" className="xr-button" disabled={!proof} onClick={() => setSharing(true)}>
+            View / share process
           </button>
           <button type="button" className="xr-button" disabled={busy}
             onClick={() => { void bridge?.living.exportPackage(objectId); }}>
@@ -151,6 +161,7 @@ export function ObjectView({ detail, busy, onRefresh, onBack }: ObjectViewProps)
       </nav>
 
       <SceneRenderer scene={scene} bindings={bindings} />
+      {sharing && proof && <ProcessShare objectId={objectId} title={detail.state.properties.title} proof={proof} onClose={() => setSharing(false)} />}
     </main>
   );
 }

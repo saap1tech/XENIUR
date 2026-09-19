@@ -11,6 +11,9 @@ import {
 import { BlobStore } from "./blobs.js";
 import { RecipeStore } from "./recipe-store.js";
 import { DecisionStore } from "./decisions.js";
+import { ConstraintStore } from "./constraints.js";
+import { ProcessStore } from "./process.js";
+import { ActionReceiptStore } from "./action-receipts.js";
 import { json, openDatabase, type Db } from "./db.js";
 import * as rows from "./rows.js";
 
@@ -49,6 +52,12 @@ export class ObjectGraph {
   readonly recipes: RecipeStore;
   /** Decisions, their evidence, and the review edges that hang off them. */
   readonly decisions: DecisionStore;
+  /** Typed problem constraints, with values committed through Object versions. */
+  readonly constraints: ConstraintStore;
+  /** Inspectable process history. It never estimates unrecorded human effort. */
+  readonly process: ProcessStore;
+  /** Durable Living Objects for consequential external effects. */
+  readonly actionReceipts: ActionReceiptStore;
 
   private constructor(readonly db: Db, readonly blobs: BlobStore) {
     this.recipes = new RecipeStore(db, {
@@ -56,6 +65,9 @@ export class ObjectGraph {
       blobHashOf: (representationId) => this.getRepresentation(representationId)?.blobHash ?? null,
     });
     this.decisions = new DecisionStore(this);
+    this.constraints = new ConstraintStore(db, this);
+    this.process = new ProcessStore(db);
+    this.actionReceipts = new ActionReceiptStore(db, this);
   }
 
   static open(opts: GraphOptions): ObjectGraph {
@@ -180,7 +192,13 @@ export class ObjectGraph {
    * mutation to escape through. This is the whole reason properties left the objects row.
    */
   setProperties(objectId: string, patch: Partial<ObjectProperties>, label?: string): ObjectState {
-    return this.commitVersion({ objectId, properties: patch, label: label ?? "edited properties" });
+    const state = this.commitVersion({ objectId, properties: patch, label: label ?? "edited properties" });
+    this.process.record({
+      objectId, versionId: state.versionId, kind: "manual_edit", actor: "human",
+      label: label ?? "Edited properties", tool: null, model: null,
+      inputHashes: [], outputHashes: [], durationMs: 0,
+    });
+    return state;
   }
 
   archiveObject(objectId: string): void {
@@ -335,6 +353,24 @@ export class ObjectGraph {
 
     const a = this.getAction(actionId);
     if (!a) throw new Error(`no such action: ${actionId}`);
+    if ((result.status ?? "completed") === "completed" && outputs.length > 0) {
+      const objectIds = [...new Set(outputs.map((output) => this.getRepresentation(output.representationId)?.objectId)
+        .filter((id): id is string => Boolean(id)))];
+      const inputHashes = inputs.map((input) => this.getRepresentation(input.representationId)?.blobHash)
+        .filter((hash): hash is string => Boolean(hash));
+      const outputHashes = outputs.map((output) => this.getRepresentation(output.representationId)?.blobHash)
+        .filter((hash): hash is string => Boolean(hash));
+      const actor = a.provenance === "generated" ? "model" : a.provenance === "human" || a.provenance === "imported" ? "human" : "tool";
+      const kind = a.tool === "import.file" ? "source_collected" : actor === "model" ? "model_step" : actor === "human" ? "manual_edit" : "tool_used";
+      for (const objectId of objectIds) this.process.record({
+        objectId, versionId: this.currentState(objectId)?.versionId ?? null,
+        kind, actor, label: a.intent, tool: a.tool, model: a.model,
+        inputHashes, outputHashes, durationMs: a.finishedAt === null ? 0 : a.finishedAt - a.startedAt,
+      });
+    }
+    if (a.receipt && ["browser.fill", "browser.click", "browser.submit"].includes(a.tool)) {
+      this.actionReceipts.record(a.id, a.receipt);
+    }
     return a;
   }
 

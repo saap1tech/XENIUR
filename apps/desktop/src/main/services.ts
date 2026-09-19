@@ -4,7 +4,14 @@ import type {
 } from "@xeniur/core";
 import {
   ObjectGraph, ReadinessEvaluator, ideaDna, loadProfiles, exportPackage, impactOf, SpendLedger,
+  MetricsStore,
+  ComputeLedger, WorkflowLibrary,
 } from "@xeniur/graph";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { z } from "zod";
+import { WebRiskChecker } from "./web/risk.js";
+import { generationFingerprint, verifiedGenerationPrice } from "./economy.js";
 import { TaskQueue } from "@xeniur/tasks";
 import { PermissionBroker } from "@xeniur/permissions";
 import { SessionBroker } from "@xeniur/sessions";
@@ -39,6 +46,10 @@ export interface Services {
   queue: TaskQueue;
   broker: PermissionBroker;
   sessions: SessionBroker;
+  metrics: MetricsStore;
+  compute: ComputeLedger;
+  workflows: WorkflowLibrary;
+  webRisk: WebRiskChecker;
   router: CapabilityRouter;
   brain: Brain;
   /**
@@ -122,10 +133,22 @@ export function createServices(window: BrowserWindow): Services {
   const graph = ObjectGraph.open({ dbPath: paths.dbPath, blobDir: paths.blobDir });
   const broker = new PermissionBroker(graph.db);
   const sessions = new SessionBroker(graph.db);
+  const metrics = new MetricsStore(graph.db);
+  metrics.start();
   const env: ProviderEnv = {
     scratchDir: paths.scratchDir, rootDir: paths.projectRoot, binaries: BINARIES,
   };
-  const router = new CapabilityRouter({ graph, broker, config, env });
+  const policy = z.object({ usdPerCompute: z.number().positive().nullable(), intelligenceRolling: z.number().int().nonnegative(),
+    intelligenceReserve: z.number().int().nonnegative(), rollingHours: z.number().positive() }).parse(
+    JSON.parse(readFileSync(join(paths.projectRoot, "config/economy.json"), "utf8")));
+  const compute = new ComputeLedger(graph.db, policy);
+  const workflows = new WorkflowLibrary(graph);
+  const webRisk = new WebRiskChecker(() => ({ mode: compute.preference("web.riskMode", "local_only") === "google_lookup" ? "google_lookup" : "local_only",
+    key: process.env["GOOGLE_WEB_RISK_API_KEY"] }));
+  const router = new CapabilityRouter({ graph, broker, config, env, computeGate: {
+    reserve: (plan, ctx, provider) => compute.reserve(ctx.computeQuoteId!, generationFingerprint(graph, plan, provider.id, verifiedGenerationPrice(provider, config))),
+    settle: (id, usd) => compute.settle(id, usd),
+  } });
   const brain = makeBrain(config);
   const spend = new SpendLedger(graph.db, config.budget);
   const gatedBrain = makeGatedBrain(config, spend);
@@ -146,7 +169,7 @@ export function createServices(window: BrowserWindow): Services {
       })),
   });
 
-  const browser = new BrowserShell(window);
+  const browser = new BrowserShell(window, webRisk);
   const preview = new PreviewRuntime(window);
 
   // Every tool the queue can run. A task that names anything else fails loudly rather
@@ -162,6 +185,7 @@ export function createServices(window: BrowserWindow): Services {
         plan?: { intent: string; objects: string[]; tool: Tool; args: Record<string, unknown> };
         objectId?: string; inputs?: Array<{ representationId: string; role: "source" }>;
         authorization?: Authorization;
+        computeQuoteId?: string;
       };
       if (!payload.plan) throw new Error("task payload has no plan");
       ctx.progress(0.1, "starting");
@@ -172,6 +196,7 @@ export function createServices(window: BrowserWindow): Services {
           // The queue carries the authorization a person granted for this exact plan;
           // `ctx.approved` only says the task was resumed, which is not the same thing.
           ...(payload.authorization ? { authorization: payload.authorization } : {}),
+          ...(payload.computeQuoteId ? { computeQuoteId: payload.computeQuoteId } : {}),
           ...(payload.objectId ? { objectId: payload.objectId } : {}),
           ...(payload.inputs ? { inputs: payload.inputs } : {}),
           label: ctx.task.title,
@@ -280,7 +305,7 @@ export function createServices(window: BrowserWindow): Services {
     graph.getWorld(worldId) ? buildThinkingMap(graph, sense, worldId) : null;
 
   return {
-    graph, queue, broker, sessions, router, brain, gatedBrain, spend, config, env, browser, preview,
+    graph, queue, broker, sessions, metrics, compute, workflows, webRisk, router, brain, gatedBrain, spend, config, env, browser, preview,
     rebuild, validation, readiness, sense,
     detailOf, historyOf, thinkingMap,
     impactOf: impactOfObject, passageOf,
@@ -288,6 +313,7 @@ export function createServices(window: BrowserWindow): Services {
       .then((r) => ({ path: r.path, bytes: r.bytes })),
     systemInfo, lineage,
     async dispose() {
+      metrics.end();
       browser.closeAll();
       preview.stopAll();
       await queue.stop();

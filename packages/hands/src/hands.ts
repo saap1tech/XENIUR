@@ -1,5 +1,5 @@
 import type { Authorization, Receipt, Tool, UntrustedContent } from "@xeniur/core";
-import { newId, now, untrusted } from "@xeniur/core";
+import { newId, now, planDigest, sha256Hex, untrusted, zeroCost } from "@xeniur/core";
 import type { PermissionBroker } from "@xeniur/permissions";
 import type { SessionBroker } from "@xeniur/sessions";
 import type { DriverFactory, ExtractedProduct, PageDriver } from "./driver.js";
@@ -85,7 +85,7 @@ export class Hands {
     return {
       url: driver.url(), title,
       content: untrusted({ kind: "web_page", origin: driver.url(), fetchedAt: now() }, text),
-      receipt: await this.#receipt("browser.open", driver, { url }, ctx, `opened ${title}`),
+      receipt: await this.#receipt("browser.open", driver, { url }, { url, domain }, {}, ctx, `opened ${title}`),
     };
   }
 
@@ -103,7 +103,7 @@ export class Hands {
         { kind: "web_page", origin: driver.url(), fetchedAt: now() },
         products.map((p) => `${p.title} — ${p.price ?? "?"}`).join("\n"),
       ),
-      receipt: await this.#receipt("browser.extract", driver, { count: products.length }, ctx, `extracted ${products.length} products`),
+      receipt: await this.#receipt("browser.extract", driver, { count: products.length }, { domain }, {}, ctx, `extracted ${products.length} products`),
     };
   }
 
@@ -112,12 +112,15 @@ export class Hands {
   async fillField(fieldLabel: string, value: string, ctx: HandsContext = {}): Promise<Receipt> {
     const driver = this.#requireDriver();
     const domain = this.#currentDomain ?? this.#domainOf(driver.url());
-this.#opts.broker.guard({ tool: "browser.fill", args: { field: fieldLabel, domain }, scope: domain,
-      plan: { tool: "browser.fill", args: { field: fieldLabel, domain }, destination: domain },
+    const valueDigest = sha256Hex(JSON.stringify(value));
+    const planArgs = { field: fieldLabel, valueDigest, domain };
+    this.#opts.broker.guard({ tool: "browser.fill", args: planArgs, scope: domain,
+      plan: { tool: "browser.fill", args: planArgs, destination: domain },
       ...(ctx.authorization ? { authorization: ctx.authorization } : {}) });
     await driver.fill(fieldLabel, value);
-    // The value itself is deliberately not written to the receipt.
-    return this.#receipt("browser.fill", driver, { field: fieldLabel }, ctx, `filled ${fieldLabel}`);
+    // The digest proves the exact value; sensitive content is not copied into the receipt.
+    return this.#receipt("browser.fill", driver, { field: fieldLabel }, planArgs,
+      { [fieldLabel]: value }, ctx, `filled ${fieldLabel}`);
   }
 
   async clickElement(label: string, ctx: HandsContext = {}): Promise<Receipt> {
@@ -127,7 +130,7 @@ this.#opts.broker.guard({ tool: "browser.fill", args: { field: fieldLabel, domai
       plan: { tool: "browser.click", args: { label, domain }, destination: domain },
       ...(ctx.authorization ? { authorization: ctx.authorization } : {}) });
     await driver.click(label);
-    return this.#receipt("browser.click", driver, { label }, ctx, `clicked ${label}`);
+    return this.#receipt("browser.click", driver, { label }, { label, domain }, {}, ctx, `clicked ${label}`);
   }
 
   /**
@@ -145,7 +148,7 @@ this.#opts.broker.guard({ tool: "browser.fill", args: { field: fieldLabel, domai
       derivedFromUntrusted: true,
     });
     await driver.submit();
-    return this.#receipt("browser.submit", driver, args, ctx, "submitted the form");
+    return this.#receipt("browser.submit", driver, { fields: Object.keys(args) }, { ...args, domain }, args, ctx, "submitted the form");
   }
 
   async close(): Promise<void> {
@@ -197,19 +200,34 @@ this.#opts.broker.guard({ tool: "browser.fill", args: { field: fieldLabel, domai
   }
 
   async #receipt(
-    tool: Tool, driver: PageDriver, params: Record<string, unknown>,
-    _ctx: HandsContext, outcome: string,
+    tool: Tool, driver: PageDriver, params: Record<string, unknown>, planArgs: Record<string, unknown>,
+    sentValues: Record<string, unknown>, _ctx: HandsContext, outcome: string,
   ): Promise<Receipt> {
     const [shot, digest] = await Promise.all([
       driver.screenshot().catch(() => null),
       driver.domDigest().catch(() => null),
     ]);
+    const destination = this.#currentDomain ?? this.#domainOf(driver.url());
+    const dataSent = Object.entries(sentValues).map(([name, value]) => ({
+      name, valueDigest: sha256Hex(JSON.stringify(value) ?? "undefined"),
+      valueType: value === null ? "null" as const : typeof value === "string" ? "string" as const
+        : typeof value === "number" ? "number" as const : typeof value === "boolean" ? "boolean" as const : "object" as const,
+    }));
+    const price = typeof planArgs["priceUsd"] === "number"
+      ? { ...zeroCost(), usd: planArgs["priceUsd"] as number } : null;
     return {
       screenshotBlobHash: shot && this.#opts.storeScreenshot ? this.#opts.storeScreenshot(shot) : null,
       domDigest: digest,
       url: driver.url(),
       params: { ...params, tool },
       sessionGrantId: this.#lastGrantId,
+      attempted: outcome,
+      planDigest: planDigest({ tool, args: planArgs, destination }),
+      destination,
+      dataSent,
+      quotedPrice: price,
+      actualPrice: null,
+      providerResponse: { status: outcome, reference: null, digest },
       outcome,
       at: now(),
     };

@@ -1,0 +1,10 @@
+{
+  "name": "@xeniur/capabilities",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "XCDL: trusted data-only capability definitions for XENIUR.",
+  "main": "./src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "@xeniur/core": "*" }
+}

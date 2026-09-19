@@ -120,7 +120,7 @@ export function Comparison({ node, bindings }: { node: Node<"Comparison">; bindi
           <figure key={rep?.id ?? i} className="xr-compare__side">
             {rep?.blobHash && rep.modality === "image"
               ? <img src={bindings.blobUrl(rep.blobHash)} alt="" />
-              : <div className="xr-thumb xr-thumb--none">{rep?.format.toUpperCase() ?? "—"}</div>}
+              : <div className="xr-thumb xr-thumb--none">{rep?.format.toUpperCase() ?? "None"}</div>}
             <figcaption>
               {rep ? <ProvenanceBadge provenance={rep.provenance} provider={rep.provider} /> : "missing"}
             </figcaption>

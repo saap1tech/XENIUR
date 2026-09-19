@@ -106,7 +106,7 @@ export function ReadinessBoard({ node, bindings }: { node: Node<"ReadinessBoard"
                 {report.blockers.map((b, i) => (
                   <li key={i}>
                     {b.detail}
-                    {b.remedy && <span className="xr-ready__remedy"> — {b.remedy}</span>}
+                    {b.remedy && <span className="xr-ready__remedy"> / {b.remedy}</span>}
                   </li>
                 ))}
               </ul>

@@ -89,9 +89,8 @@ writeFileSync(OUT, `<!doctype html>
     <span class="xr-world__reason">${scene.reason}</span>
   </header>
   ${markup}
-  <footer class="xr-say">
-    <input placeholder="Say what to do with it…" value="">
-    <button type="button" class="xr-button xr-button--primary">Go</button>
+  <footer class="xr-language-dock">
+    <button type="button" class="xr-language-dock__trigger">Use language for this <span>⌘K also works</span></button>
   </footer>
 </main></body></html>`);
 

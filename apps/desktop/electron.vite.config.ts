@@ -1,10 +1,12 @@
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
+import tailwindcss from "tailwindcss";
+import autoprefixer from "autoprefixer";
 
 const pkgs = [
   "core", "graph", "tasks", "permissions", "sessions", "validators", "sensemaking",
-  "providers", "router", "brain", "hands", "ui",
+  "providers", "router", "brain", "hands", "ui", "grammar",
 ] as const;
 
 // Absolute, so it does not shift with each target's `root`. Passing --outDir on the
@@ -44,7 +46,8 @@ export default defineConfig({
   renderer: {
     root: fileURLToPath(new URL("./src/renderer", import.meta.url)),
     plugins: [react()],
-    resolve: { alias },
+    resolve: { alias: { ...alias, "@": fileURLToPath(new URL("./src/renderer", import.meta.url)) } },
+    css: { postcss: { plugins: [tailwindcss({ config: fileURLToPath(new URL("./tailwind.config.cjs", import.meta.url)) }), autoprefixer()] } },
     build: {
       outDir: outDir("renderer"),
       emptyOutDir: true,

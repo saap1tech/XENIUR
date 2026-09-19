@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
-import type { ObjectDetail, SystemInfo, Task, World as WorldRow, WorldSnapshot } from "@xeniur/core";
+import type { ComputeQuote, EconomySnapshot, ObjectDetail, SystemInfo, Task, World as WorldRow, WorldSnapshot } from "@xeniur/core";
 import { Home, type HomeEntry } from "./Home.js";
 import { World } from "./World.js";
 import { ObjectView } from "./ObjectView.js";
 import { CommandPalette, usePaletteShortcut, type Command } from "./CommandPalette.js";
 import { FocusMode } from "./FocusMode.js";
+import { BrandMark } from "./BrandMark.js";
+import { ComputeReview } from "./ComputeReview.js";
+import { WebLayer } from "./WebLayer.js";
+import { WorkflowLibrary } from "./WorkflowLibrary.js";
 
 /** A new World, named for the way in rather than for a subsystem. */
 const NEW_WORLD: Record<HomeEntry, { title: string; emoji: string }> = {
@@ -17,7 +21,9 @@ type View =
   | { kind: "home" }
   | { kind: "world"; snapshot: WorldSnapshot }
   | { kind: "object"; detail: ObjectDetail; worldSnapshot: WorldSnapshot }
-  | { kind: "focus"; objectId: string; minutes: number };
+  | { kind: "focus"; objectId: string; minutes: number }
+  | { kind: "web" }
+  | { kind: "workflows" };
 
 export function App() {
   const [worlds, setWorlds] = useState<WorldRow[]>([]);
@@ -27,6 +33,8 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [economy, setEconomy] = useState<EconomySnapshot | null>(null);
+  const [quote, setQuote] = useState<ComputeQuote | null>(null);
 
   const bridge = window.xeniur;
   usePaletteShortcut(setPaletteOpen);
@@ -61,6 +69,7 @@ export function App() {
     void refreshWorlds();
     void refreshTasks();
     void bridge?.system.info().then(setInfo);
+    void bridge?.economy.snapshot().then(setEconomy);
   }, [bridge, refreshWorlds, refreshTasks]);
 
   // Task events are pushed by the queue. Focus Mode deliberately ignores them.
@@ -89,6 +98,7 @@ export function App() {
         worldId: view.snapshot.world.id, utterance, selection,
       });
       if (!result.accepted) setNotice(result.error ?? "I could not plan that.");
+      if (result.quote) setQuote(result.quote);
       await refreshTasks();
     } finally { setBusy(false); }
   }, [bridge, view, refreshTasks]);
@@ -134,7 +144,18 @@ export function App() {
   }
 
   if (!bridge) {
-    return <main className="xr-home"><h1>XENIUR</h1>
+    if (window.location.hostname === "localhost" && new URLSearchParams(window.location.search).has("visual-preview")) {
+      const now = Date.now();
+      const sampleWorlds: WorldRow[] = [
+        { id: "11111111-1111-4111-8111-111111111111", title: "Rainwear 2027", emoji: "◒", summary: "Interview → decision → jacket → delivery", createdAt: now, lastOpenedAt: now },
+        { id: "22222222-2222-4222-8222-222222222222", title: "Tokyo / April", emoji: "⌁", summary: "People · places · priorities · cost", createdAt: now, lastOpenedAt: now },
+        { id: "33333333-3333-4333-8333-333333333333", title: "XR Identity", emoji: "XR", summary: "Logo · typography · voice · process", createdAt: now, lastOpenedAt: now },
+      ];
+      return <Home worlds={sampleWorlds} active={[]} info={{ version: "0.1", brainIsMock: true, brainModel: null, capabilities: [] }}
+        economy={{ local: { metered: false, label: "Unlimited Local" }, intelligence: { configured: true, rollingRemaining: 938, rollingLimit: 1000, reserveRemaining: 4800, reserveLimit: 5000, resetsAt: now }, compute: { configured: true, balance: 524, usdPerCompute: .02, held: 0 } }}
+        onOpen={() => undefined} onCreate={() => undefined} onApprove={() => undefined} onReject={() => undefined} onExplore={() => undefined} onWorkflows={() => undefined} />;
+    }
+    return <main className="xr-home"><BrandMark />
       <p className="xr-empty">The bridge is unavailable. This window is not XENIUR's own renderer.</p>
     </main>;
   }
@@ -160,7 +181,18 @@ export function App() {
 
       <CommandPalette commands={commands} open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 
-      {view.kind === "object" ? (
+      {quote && <ComputeReview quote={quote} busy={busy} onCancel={() => {
+        void bridge.economy.cancel(quote.id); setQuote(null);
+      }} onConfirm={async () => {
+        setBusy(true); setNotice(null);
+        try { const result = await bridge.economy.confirm(quote.id); setQuote(null); if (!result.accepted) setNotice(result.error ?? "This generation was not queued."); await refreshTasks(); await bridge.economy.snapshot().then(setEconomy); }
+        catch (cause) { setNotice(cause instanceof Error ? cause.message : "This estimate could not be confirmed."); }
+        finally { setBusy(false); }
+      }} />}
+
+      {view.kind === "web" ? <WebLayer worlds={worlds} onBack={() => setView({ kind: "home" })} />
+      : view.kind === "workflows" ? <WorkflowLibrary onBack={() => setView({ kind: "home" })} onApplied={(worldId) => { void refreshWorlds(); void openWorld(worldId); }} />
+      : view.kind === "object" ? (
         <ObjectView
           detail={view.detail} busy={busy}
           onRefresh={() => { void refreshObject(); }}
@@ -176,6 +208,7 @@ export function App() {
       ) : (
         <Home
           worlds={worlds} active={tasks} info={info}
+          economy={economy}
           onOpen={(id) => { void openWorld(id); }}
           onCreate={async (entry) => {
             // "Review changes" is not a new project: it opens the one that has changes.
@@ -188,6 +221,8 @@ export function App() {
             await openWorld(created.id);
           }}
           onApprove={approve} onReject={reject}
+          onExplore={() => setView({ kind: "web" })}
+          onWorkflows={() => setView({ kind: "workflows" })}
         />
       )}
     </>

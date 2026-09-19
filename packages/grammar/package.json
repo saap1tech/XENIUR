@@ -1,0 +1,13 @@
+{
+  "name": "@xeniur/grammar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure semantic and layout compilers for XENIUR scenes.",
+  "main": "./src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": {
+    "@xeniur/core": "*",
+    "zod": "^3.23.8"
+  }
+}

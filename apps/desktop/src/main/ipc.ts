@@ -1,11 +1,16 @@
 import { app, ipcMain, type IpcMainInvokeEvent } from "electron";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { extractCandidates } from "@xeniur/sensemaking";
 import { z } from "zod";
-import { UuidSchema, type IntentResult, type WorldSnapshot } from "@xeniur/core";
+import { sha256Hex, UuidSchema, type ActionPlan, type IntentResult, type WorldSnapshot } from "@xeniur/core";
+import { renderProofPage } from "@xeniur/graph";
 import { InvalidPlanError } from "@xeniur/brain";
+import { planForProposal, proposalsFor } from "@xeniur/grammar";
 import type { Services } from "./services.js";
 import { assertTrustedSender, UntrustedSenderError } from "./security.js";
+import { captureWeb } from "./web/capture.js";
+import { generationFingerprint, verifiedGenerationPrice } from "./economy.js";
 
 const Uuid = z.object({ id: UuidSchema });
 const Rect = z.object({
@@ -31,6 +36,11 @@ const SCHEMAS = {
     worldId: UuidSchema, utterance: z.string().min(1).max(2000),
     selection: z.array(UuidSchema).max(32).optional(),
   }),
+  "gestures:choose": z.object({
+    worldId: UuidSchema, sourceId: UuidSchema, targetId: z.string().min(1).max(200),
+    targetKind: z.enum(["claim", "object", "print", "delivery", "version", "question_lane"]),
+    label: z.string().min(1).max(100),
+  }),
   "tasks:active": z.undefined(),
   "tasks:approve": Uuid,
   "tasks:reject": Uuid,
@@ -39,6 +49,15 @@ const SCHEMAS = {
   "browser:navigate": z.object({ viewId: z.string().min(1), url: z.string().url() }),
   "browser:setBounds": Rect,
   "browser:close": z.object({ viewId: z.string().min(1) }),
+  "browser:status": z.object({ viewId: z.string().min(1) }),
+  "web:settings": z.undefined(),
+  "web:setRiskMode": z.object({ mode: z.enum(["local_only", "google_lookup"]) }),
+  "web:explore": z.object({ worldId: UuidSchema, url: z.string().url().max(4000) }),
+  "economy:snapshot": z.undefined(),
+  "economy:confirm": z.object({ quoteId: UuidSchema }),
+  "economy:cancel": z.object({ quoteId: UuidSchema }),
+  "workflows:list": z.undefined(),
+  "workflows:apply": z.object({ id: z.string().min(1).max(128) }),
   "code:files": Uuid,
   "code:run": Uuid,
   "code:stop": Uuid,
@@ -57,6 +76,16 @@ const SCHEMAS = {
   }),
   "living:export": Uuid,
   "living:impact": Uuid,
+  "constraints:list": Uuid,
+  "constraints:setValue": z.object({ id: UuidSchema, value: z.unknown() }),
+  "process:proof": Uuid,
+  "process:publish": z.object({ id: UuidSchema, privacy: z.enum(["filtered", "public"]).default("filtered") }),
+  "process:exportPage": z.object({ id: UuidSchema, eventIds: z.array(UuidSchema).max(500),
+    discloseHashes: z.boolean(), discloseTiming: z.boolean() }),
+  "metrics:record": z.object({
+    kind: z.enum(["gesture_used", "typed_instead"]),
+    concept: z.enum(["where", "when", "who", "cost", "quantity", "priority", "sequence", "relationship"]),
+  }),
 
   /* Sensemaking */
   "sense:map": Uuid,
@@ -114,6 +143,22 @@ const SCHEMAS = {
 export type Channel = keyof typeof SCHEMAS;
 export const CHANNELS = Object.keys(SCHEMAS) as Channel[];
 
+function enqueuePlan(services: Services, worldId: string, plan: ActionPlan, computeQuoteId?: string): IntentResult {
+  const objectId = plan.objects[0];
+  const state = objectId ? services.graph.currentState(objectId) : null;
+  const headForm = state?.forms[state.forms.length - 1];
+  const head = headForm ? services.graph.getRepresentation(headForm.representationId) : undefined;
+  const task = services.queue.enqueue({
+    worldId, title: plan.intent, tool: plan.tool,
+    payload: {
+      plan, ...(objectId ? { objectId } : {}),
+      ...(computeQuoteId ? { computeQuoteId } : {}),
+      ...(head ? { inputs: [{ representationId: head.id, role: "source" }] } : {}),
+    },
+  });
+  return { accepted: true, taskId: task.id, plan: { intent: plan.intent, tool: plan.tool, objects: plan.objects } };
+}
+
 export function registerIpc(services: Services): void {
   const handlers: { [K in Channel]: (args: z.infer<(typeof SCHEMAS)[K]>) => unknown } = {
     "worlds:list": () => services.graph.listWorlds(),
@@ -151,21 +196,18 @@ export function registerIpc(services: Services): void {
           activeTasks: services.queue.tasks.active().map((t) => ({ id: t.id, title: t.title, status: t.status })),
         });
 
-        // Feed the *current* form of the selected object in as the source — resolved
-        // through the head version, so an undo actually changes what gets transformed.
-        const objectId = plan.objects[0] ?? selected[0]?.state.object.id;
-        const state = objectId ? services.graph.currentState(objectId) : null;
-        const headForm = state?.forms[state.forms.length - 1];
-        const head = headForm ? services.graph.getRepresentation(headForm.representationId) : undefined;
-
-        const task = services.queue.enqueue({
-          worldId, title: plan.intent, tool: plan.tool,
-          payload: {
-            plan, ...(objectId ? { objectId } : {}),
-            ...(head ? { inputs: [{ representationId: head.id, role: "source" }] } : {}),
-          },
-        });
-        return { accepted: true, taskId: task.id, plan: { intent: plan.intent, tool: plan.tool, objects: plan.objects } };
+        const { provider } = await services.router.route(plan.tool);
+        if (provider.kind === "generative") {
+          const estimatedUsd = verifiedGenerationPrice(provider, services.config);
+          const quote = services.compute.offer({ worldId, title: plan.intent, plan,
+            fingerprint: generationFingerprint(services.graph, plan, provider.id, estimatedUsd),
+            provider: provider.id, kind: "cloud", estimatedUsd,
+            provenance: "The result will be recorded as AI-generated.",
+            localAlternative: plan.tool === "3d.generate" ? "Create a basic local extrusion — 0 Compute" : null });
+          return { accepted: true, taskId: null,
+            plan: { intent: plan.intent, tool: plan.tool, objects: plan.objects }, quote };
+        }
+        return enqueuePlan(services, worldId, plan);
       } catch (err) {
         // A plan that will not validate never becomes a task.
         const error = err instanceof InvalidPlanError
@@ -175,15 +217,62 @@ export function registerIpc(services: Services): void {
       }
     },
 
+    "gestures:choose": ({ worldId, sourceId, targetId, targetKind, label }): IntentResult => {
+      const source = services.graph.currentState(sourceId);
+      const target = services.graph.currentState(targetId);
+      if (!source) return { accepted: false, taskId: null, plan: null, error: "no such source" };
+      if (source.object.worldId !== worldId || (target && target.object.worldId !== worldId)) {
+        return { accepted: false, taskId: null, plan: null, error: "gesture subjects must share this world" };
+      }
+      const expectedKind = target?.properties.semanticType === "claim" ? "claim" : target ? "object" : targetKind;
+      if (target && targetKind !== expectedKind) {
+        return { accepted: false, taskId: null, plan: null, error: "target kind no longer applies" };
+      }
+      const proposal = proposalsFor(
+        { id: sourceId, title: source.properties.title, semanticType: source.properties.semanticType },
+        { id: targetId, title: target?.properties.title ?? targetKind, kind: targetKind,
+          semanticType: target?.properties.semanticType },
+      ).find((candidate) => candidate.label === label);
+      if (!proposal) return { accepted: false, taskId: null, plan: null, error: "proposal no longer applies" };
+      return enqueuePlan(services, worldId, planForProposal(proposal));
+    },
+
     "tasks:active": () => services.queue.tasks.active(),
     "tasks:approve": ({ id }) => { services.queue.approve(id); },
     "tasks:reject": ({ id }) => { services.queue.reject(id); },
     "tasks:cancel": ({ id }) => { services.queue.cancel(id); },
 
     "browser:open": ({ url }) => services.browser.open(url),
-    "browser:navigate": ({ viewId, url }) => { services.browser.navigate(viewId, url); },
+    "browser:navigate": ({ viewId, url }) => services.browser.navigate(viewId, url),
     "browser:setBounds": ({ viewId, rect }) => { services.browser.setBounds(viewId, rect); },
     "browser:close": ({ viewId }) => { services.browser.close(viewId); },
+    "browser:status": ({ viewId }) => services.browser.status(viewId),
+    "web:settings": () => ({
+      riskMode: services.compute.preference("web.riskMode", "local_only") === "google_lookup" ? "google_lookup" as const : "local_only" as const,
+      lookupConfigured: Boolean(process.env["GOOGLE_WEB_RISK_API_KEY"]),
+      disclosure: "Google Lookup sends the full URL to Google. Local-only mode applies XENIUR's address policy without a reputation request.",
+    }),
+    "web:setRiskMode": ({ mode }) => {
+      if (mode === "google_lookup" && !process.env["GOOGLE_WEB_RISK_API_KEY"]) throw new Error("Google Web Risk is not configured on this device.");
+      services.compute.setPreference("web.riskMode", mode);
+      return { riskMode: mode, lookupConfigured: Boolean(process.env["GOOGLE_WEB_RISK_API_KEY"]),
+        disclosure: "Google Lookup sends the full URL to Google. Local-only mode applies XENIUR's address policy without a reputation request." };
+    },
+    "web:explore": async ({ worldId, url }) => {
+      if (!services.graph.getWorld(worldId)) throw new Error("Choose a World before capturing this source.");
+      const captured = await captureWeb(url, services.webRisk);
+      const source = services.sense.recordSource({ worldId, kind: "article", title: captured.title,
+        url: captured.url, text: captured.text, hash: sha256Hex(captured.text), extractor: "xeniur-explore/1",
+        metadata: { risk: captured.risk.status } });
+      const atoms = services.sense.acceptCandidates(worldId, source.id, extractCandidates(captured.text));
+      return { objectId: source.id, sourceId: source.id, title: captured.title, url: captured.url,
+        excerpt: captured.text.slice(0, 520), contentHash: sha256Hex(captured.text), risk: captured.risk, atomCount: atoms.length };
+    },
+    "economy:snapshot": () => services.compute.snapshot(),
+    "economy:confirm": ({ quoteId }) => services.compute.confirm(quoteId, (quote) => enqueuePlan(services, quote.worldId, quote.plan, quote.id)),
+    "economy:cancel": ({ quoteId }) => { services.compute.cancel(quoteId); },
+    "workflows:list": () => services.workflows.list(),
+    "workflows:apply": ({ id }) => services.workflows.apply(id),
 
     "code:files": ({ id }) => services.preview.files(id),
     "code:run": ({ id }) => {
@@ -230,6 +319,23 @@ export function registerIpc(services: Services): void {
     "living:switchBranch": ({ id, branchId }) => services.graph.switchBranch(id, branchId),
 
     "living:impact": ({ id }) => services.impactOf(id),
+
+    "constraints:list": ({ id }) => services.graph.constraints.list(id),
+    "constraints:setValue": ({ id, value }) => services.graph.constraints.get(id)
+      ? services.graph.constraints.setValue(id, value) : null,
+    "process:proof": ({ id }) => services.graph.process.proof(id),
+    "process:publish": ({ id, privacy }) => services.graph.process.publish(id, privacy),
+    "process:exportPage": ({ id, eventIds, discloseHashes, discloseTiming }) => {
+      const state = services.graph.currentState(id);
+      if (!state) throw new Error("This Object no longer exists.");
+      const result = renderProofPage(services.graph.process.proof(id), { title: state.properties.title,
+        eventIds, discloseHashes, discloseTiming });
+      const safe = state.properties.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "process";
+      const path = join(app.getPath("downloads"), `${safe}-process.html`);
+      writeFileSync(path, result.html, { encoding: "utf8", mode: 0o600 });
+      return { path, rootHash: result.manifest.rootHash };
+    },
+    "metrics:record": ({ kind, concept }) => { services.metrics.record(kind, { detail: { concept } }); },
 
     /* ----------------------------------------------------------- Decisions */
 

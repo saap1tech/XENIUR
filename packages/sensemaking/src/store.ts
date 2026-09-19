@@ -252,6 +252,15 @@ export class SensemakingStore {
       ).run(objectId, atom.atomType, atom.sourceId, atom.sourceVersionId,
             JSON.stringify(atom.locator), atom.confidence, atom.lane, atom.extraction,
             atom.statedAt);
+      const sourceVersion = atom.sourceVersionId ? this.getSourceVersion(atom.sourceVersionId) : null;
+      this.graph.process.record({
+        objectId, versionId: this.graph.currentState(objectId)?.versionId ?? null,
+        kind: atom.sourceId ? "source_collected" : "note_written", actor: "human",
+        label: atom.sourceId ? `Captured ${atom.atomType} from a source` : `Wrote ${atom.atomType}`,
+        tool: null, model: null,
+        inputHashes: sourceVersion ? [sourceVersion.contentHash] : [],
+        outputHashes: rep.blobHash ? [rep.blobHash] : [], durationMs: 0,
+      });
       return atom;
     })();
   }

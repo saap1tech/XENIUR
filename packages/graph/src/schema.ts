@@ -735,6 +735,86 @@ CREATE INDEX idx_spend_open ON spend(status, expires_at);
 CREATE INDEX idx_spend_task ON spend(task_id);
 `;
 
+/** Migration 11: typed definitions; values stay in versioned Object properties. */
+const CONSTRAINTS = `
+CREATE TABLE constraints (
+  object_id  TEXT PRIMARY KEY REFERENCES objects(id) ON DELETE CASCADE,
+  kind       TEXT NOT NULL,
+  unit       TEXT,
+  spec       TEXT NOT NULL,
+  applies_to TEXT NOT NULL
+);
+CREATE INDEX idx_constraints_kind ON constraints(kind);
+`;
+
+/** Migration 12: factual creative lineage and optional privacy-filtered proofs. */
+const PROCESS_PROVENANCE = `
+CREATE TABLE process_events (
+  id            TEXT PRIMARY KEY,
+  object_id     TEXT NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+  version_id    TEXT REFERENCES versions(id) ON DELETE SET NULL,
+  kind          TEXT NOT NULL,
+  actor         TEXT NOT NULL,
+  label         TEXT NOT NULL,
+  tool          TEXT,
+  model         TEXT,
+  input_hashes  TEXT NOT NULL DEFAULT '[]',
+  output_hashes TEXT NOT NULL DEFAULT '[]',
+  duration_ms   INTEGER NOT NULL DEFAULT 0,
+  at            INTEGER NOT NULL
+);
+CREATE INDEX idx_process_events_object ON process_events(object_id, at);
+
+CREATE TABLE process_proofs (
+  id           TEXT PRIMARY KEY,
+  object_id    TEXT NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+  privacy      TEXT NOT NULL,
+  proof_hash   TEXT NOT NULL,
+  snapshot     TEXT NOT NULL,
+  published_at INTEGER NOT NULL
+);
+CREATE INDEX idx_process_proofs_object ON process_proofs(object_id, published_at);
+
+CREATE TABLE derivation_notices (
+  id                TEXT PRIMARY KEY,
+  source_object_id  TEXT NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+  derived_object_id TEXT NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+  overlap           REAL NOT NULL,
+  invitation        TEXT NOT NULL,
+  created_at        INTEGER NOT NULL
+);
+`;
+
+const CREATOR_LAYER = `
+CREATE TABLE app_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE compute_entries (id TEXT PRIMARY KEY, units INTEGER NOT NULL, reason TEXT NOT NULL, quote_id TEXT, at INTEGER NOT NULL);
+CREATE TABLE compute_quotes (id TEXT PRIMARY KEY, body TEXT NOT NULL, status TEXT NOT NULL, expires_at INTEGER NOT NULL, actual_units INTEGER);
+CREATE TABLE intelligence_usage (id TEXT PRIMARY KEY, bucket TEXT NOT NULL, units INTEGER NOT NULL, at INTEGER NOT NULL);
+CREATE INDEX idx_intelligence_usage_at ON intelligence_usage(at);
+CREATE TABLE installed_workflows (id TEXT PRIMARY KEY, manifest TEXT NOT NULL, installed_at INTEGER NOT NULL);
+`;
+
+/** Migration 14: consequential external actions become durable Living Objects. */
+const ACTION_RECEIPTS = `
+UPDATE process_events SET kind = 'xeniur_session' WHERE kind = 'working_session';
+CREATE TABLE action_receipts (
+  object_id         TEXT PRIMARY KEY REFERENCES objects(id) ON DELETE CASCADE,
+  action_id         TEXT NOT NULL UNIQUE REFERENCES actions(id) ON DELETE RESTRICT,
+  capability        TEXT NOT NULL,
+  attempted         TEXT NOT NULL,
+  plan_digest       TEXT NOT NULL,
+  account_session_id TEXT,
+  destination       TEXT NOT NULL,
+  data_sent         TEXT NOT NULL DEFAULT '[]',
+  quoted_price      TEXT,
+  actual_price      TEXT NOT NULL,
+  provider_response TEXT,
+  at                INTEGER NOT NULL,
+  outcome           TEXT NOT NULL
+);
+CREATE INDEX idx_action_receipts_destination ON action_receipts(destination, at);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: INIT },
   { version: 2, name: "object_model", sql: OBJECT_MODEL },
@@ -746,4 +826,8 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 8, name: "decisions", sql: DECISIONS },
   { version: 9, name: "sessions", sql: SESSIONS },
   { version: 10, name: "spend", sql: SPEND },
+  { version: 11, name: "constraints", sql: CONSTRAINTS },
+  { version: 12, name: "process_provenance", sql: PROCESS_PROVENANCE },
+  { version: 13, name: "creator_layer", sql: CREATOR_LAYER },
+  { version: 14, name: "action_receipts", sql: ACTION_RECEIPTS },
 ];

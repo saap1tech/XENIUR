@@ -16,6 +16,10 @@ export interface RouterDeps {
   registry?: ProviderRegistry;
   config: ProvidersConfig;
   env: ProviderEnv;
+  computeGate?: {
+    reserve(plan: ActionPlan, ctx: ExecuteContext, provider: Provider): void;
+    settle(quoteId: string, actualUsd: number): void;
+  };
 }
 
 export interface ExecuteContext {
@@ -25,6 +29,7 @@ export interface ExecuteContext {
   taskId?: string | null;
   /** Permission for exactly this action, bound to its plan digest. */
   authorization?: Authorization;
+  computeQuoteId?: string;
   /** True when the reason for this action came from content XENIUR does not control. */
   derivedFromUntrusted?: boolean;
   /** Representations to feed in, with the role each one plays. */
@@ -74,6 +79,7 @@ export class CapabilityRouter {
   private readonly registry: ProviderRegistry;
   private readonly config: ProvidersConfig;
   private readonly env: ProviderEnv;
+  private readonly computeGate: RouterDeps["computeGate"];
 
   constructor(deps: RouterDeps) {
     this.graph = deps.graph;
@@ -81,6 +87,7 @@ export class CapabilityRouter {
     this.registry = deps.registry ?? new ProviderRegistry();
     this.config = deps.config;
     this.env = deps.env;
+    this.computeGate = deps.computeGate;
   }
 
   /* ------------------------------------------------------- the eight verbs */
@@ -197,6 +204,10 @@ export class CapabilityRouter {
     this.assertWithinBudget(this.estimateUsd(provider), ctx.taskId ?? null);
 
     const inputs = this.resolveInputs(ctx.inputs ?? []);
+    if (provider.kind === "generative" || ctx.computeQuoteId) {
+      if (!this.computeGate || !ctx.computeQuoteId) throw new Error("Review the Compute estimate before cloud generation.");
+      this.computeGate.reserve(plan, ctx, provider);
+    }
     const action = this.graph.beginAction({
       worldId: ctx.worldId, taskId: ctx.taskId ?? null, intent: plan.intent, tool: plan.tool,
       plan, permissionLevel: decision.level,
@@ -212,6 +223,7 @@ export class CapabilityRouter {
 
     try {
       const result = await provider.execute({ tool: plan.tool, args: plan.args, inputs }, this.env);
+      if (ctx.computeQuoteId) this.computeGate!.settle(ctx.computeQuoteId, result.cost.usd);
 
       // One transaction: representations, lineage, the action's closing row and the
       // version snapshot land together or not at all.

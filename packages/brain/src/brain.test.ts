@@ -13,7 +13,7 @@ const state = (over: Partial<ObjectState> = {}): ObjectState => ({
   versionId: "vvvvvvvv-vvvv-4vvv-8vvv-vvvvvvvvvvvv", seq: 3,
   branchId: null, branchName: "main",
   properties: {
-    title: "Rocket", semanticType: "rocket", tags: [],
+    title: "Rocket", semanticType: "rocket", traits: [], tags: [],
     dimensions: null, units: null, settings: {},
   },
   forms: [{ role: "source.primary", representationId: "rrrrrrrr-rrrr-4rrr-8rrr-000000000001" }],

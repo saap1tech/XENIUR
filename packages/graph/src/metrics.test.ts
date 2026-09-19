@@ -92,4 +92,18 @@ describe("what XENIUR records about your own use of it", () => {
     // The export is the same data the disclosure view shows.
     expect(summary).toContain("you brought the first thing into a project");
   });
+
+  it("records the concept for typed fallback and never the words typed", () => {
+    metrics.start();
+    metrics.record("gesture_used", { detail: { concept: "relationship" } });
+    metrics.record("typed_instead", { detail: {
+      concept: "cost", typed: "under 1200 near Shinjuku", title: "Tokyo launch",
+    } });
+    const disclosure = metrics.disclose();
+    expect(disclosure.visualPaths.gestureUsed).toBe(1);
+    expect(disclosure.visualPaths.typedInstead).toBe(1);
+    expect(disclosure.visualPaths.byConcept).toEqual({ cost: 1 });
+    const typed = metrics.events().find((event) => event.kind === "typed_instead")!;
+    expect(typed.detail).toEqual({ concept: "cost" });
+  });
 });

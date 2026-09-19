@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, readFileSync } from "node:fs";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import sharp from "sharp";
@@ -9,8 +10,51 @@ import type { ProviderEnv } from "@xeniur/providers";
 import { ValidationRunner } from "./index.js";
 
 const ROOT = process.cwd();
+const BLENDER = process.env["XENIUR_BLENDER"] ?? "/Applications/Blender.app/Contents/MacOS/Blender";
 let dir: string, g: ObjectGraph, env: ProviderEnv, runner: ValidationRunner;
 let readiness: ReadinessEvaluator, worldId: string, objectId: string;
+
+/**
+ * Real mesh fixtures, exported from the repo's own .blend at the start of the run.
+ *
+ * These used to be read from /tmp, which any clean machine — and any tidy one — does not
+ * have. A test that depends on a path outside the repository is a test that fails for
+ * everyone except the person who wrote it.
+ */
+let fixtures: string;
+let rocketStl: Buffer, rocketGlb: Buffer;
+/** Blender's own triangle count for the exported mesh — the number the validator must agree with. */
+let blenderPolygons: number;
+
+beforeAll(() => {
+  fixtures = mkdtempSync(join(tmpdir(), "xeniur-validator-fixtures-"));
+  const script = join(fixtures, "export.py");
+  writeFileSync(script, `
+import bpy, sys
+out = sys.argv[sys.argv.index("--") + 1]
+bpy.ops.object.select_all(action="SELECT")
+bpy.ops.export_scene.gltf(filepath=out + "/rocket.glb", export_format="GLB", use_selection=True)
+bpy.ops.wm.stl_export(filepath=out + "/rocket.stl", export_selected_objects=True)
+# Blender's own count of what the exporters actually write: both GLB and STL triangulate, so
+# the number the validator must agree with is the triangle count, not the quad count.
+tris = 0
+for o in bpy.context.scene.objects:
+    if o.type == "MESH":
+        o.data.calc_loop_triangles()
+        tris += len(o.data.loop_triangles)
+open(out + "/polygons.txt", "w").write(str(tris))
+`);
+  execFileSync(BLENDER, [
+    "--background", join(ROOT, "assets", "rocket.blend"), "--python", script, "--", fixtures,
+  ], { stdio: "ignore" });
+  if (!existsSync(join(fixtures, "rocket.stl")) || !existsSync(join(fixtures, "rocket.glb"))) {
+    throw new Error("Blender did not produce the mesh fixtures; is XENIUR_BLENDER set?");
+  }
+  rocketStl = readFileSync(join(fixtures, "rocket.stl"));
+  rocketGlb = readFileSync(join(fixtures, "rocket.glb"));
+  blenderPolygons = Number(readFileSync(join(fixtures, "polygons.txt"), "utf8").trim());
+});
+afterAll(() => { rmSync(fixtures, { recursive: true, force: true }); });
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "xeniur-validators-"));
@@ -41,13 +85,14 @@ const addForm = (role: string, bytes: Buffer, modality: "mesh" | "image", format
 
 describe("validators measure, they do not judge", () => {
   it("measures a real mesh with Blender and reports the numbers", async () => {
-    addForm("print.stl", readFileSync("/tmp/xeniur-smoke/rocket.stl"), "mesh", "stl", "deterministic");
+    addForm("print.stl", rocketStl, "mesh", "stl", "deterministic");
     const summary = await runner.validate(objectId, { only: ["mesh.polycount", "mesh.manifold", "mesh.watertight"] });
 
     const poly = summary.checks.find((c) => c.validator === "mesh.polycount")!;
     expect(poly.status).toBe("pass");
-    expect(poly.detail["polygons"]).toBe(284);
-    expect(poly.summary).toContain("284 polygons");
+    // Not a magic number: the validator must report what Blender counts in the same file.
+    expect(poly.detail["polygons"]).toBe(blenderPolygons);
+    expect(poly.summary).toContain(`${blenderPolygons} polygons`);
 
     // The procedural rocket genuinely is not a clean solid, and the check says so plainly.
     const manifold = summary.checks.find((c) => c.validator === "mesh.manifold")!;
@@ -210,14 +255,14 @@ describe("readiness explains itself", () => {
   });
 
   it("enforces a numeric bound against what the validator actually measured", async () => {
-    addForm("delivery.godot", readFileSync("/tmp/xeniur-smoke/rocket.glb"), "mesh", "glb", "deterministic");
+    addForm("delivery.godot", rocketGlb, "mesh", "glb", "deterministic");
     await runner.validate(objectId, { only: ["mesh.polycount", "mesh.manifold"] });
 
-    // 284 polygons is well under 50,000, so the ceiling is satisfied.
+    // A few hundred triangles is well under 50,000, so the ceiling is satisfied.
     const report = readiness.evaluate(objectId, "godot")!;
     const polycount = report.results.find((r) => JSON.stringify(r.requirement).includes("polycount"))!;
     expect(polycount.met).toBe(true);
-    expect(polycount.detail).toContain("284 polygons");
+    expect(polycount.detail).toContain(`${blenderPolygons} polygons`);
   }, 120_000);
 
   it("refuses to approve a release that is not ready, and says why", () => {

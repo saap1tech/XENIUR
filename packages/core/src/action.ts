@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TimestampSchema, UuidSchema } from "./ids.js";
+import { BlobHashSchema, TimestampSchema, UuidSchema } from "./ids.js";
 import { ActionStatusSchema, ProvenanceSchema } from "./enums.js";
 import { PermissionLevelSchema } from "./permissions.js";
 import { ToolSchema } from "./tools.js";
@@ -39,6 +39,14 @@ export const ActionPlanSchema = z.object({
 }).strict();
 export type ActionPlan = z.infer<typeof ActionPlanSchema>;
 
+export const SentDataSchema = z.object({
+  name: z.string().min(1),
+  /** Verifies the exact local value without copying sensitive content into public proof. */
+  valueDigest: BlobHashSchema,
+  valueType: z.enum(["string", "number", "boolean", "object", "null"]),
+}).strict();
+export type SentData = z.infer<typeof SentDataSchema>;
+
 /** Written after any consequential operation, so an outcome can always be audited. */
 export const ReceiptSchema = z.object({
   screenshotBlobHash: z.string().nullable().default(null),
@@ -46,6 +54,16 @@ export const ReceiptSchema = z.object({
   url: z.string().nullable().default(null),
   params: z.record(z.unknown()).default({}),
   sessionGrantId: UuidSchema.nullable().default(null),
+  attempted: z.string().default(""),
+  planDigest: BlobHashSchema.nullable().default(null),
+  destination: z.string().nullable().default(null),
+  dataSent: z.array(SentDataSchema).default([]),
+  quotedPrice: CostSchema.nullable().default(null),
+  actualPrice: CostSchema.nullable().default(null),
+  providerResponse: z.object({
+    status: z.string().min(1), reference: z.string().nullable().default(null),
+    digest: BlobHashSchema.nullable().default(null),
+  }).strict().nullable().default(null),
   outcome: z.string(),
   at: TimestampSchema,
 });

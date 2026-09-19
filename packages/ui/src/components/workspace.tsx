@@ -85,7 +85,7 @@ export function ImpactReview({ node, bindings }: { node: Node<"ImpactReview">; b
         <Panel title="Review">
           <p className="xr-impact__what">
             Something you cited has changed. Nothing here is wrong, and nothing here can be
-            rebuilt — only you can say whether it still holds.
+            rebuilt; only you can say whether it still holds.
           </p>
           <ul className="xr-impact__list xr-impact__list--review">
             {impact.review.map((r) => <ReviewRow key={`${r.causeObjectId}-${r.objectId}`}
@@ -204,7 +204,7 @@ export function DecisionCard({ node, bindings }: { node: Node<"DecisionCard">; b
 
       <p className="xr-decision__chosen">
         <span className="xr-decision__label">Chosen</span>
-        <span className="xr-decision__value">{chosen?.label ?? decision.chosenOption ?? "—"}</span>
+        <span className="xr-decision__value">{chosen?.label ?? decision.chosenOption ?? "None"}</span>
       </p>
 
       {decision.rationale && <p className="xr-decision__why">{decision.rationale}</p>}
@@ -237,7 +237,7 @@ export function DecisionCard({ node, bindings }: { node: Node<"DecisionCard">; b
             {decision.assumptions.map((a, i) => (
               <li key={i}>
                 {a.text}
-                {a.reviewTrigger && <em> — revisit if {a.reviewTrigger}</em>}
+                {a.reviewTrigger && <em> / revisit if {a.reviewTrigger}</em>}
               </li>
             ))}
           </ul>
@@ -335,7 +335,7 @@ export function PreviewCard({ node, bindings }: { node: Node<"PreviewCard">; bin
         {pending.reversible
           ? "This can be undone."
           : "This cannot be undone from inside XENIUR."}
-        {" "}Approving covers exactly this — if anything above changes, it will ask again.
+        {" "}Approving covers exactly this; if anything above changes, it will ask again.
       </p>
 
       <div className="xr-preview__actions">
@@ -402,7 +402,7 @@ export function InspectorQuestions({ node, bindings }: {
         if (relevant.length === 0) {
           return <p className="xr-answer__lead">
             No decisions have been recorded for this yet. What it is, it is because somebody
-            made it that way — writing that down is what makes the next revision easier.
+            made it that way. Writing that down is what makes the next revision easier.
           </p>;
         }
         return (
@@ -411,7 +411,7 @@ export function InspectorQuestions({ node, bindings }: {
               <li key={d.objectId}>
                 <button type="button" className="xr-linkish"
                   onClick={() => bindings.onSelect?.(d.objectId)}>{d.question}</button>
-                <span className="xr-answer__aside"> — {d.chosenOption}</span>
+                <span className="xr-answer__aside"> / {d.chosenOption}</span>
               </li>
             ))}
           </ul>
@@ -437,7 +437,7 @@ export function InspectorQuestions({ node, bindings }: {
               return (
                 <li key={r.profileId}>
                   <span>{r.profileName}</span>
-                  <span className="xr-answer__aside"> — {met}/{r.results.length} current measurements</span>
+                  <span className="xr-answer__aside"> / {met}/{r.results.length} current measurements</span>
                 </li>
               );
             })}
@@ -446,7 +446,7 @@ export function InspectorQuestions({ node, bindings }: {
       }
       case "next": {
         const safe: string[] = ["Rename it", "Undo the last change", "Compare two versions"];
-        if ((impact?.rebuild.length ?? 0) > 0) safe.unshift("Rebuild what is out of date — free, and reversible");
+        if ((impact?.rebuild.length ?? 0) > 0) safe.unshift("Rebuild what is out of date. Free and reversible");
         if ((impact?.review.length ?? 0) > 0) safe.push("Look at what changed underneath a decision");
         return (
           <>
@@ -583,7 +583,7 @@ export function ThinkingTable({ node, bindings }: { node: Node<"ThinkingTable">;
                   </li>
                 );
               })}
-              {map[key].length === 0 && <li className="xr-table__empty">—</li>}
+              {map[key].length === 0 && <li className="xr-table__empty">None</li>}
             </ul>
           </section>
         ))}

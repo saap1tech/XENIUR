@@ -1,8 +1,8 @@
 import type { LineageStep } from "@xeniur/graph";
 import type {
   ActionRecord, Atom, Check, DecisionDetail, DnaReport, FrictionState, ImpactReport, Lane,
-  ObjectState, PlanShape, ReadinessReport, RebuildPlan, Representation, ResolvedPassage,
-  SourceVersion, StepStatus, Task, ThinkingMap,
+  ObjectState, PlanShape, ProcessProof, ReadinessReport, RebuildPlan, Representation, ResolvedPassage,
+  SourceVersion, StepStatus, Task, ThinkingMap, ConstraintRecord, ConstraintValue,
 } from "@xeniur/core";
 import { formOf } from "@xeniur/core";
 
@@ -72,6 +72,11 @@ export interface SceneBindings {
     left: { versionId: string; label: string; representation: Representation | null };
     right: { versionId: string; label: string; representation: Representation | null };
   }>>;
+  constraints?: Readonly<Record<string, ConstraintRecord>>;
+  processProof?: Readonly<Record<string, ProcessProof>>;
+  gestureProposals?: Readonly<Record<string, {
+    id: string; label: string; because: string; reversible: boolean;
+  }>>;
 
   /** Resolves a content address to something an <img>/<video> can load. */
   blobUrl(blobHash: string): string;
@@ -104,6 +109,12 @@ export interface SceneBindings {
   onCompare?(objectId: string, formRole: string): void;
   onConvertToDecision?(atomObjectId: string): void;
   onLink?(fromObjectId: string, toObjectId: string): void;
+  /** A drag or its keyboard twin only asks the host for proposals. */
+  onGestureTarget?(sourceId: string, targetId: string): void;
+  onChooseGesture?(proposalId: string): void;
+  onConstraintChange?(constraintId: string, value: ConstraintValue): void;
+  onChoose?(choiceId: string): void;
+  onReviewApprove?(objectId: string): void;
 }
 
 export const emptyBindings = (): SceneBindings => ({

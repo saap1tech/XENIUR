@@ -8,6 +8,11 @@ import type { Atom, FrictionState, Lane, ResolvedPassage, ThinkingMap } from "./
 import type { Task, TaskEvent } from "./tasks.js";
 import type { ActionRecord } from "./action.js";
 import type { Scene } from "./scene.js";
+import type { ConstraintRecord, ConstraintValue } from "./constraints.js";
+import type { ProcessProof } from "./process.js";
+import type { ComputeQuote, EconomySnapshot } from "./compute.js";
+import type { CapturedWebSource, LiveSiteState, WebSettings } from "./web.js";
+import type { WorkflowListing } from "./workflow.js";
 
 export interface Rect { x: number; y: number; width: number; height: number; }
 
@@ -63,6 +68,8 @@ export interface IntentResult {
   taskId: string | null;
   plan: { intent: string; tool: string; objects: string[] } | null;
   error?: string;
+  /** Expensive cloud work pauses here. It is not a task until this exact quote is confirmed. */
+  quote?: ComputeQuote;
 }
 
 /**
@@ -89,6 +96,13 @@ export interface XeniurBridge {
   intent: {
     submit(input: { worldId: string; utterance: string; selection?: string[] }): Promise<IntentResult>;
   };
+  gestures: {
+    choose(input: {
+      worldId: string; sourceId: string; targetId: string;
+      targetKind: "claim" | "object" | "print" | "delivery" | "version" | "question_lane";
+      label: string;
+    }): Promise<IntentResult>;
+  };
   tasks: {
     active(): Promise<Task[]>;
     approve(taskId: string): Promise<void>;
@@ -101,6 +115,21 @@ export interface XeniurBridge {
     navigate(viewId: string, url: string): Promise<void>;
     setBounds(viewId: string, rect: Rect): void;
     close(viewId: string): Promise<void>;
+    status(viewId: string): Promise<LiveSiteState | null>;
+  };
+  web: {
+    settings(): Promise<WebSettings>;
+    setRiskMode(mode: WebSettings["riskMode"]): Promise<WebSettings>;
+    explore(worldId: string, url: string): Promise<CapturedWebSource & { sourceId: string; atomCount: number }>;
+  };
+  economy: {
+    snapshot(): Promise<EconomySnapshot>;
+    confirm(quoteId: string): Promise<IntentResult>;
+    cancel(quoteId: string): Promise<void>;
+  };
+  workflows: {
+    list(): Promise<WorkflowListing[]>;
+    apply(id: string): Promise<string>;
   };
   code: {
     files(objectId: string): Promise<Record<string, string>>;
@@ -143,6 +172,21 @@ export interface XeniurBridge {
     passage(atomObjectId: string): Promise<(ResolvedPassage & { sourceTitle: string }) | null>;
     /** Which accepted decisions and source copies a delivery was made under. */
     influence(objectId: string, releaseId?: string): Promise<InfluenceReport | null>;
+  };
+
+  constraints: {
+    list(worldId: string): Promise<ConstraintRecord[]>;
+    setValue(objectId: string, value: ConstraintValue): Promise<ConstraintRecord | null>;
+  };
+
+  process: {
+    proof(objectId: string): Promise<ProcessProof>;
+    publish(objectId: string, privacy?: "filtered" | "public"): Promise<ProcessProof>;
+    exportPage(input: { objectId: string; eventIds: string[]; discloseHashes: boolean; discloseTiming: boolean }): Promise<{ path: string; rootHash: string }>;
+  };
+
+  metrics: {
+    record(kind: "gesture_used" | "typed_instead", concept: string): Promise<void>;
   };
 
   /* Sensemaking */

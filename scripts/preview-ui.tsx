@@ -22,6 +22,7 @@ import {
   SensemakingStore, buildThinkingMap, extractCandidates,
 } from "@xeniur/sensemaking";
 import { SceneRenderer, type SceneBindings } from "@xeniur/ui";
+import { proposalsFor } from "@xeniur/grammar";
 
 const ROOT = process.cwd();
 const OUT = process.argv[2] ?? join(ROOT, "ui-preview.html");
@@ -140,11 +141,51 @@ async function main(): Promise<void> {
   });
   graph.decisions.accept(decisionId, "you");
 
+  /* Typed fixtures for the full M4 primitive gallery. */
+  const constraintObject = (title: string) => graph.createObject({
+    worldId: applied.worldId, semanticType: "constraint", title,
+  });
+  const costObject = constraintObject("Cost ceiling");
+  const cost = graph.constraints.define(costObject.object.id,
+    { kind: "range", min: 500, max: 2500, step: 100, unit: "EUR" }, "Budget", 1500);
+  const priorityObject = constraintObject("Trip priorities");
+  const priority = graph.constraints.define(priorityObject.object.id,
+    { kind: "priority", dimensions: ["Quiet", "Food", "Nightlife"] }, "Priorities",
+    { Quiet: 0.8, Food: 0.65, Nightlife: 0.2 });
+  const peopleObject = constraintObject("Party size");
+  const people = graph.constraints.define(peopleObject.object.id,
+    { kind: "quantity", min: 1, max: 8, unit: "people" }, "Travellers", 2);
+  const dateObject = constraintObject("Travel window");
+  const start = Date.UTC(2027, 3, 12);
+  const end = Date.UTC(2027, 3, 18);
+  const dates = graph.constraints.define(dateObject.object.id,
+    { kind: "date_range", earliest: Date.UTC(2027, 3, 1), latest: Date.UTC(2027, 3, 30) },
+    "Dates", { start, end });
+  const locationObject = constraintObject("Neighbourhood");
+  const location = graph.constraints.define(locationObject.object.id, { kind: "location", places: [
+    { id: "shinjuku", label: "Shinjuku", x: 160, y: 210, district: "West" },
+    { id: "asakusa", label: "Asakusa", x: 432, y: 116, district: "East" },
+    { id: "koenji", label: "Koenji", x: 82, y: 128, district: "West" },
+  ] }, "Where", "shinjuku");
+  const visualConstraints = [location, dates, people, cost, priority];
+  graph.process.record({
+    objectId, versionId: graph.currentState(objectId)!.versionId, kind: "sketch_made", actor: "human",
+    label: "Rocket silhouette sketch", tool: null, model: null,
+    inputHashes: [], outputHashes: ["a".repeat(64)], durationMs: 180_000,
+  });
+  const visualProposal = proposalsFor(
+    { id: objectId, title: "Rocket", semanticType: "asset" },
+    { id: decisionId, title: "Seam decision", kind: "object" },
+  )[0]!;
+
   /* Bindings, exactly as the app assembles them. */
   // (the decision is accepted below, once the reading World has given it something to cite)
 
   const detailBindings = (): SceneBindings => ({
-    states: { [objectId]: graph.currentState(objectId)! },
+    states: {
+      [objectId]: graph.currentState(objectId)!,
+      [decisionId]: graph.currentState(decisionId)!,
+    },
     representations: Object.fromEntries(graph.listRepresentations(objectId).map((r) => [r.id, r])),
     tasks: {},
     stepStates: { [objectId]: graph.recipes.statusOf(objectId) },
@@ -185,6 +226,9 @@ async function main(): Promise<void> {
       plan: samplePlan, level: "PURCHASE", scope: "supplier.example", taskId: null,
       summary: "Order 40 metres of taped seam tape", reversible: false,
     } },
+    constraints: Object.fromEntries(visualConstraints.map((item) => [item.objectId, item])),
+    processProof: { [objectId]: graph.process.proof(objectId, "filtered") },
+    gestureProposals: { [visualProposal.id]: visualProposal },
     blobUrl: (hash) => dataUrls.get(hash) ?? "",
   });
 
@@ -214,6 +258,27 @@ async function main(): Promise<void> {
   });
 
   const sections: Array<[string, string]> = [
+    ["M4 · the fourteen visual primitives", renderToStaticMarkup(<SceneRenderer bindings={detailBindings()} scene={scene("visual grammar", [
+      { id: "orbit", component: "ObjectOrbit", focusId: objectId, relatedIds: [decisionId], state: "selected", disclosure: 2 },
+      { id: "ring", component: "AffordanceRing", objectId, proposalIds: [visualProposal.id] },
+      { id: "spatial", component: "SpatialCanvas", focusId: objectId, objectIds: [objectId, decisionId],
+        edges: [{ id: "decision-edge", from: decisionId, to: objectId, relation: "satisfies" }], disclosure: 2 },
+      { id: "strip", component: "ConstraintStrip", constraintIds: visualConstraints.map((item) => item.objectId), disclosure: 2 },
+      { id: "cost", component: "RangeMeter", constraintId: cost.objectId },
+      { id: "priority", component: "PriorityBalance", constraintId: priority.objectId },
+      { id: "people", component: "PeopleChips", constraintId: people.objectId },
+      { id: "calendar", component: "Calendar", constraintId: dates.objectId },
+      { id: "map", component: "SchematicMap", constraintId: location.objectId,
+        placeIds: ["shinjuku", "asakusa", "koenji"], selectedPlaceId: "shinjuku" },
+      { id: "choices", component: "ChoiceCards", meaning: "where", choices: [
+        { id: "one", label: "Shinjuku base", detail: "Quiet side street", selected: true, excluded: false, cost: 1180 },
+        { id: "two", label: "Asakusa studio", detail: "Near the river", selected: false, excluded: false, cost: 940 },
+      ] },
+      { id: "stepper", component: "Stepper", constraintId: people.objectId },
+      { id: "evidence", component: "EvidenceMeter", objectId, disclosure: 3 },
+      { id: "empty", component: "EmptySlot", meaning: "source", label: "Add first-hand observation" },
+      { id: "review", component: "ReviewSheet", objectId, title: "Rocket delivery", sections: ["Forms", "Checks", "Process"] },
+    ])} />)],
     ["Object · Forms and what changed", renderToStaticMarkup(<SceneRenderer bindings={detailBindings()} scene={scene("forms", [
       { id: "s", component: "FormStrip", objectId, selectedRole: null, showFileNames: false },
       { id: "i", component: "ImpactReview", objectId, compact: false },
@@ -251,7 +316,7 @@ async function main(): Promise<void> {
 
   const css = readFileSync(join(ROOT, "apps/desktop/src/renderer/styles.css"), "utf8");
   writeFileSync(OUT, `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>XENIUR — interface</title>
+<html lang="en"><head><meta charset="utf-8"><title>XENIUR | interface</title>
 <style>${css}
 .prev { max-width: 960px; margin: 0 auto; padding: 40px 24px 80px; }
 .prev h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em;

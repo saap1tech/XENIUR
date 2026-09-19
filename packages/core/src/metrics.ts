@@ -22,6 +22,8 @@ export const SESSION_EVENT_KINDS = [
   "decision_reaffirmed",      // they acted on the review half
   "compared_versions",
   "traced_cause",             // "show how this happened" — can they answer *why*?
+  "gesture_used",            // completed through a direct visual path
+  "typed_instead",           // typed where a visual path existed; concept only, never words
   "delivery_mistake",         // a release later superseded or withdrawn
   "reflection_dismissed",     // friction turned off; a prompt nobody wants is a bad prompt
   "session_ended",
@@ -79,6 +81,11 @@ export interface MetricsDisclosure {
   /** True when nothing recorded here could identify a person or their work. */
   containsNoContent: boolean;
   revision: RevisionMetrics;
+  visualPaths: {
+    gestureUsed: number;
+    typedInstead: number;
+    byConcept: Record<string, number>;
+  };
 }
 
 /** What each recorded kind means, in a sentence, shown beside its count. */
@@ -94,6 +101,8 @@ export const EVENT_MEANINGS: Record<SessionEventKind, string> = {
   decision_reaffirmed: "you looked at a decision and stood by it",
   compared_versions: "you compared two versions",
   traced_cause: "you asked how something happened",
+  gesture_used: "you completed an action by touching or moving something",
+  typed_instead: "you typed where a visual path was available",
   delivery_mistake: "a delivery was later replaced",
   reflection_dismissed: "you dismissed a reflection prompt",
   session_ended: "you closed XENIUR",

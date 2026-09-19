@@ -1,4 +1,4 @@
-export { SceneRenderer } from "./SceneRenderer.jsx";
+export { SceneRenderer, semanticDescription } from "./SceneRenderer.jsx";
 export type { SceneRendererProps } from "./SceneRenderer.jsx";
 export { COMPONENT_REGISTRY, planScene, validateScene } from "./registry.js";
 export type { ScenePlan, Refusal, SceneValidation } from "./registry.js";
@@ -12,4 +12,9 @@ export {
   FormStrip, ReadinessBoard, ChecksPanel, RebuildPreview, VersionTimeline, ImportDrop,
 } from "./components/living.jsx";
 export { LineageGraph, RecipeGraph } from "./components/graphs.jsx";
+export {
+  ObjectOrbit, AffordanceRing, SpatialCanvas, ConstraintStrip, RangeMeter, PriorityBalance,
+  PeopleChips, Calendar, SchematicMap, ChoiceCards, Stepper, EvidenceMeter, EmptySlot, ReviewSheet,
+  requestGesture,
+} from "./components/visual.jsx";
 export { ThinkingMapView, IngredientPanel, FocusView } from "./components/thinking.jsx";

@@ -137,6 +137,17 @@ export class DecisionStore {
         `UPDATE decisions SET state = 'accepted', accepted_by = ?, accepted_at = ?,
                               accepted_version_id = ? WHERE object_id = ?`,
       ).run(by, now(), state.versionId, objectId);
+      this.graph.process.record({
+        objectId, versionId: state.versionId, kind: "decision_accepted", actor: "human",
+        label: `Accepted ${detail.chosenOption}`, tool: null, model: null,
+        inputHashes: detail.evidence.flatMap((item) => {
+          if (!item.sourceVersionId) return [];
+          const row = this.graph.db.prepare(`SELECT content_hash FROM source_versions WHERE id = ?`)
+            .get(item.sourceVersionId) as { content_hash: string } | undefined;
+          return row ? [row.content_hash] : [];
+        }),
+        outputHashes: rep.blobHash ? [rep.blobHash] : [], durationMs: 0,
+      });
       return this.detail(objectId)!;
     })();
   }

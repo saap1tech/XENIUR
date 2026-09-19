@@ -134,8 +134,11 @@ describe("the World shows what the loop produced", () => {
     expect(render()).toContain("MOCK");
   });
 
-  it("offers a way to say what to do next", () => {
-    expect(render()).toContain("Say what you want…");
+  it("offers language as a peer, attached to the situation rather than above it", () => {
+    const html = render();
+    expect(html).toContain("Use language for this");
+    // Language is a shortcut into the same actions, never the centre of the screen.
+    expect(html.indexOf("xr-language-dock")).toBeGreaterThan(html.indexOf("xr-scene"));
   });
 
   it("renders only registered components — no raw markup path exists", () => {

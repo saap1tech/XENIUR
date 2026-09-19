@@ -151,6 +151,16 @@ export class MetricsStore {
       // re-reads what was actually stored rather than trusting it.
       containsNoContent: events.every((e) => Object.values(e.detail).every(isNonContent)),
       revision: this.revision(),
+      visualPaths: {
+        gestureUsed: counts.get("gesture_used") ?? 0,
+        typedInstead: counts.get("typed_instead") ?? 0,
+        byConcept: events.filter((event) => event.kind === "typed_instead")
+          .reduce<Record<string, number>>((all, event) => {
+            const concept = typeof event.detail["concept"] === "string" ? event.detail["concept"] : "unknown";
+            all[concept] = (all[concept] ?? 0) + 1;
+            return all;
+          }, {}),
+      },
     };
   }
 

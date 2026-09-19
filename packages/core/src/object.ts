@@ -4,6 +4,7 @@ import {
   ModalitySchema, ProvenanceSchema, RelationshipKindSchema, EdgeKindSchema,
   InputRoleSchema, OutputRoleSchema,
 } from "./enums.js";
+import { SemanticTraitsSchema } from "./traits.js";
 
 export const WorldSchema = z.object({
   id: UuidSchema,
@@ -37,6 +38,8 @@ export type XeniurObject = z.infer<typeof XeniurObjectSchema>;
 export const ObjectPropertiesSchema = z.object({
   title: z.string().min(1),
   semanticType: z.string().min(1),
+  /** Domain-independent affordances used by the visual grammar. Versioned like any property. */
+  traits: SemanticTraitsSchema.default([]),
   tags: z.array(z.string()).default([]),
   /** Physical extent, when the thing has one. Units are recorded, never assumed. */
   dimensions: z.object({ x: z.number(), y: z.number(), z: z.number() }).nullable().default(null),
@@ -47,7 +50,7 @@ export const ObjectPropertiesSchema = z.object({
 export type ObjectProperties = z.infer<typeof ObjectPropertiesSchema>;
 
 export const defaultProperties = (title: string, semanticType: string): ObjectProperties => ({
-  title, semanticType, tags: [], dimensions: null, units: null, settings: {},
+  title, semanticType, traits: [], tags: [], dimensions: null, units: null, settings: {},
 });
 
 /**

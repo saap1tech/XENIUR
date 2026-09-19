@@ -20,7 +20,7 @@ const state = (id: string, title: string, forms: string[]): ObjectState => ({
     currentBranchId: null, createdAt: 0, archivedAt: null,
   },
   versionId: "11111111-1111-4111-8111-111111111111", seq: 3, branchId: null, branchName: "main",
-  properties: { title, semanticType: "rocket", tags: [], dimensions: null, units: null, settings: {} },
+  properties: { title, semanticType: "rocket", traits: ["spatial", "printable", "versioned"], tags: [], dimensions: null, units: null, settings: {} },
   forms: forms.map((role) => ({ role, representationId: REP })),
   recipeId: null,
 });
@@ -299,7 +299,7 @@ describe("the interface speaks, rather than printing rows", () => {
     const out = render({ id: "q", component: "InspectorQuestions", objectId: OBJ, open: "what" },
                        bindings({ states: { [OBJ]: {
                          ...state(OBJ, "Rocket", ["source.primary"]),
-                         properties: { title: "Rocket", semanticType: "asset3d", tags: [],
+                         properties: { title: "Rocket", semanticType: "asset3d", traits: ["spatial", "renderable", "versioned"], tags: [],
                                        dimensions: null, units: null, settings: {} },
                        } } }));
     expect(out).toContain("a 3D asset called");

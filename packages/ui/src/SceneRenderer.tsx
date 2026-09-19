@@ -10,14 +10,17 @@ export interface SceneRendererProps {
   onRefusal?(refusals: Refusal[]): void;
 }
 
-function renderNode(node: SceneNode, bindings: SceneBindings, refusals: Refusal[]): ReactNode {
+function renderNode(
+  node: SceneNode, bindings: SceneBindings, refusals: Refusal[],
+  slots: ReadonlyMap<string, { id: string; role: string }>,
+): ReactNode {
   const name = (node as { component: string }).component;
 
   if (name === "Canvas") {
     const canvas = node as Extract<SceneNode, { component: "Canvas" }>;
     return (
       <div key={canvas.id} className={`xr-canvas xr-canvas--${canvas.layout}`}>
-        {canvas.children.map((child) => renderNode(child, bindings, refusals))}
+        {canvas.children.map((child) => renderNode(child, bindings, refusals, slots))}
       </div>
     );
   }
@@ -27,7 +30,23 @@ function renderNode(node: SceneNode, bindings: SceneBindings, refusals: Refusal[
 
   const leaf = plan.renderable[0]!;
   const Component = COMPONENT_REGISTRY[leaf.component as keyof typeof COMPONENT_REGISTRY];
-  return createElement(Component, { key: leaf.id, node: leaf, bindings });
+  const rendered = createElement(Component, { node: leaf, bindings });
+  const slot = slots.get(leaf.id);
+  return slot
+    ? <div key={leaf.id} className={`xr-scene-slot xr-scene-slot--${slot.role}`} data-slot={slot.id}>{rendered}</div>
+    : <div key={leaf.id} className="xr-scene-slot">{rendered}</div>;
+}
+
+/** The screen-reader twin speaks subjects and values, never implementation names. */
+export function semanticDescription(scene: Scene, bindings: SceneBindings): string {
+  const focus = scene.focusId ? bindings.states[scene.focusId] : undefined;
+  const parts = [scene.title];
+  if (focus) parts.push(`Focused on ${focus.properties.title}`);
+  const constraints = Object.values(bindings.constraints ?? {});
+  if (constraints.length > 0) {
+    parts.push(`Constraints: ${constraints.map((item) => `${item.appliesTo} ${String(item.value)}`).join(", ")}`);
+  }
+  return parts.filter(Boolean).join(". ");
 }
 
 /**
@@ -39,12 +58,14 @@ function renderNode(node: SceneNode, bindings: SceneBindings, refusals: Refusal[
  */
 export function SceneRenderer({ scene, bindings, onRefusal }: SceneRendererProps) {
   const refusals: Refusal[] = [];
-  const tree = renderNode(scene.root, bindings, refusals);
+  const slots = new Map((scene.slots ?? []).map((slot) => [slot.nodeId, { id: slot.id, role: slot.role }]));
+  const tree = renderNode(scene.root, bindings, refusals, slots);
   if (refusals.length > 0) {
     for (const r of refusals) {
       console.warn(`[XENIUR] refused scene node ${r.id}: "${r.component}" ${r.reason}`);
     }
     onRefusal?.(refusals);
   }
-  return <div className="xr-scene" data-world={scene.worldId}>{tree}</div>;
+  return <div className="xr-scene" data-world={scene.worldId}
+    data-layout={scene.layoutId ?? "legacy"} aria-label={semanticDescription(scene, bindings)}>{tree}</div>;
 }

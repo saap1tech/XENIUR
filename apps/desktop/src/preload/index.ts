@@ -32,6 +32,9 @@ contextBridge.exposeInMainWorld("xeniur", {
     submit: (input: { worldId: string; utterance: string; selection?: string[] }) =>
       call("intent:submit", input),
   },
+  gestures: {
+    choose: (input: Record<string, unknown>) => call("gestures:choose", input),
+  },
   tasks: {
     active: () => call("tasks:active"),
     approve: (taskId: string) => call("tasks:approve", { id: taskId }),
@@ -51,6 +54,21 @@ contextBridge.exposeInMainWorld("xeniur", {
       void call("browser:setBounds", { viewId, rect });
     },
     close: (viewId: string) => call("browser:close", { viewId }),
+    status: (viewId: string) => call("browser:status", { viewId }),
+  },
+  web: {
+    settings: () => call("web:settings"),
+    setRiskMode: (mode: "local_only" | "google_lookup") => call("web:setRiskMode", { mode }),
+    explore: (worldId: string, url: string) => call("web:explore", { worldId, url }),
+  },
+  economy: {
+    snapshot: () => call("economy:snapshot"),
+    confirm: (quoteId: string) => call("economy:confirm", { quoteId }),
+    cancel: (quoteId: string) => call("economy:cancel", { quoteId }),
+  },
+  workflows: {
+    list: () => call("workflows:list"),
+    apply: (id: string) => call("workflows:apply", { id }),
   },
   code: {
     files: (objectId: string) => call("code:files", { id: objectId }),
@@ -91,6 +109,25 @@ contextBridge.exposeInMainWorld("xeniur", {
     passage: (atomObjectId: string) => call("decisions:passage", { id: atomObjectId }),
     influence: (objectId: string, releaseId?: string) =>
       call("decisions:influence", { id: objectId, releaseId }),
+  },
+
+  constraints: {
+    list: (worldId: string) => call("constraints:list", { id: worldId }),
+    setValue: (objectId: string, value: unknown) => call("constraints:setValue", { id: objectId, value }),
+  },
+
+  process: {
+    proof: (objectId: string) => call("process:proof", { id: objectId }),
+    publish: (objectId: string, privacy?: "filtered" | "public") =>
+      call("process:publish", { id: objectId, privacy }),
+    exportPage: (input: { objectId: string; eventIds: string[]; discloseHashes: boolean; discloseTiming: boolean }) =>
+      call("process:exportPage", { id: input.objectId, eventIds: input.eventIds,
+        discloseHashes: input.discloseHashes, discloseTiming: input.discloseTiming }),
+  },
+
+  metrics: {
+    record: (kind: "gesture_used" | "typed_instead", concept: string) =>
+      call("metrics:record", { kind, concept }),
   },
 
   sense: {

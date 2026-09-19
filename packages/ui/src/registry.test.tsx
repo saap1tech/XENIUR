@@ -4,7 +4,10 @@ import {
   SCENE_COMPONENTS,
   type ObjectState, type ReadinessReport, type Representation, type Scene, type Task,
 } from "@xeniur/core";
-import { COMPONENT_REGISTRY, SceneRenderer, planScene, validateScene, emptyBindings, type SceneBindings } from "./index.js";
+import {
+  COMPONENT_REGISTRY, SceneRenderer, planScene, validateScene, emptyBindings, requestGesture,
+  semanticDescription, type SceneBindings,
+} from "./index.js";
 
 const OBJ = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const REP = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -17,7 +20,7 @@ const state: ObjectState = {
     currentBranchId: null, createdAt: 0, archivedAt: null,
   },
   versionId: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", seq: 2, branchId: null, branchName: "main",
-  properties: { title: "Rocket", semanticType: "rocket", tags: [], dimensions: null, units: null, settings: {} },
+  properties: { title: "Rocket", semanticType: "rocket", traits: ["spatial", "printable", "versioned"], tags: [], dimensions: null, units: null, settings: {} },
   forms: [{ role: "art.primary", representationId: REP }],
   recipeId: null,
 };
@@ -48,6 +51,10 @@ describe("the registry is closed", () => {
       expect(implemented.has(name), `${name} is declared but not implemented`).toBe(true);
     }
     expect(implemented.size).toBe(SCENE_COMPONENTS.length - 1);
+  });
+
+  it("contains exactly the 46 reviewed primitives", () => {
+    expect(SCENE_COMPONENTS).toHaveLength(46);
   });
 
   it("refuses a node naming a component that does not exist", () => {
@@ -94,6 +101,26 @@ describe("the registry is closed", () => {
     });
     expect(result.ok).toBe(false);
     expect(result.errors.join(" ")).toContain("Unrecognized key");
+  });
+});
+
+describe("visual interaction has a semantic twin", () => {
+  it("routes pointer and keyboard gestures to the same proposal request", () => {
+    const onGestureTarget = vi.fn();
+    const wired = { ...bindings(), onGestureTarget };
+    requestGesture(wired, OBJ, WORLD, "pointer");
+    requestGesture(wired, OBJ, WORLD, "keyboard");
+    expect(onGestureTarget.mock.calls).toEqual([[OBJ, WORLD], [OBJ, WORLD]]);
+  });
+
+  it("names subjects and values without exposing component names", () => {
+    const compiled: Scene = {
+      ...scene({ id: "r", component: "ObjectOrbit", focusId: OBJ, relatedIds: [], state: "selected", disclosure: 2 }),
+      focusId: OBJ,
+    };
+    const words = semanticDescription(compiled, bindings());
+    expect(words).toContain("Focused on Rocket");
+    expect(words).not.toContain("ObjectOrbit");
   });
 });
 

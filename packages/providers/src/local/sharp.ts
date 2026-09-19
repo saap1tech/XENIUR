@@ -39,11 +39,14 @@ export const sharpProvider: Provider = {
     const width = numberArg(call.args, "width");
     const height = numberArg(call.args, "height");
     if (width !== undefined || height !== undefined) {
-      const fit = stringArg(call.args, "fit") ?? "inside";
+      const requestedFit = stringArg(call.args, "fit") ?? "inside";
+      const fits = ["contain", "cover", "fill", "inside", "outside"] as const;
+      const fit: typeof fits[number] = fits.includes(requestedFit as typeof fits[number])
+        ? requestedFit as typeof fits[number] : "inside";
       pipeline = pipeline.resize({
         width: width ? Math.round(width) : undefined,
         height: height ? Math.round(height) : undefined,
-        fit: fit as keyof sharp.FitEnum,
+        fit,
         withoutEnlargement: call.args["allowUpscale"] !== true,
       });
       applied["resize"] = { width, height, fit };
