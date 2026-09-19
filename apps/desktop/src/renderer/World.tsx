@@ -64,6 +64,8 @@ export function World({
   onBack, onOpenObject, onSubmit, onApprove, onReject, onImported, initialGoal,
 }: WorldProps) {
   const [zone, setZone] = useState<Zone>(initialZone);
+  // Until the person clicks a zone, the goal's next question chooses the representation.
+  const [zoneChosen, setZoneChosen] = useState<boolean>(initialZone !== "work");
   const [selectedId, setSelectedId] = useState<string | null>(
     initialSelection ?? snapshot.states[0]?.object.id ?? null,
   );
@@ -78,7 +80,7 @@ export function World({
   const [trust, setTrust] = useState<Record<string, TrustFacts>>({});
   const [gestureProposals, setGestureProposals] = useState<GestureProposal[]>([]);
   const [gesturePair, setGesturePair] = useState<{
-    sourceId: string; targetId: string; targetKind: "claim" | "object";
+    sourceId: string; targetId: string; targetKind: "claim" | "object" | "decision" | "work";
   } | null>(null);
   const [languageOpen, setLanguageOpen] = useState(false);
   const [arrival, setArrival] = useState<{ path: string; inspection: PackageInspectionView } | null>(null);
@@ -121,7 +123,8 @@ export function World({
     if (!goal || !bridge?.goals) return;
     setStanding((await bridge.goals.standing(goal.id)) ?? null);
   }, [bridge, goal]);
-  useEffect(() => { if (showStanding) void refreshStanding(); }, [showStanding, refreshStanding]);
+  // The standing feeds the compiler's knowledge counts, so it is read whenever the goal is.
+  useEffect(() => { void refreshStanding(); }, [refreshStanding, showStanding, decisions, map]);
   // W: where do I stand. Esc closes it.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -245,7 +248,8 @@ export function World({
       const source = snapshot.states.find((state) => state.object.id === sourceId);
       const target = snapshot.states.find((state) => state.object.id === targetId);
       if (!source || !target) return;
-      const targetKind = target.properties.semanticType === "claim" ? "claim" : "object";
+      const targetKind = decisions.some((d) => d.objectId === targetId) ? "decision"
+        : target.properties.semanticType === "claim" ? "claim" : "object";
       setGesturePair({ sourceId, targetId, targetKind });
       setGestureProposals(proposalsFor(
         { id: sourceId, title: source.properties.title, semanticType: source.properties.semanticType },
@@ -334,7 +338,14 @@ export function World({
       : snapshot.states.map((state) => state.object.id);
     const situation = SituationSchema.parse({
       worldId, title: snapshot.world.title,
-      meaning: intent.meaning, interaction: intent.interaction, layer: intent.layer, taskStates,
+      // A clicked zone sets meaning and interaction; otherwise the need chosen from the goal does.
+      ...(zoneChosen || !goal ? { meaning: intent.meaning, interaction: intent.interaction } : {}),
+      ...(standing ? { knowledge: {
+        known: standing.knowledge.known.length, proposed: standing.knowledge.proposed.length,
+        disputed: standing.knowledge.disputed.length, unknown: standing.knowledge.unknown.length,
+        chosenDespite: standing.knowledge.chosenDespite.length,
+      } } : {}),
+      layer: intent.layer, taskStates,
       goal: goal
         ? { id: goal.id, outcome: goal.outcome, status: goal.status, requiredOutputs: goal.requiredOutputs,
             openQuestions: goal.openQuestionIds,
@@ -364,7 +375,7 @@ export function World({
       root.children.push({ id: "support-map", component: "SupportMap", objectId: selected.object.id, lanes: [], disclosure: intent.layer } as never);
     }
     return compiled;
-  }, [zone, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints, challenge, supportMap, goal, relevant, showStanding]);
+  }, [zone, zoneChosen, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints, challenge, supportMap, goal, relevant, showStanding, standing]);
 
   const inspector: Scene | null = useMemo(() => selected ? {
     worldId, title: "", reason: "",
@@ -440,8 +451,21 @@ export function World({
         {ZONES.map((z) => (
           <button key={z.key} type="button"
             className={`xr-rail__item${zone === z.key ? " is-active" : ""}`}
+            onDragOver={z.key === "work" ? (e) => e.preventDefault() : undefined}
+            onDrop={z.key === "work" ? (e) => {
+              // A question dropped on Work proposes a next action on the goal. Proposes; the person confirms.
+              const sourceId = e.dataTransfer.getData("application/x-xeniur-object");
+              const source = snapshot.states.find((state) => state.object.id === sourceId);
+              if (!source || source.properties.semanticType !== "question") return;
+              e.preventDefault();
+              setGesturePair({ sourceId, targetId: worldId, targetKind: "work" });
+              setGestureProposals(proposalsFor(
+                { id: sourceId, title: source.properties.title, semanticType: "question" },
+                { id: worldId, title: "Work", kind: "work" },
+              ));
+            } : undefined}
             onClick={() => {
-              setZone(z.key); setShowHow(null); setGestureProposals([]);
+              setZone(z.key); setZoneChosen(true); setShowHow(null); setGestureProposals([]);
               if (z.key === "decisions" && decisions[0]) setSelectedId(decisions[0].objectId);
             }}>
             {z.label}

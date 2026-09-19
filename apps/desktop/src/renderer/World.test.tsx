@@ -167,7 +167,7 @@ describe("the World organises around the goal", () => {
     expect(html).toContain("What are you trying to accomplish?");
     expect(html).toContain("One sentence, in your words");
     expect(html).toContain(">Set it<");
-    expect(html).not.toMatch(/profession|role|researcher|designer/i);
+    expect(html).not.toMatch(/profession|your role|researcher|designer/i);
     expect(html).not.toContain("xr-goalbar");
   });
 

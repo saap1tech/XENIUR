@@ -2,6 +2,8 @@ import type { SceneComponentName } from "@xeniur/core";
 import { primitiveFor, primitivesForTraits } from "./dimensions.js";
 import type { Situation } from "./situation.js";
 import { affordancesFor, type DragSubject, type GestureProposal } from "./gestures.js";
+import { NEED_REPRESENTATION, needFor, type Need } from "./need.js";
+import type { Interaction, Meaning } from "./dimensions.js";
 
 export interface SemanticConcept {
   id: string;
@@ -20,12 +22,16 @@ export interface SemanticPlan {
   focusLabel: string;
   goal: Situation["goal"];
   scope: Situation["scope"];
+  /** The next human question the Scene answers. */
+  need: Need;
+  meaning: Meaning;
+  interaction: Interaction;
   disclosure: 1 | 2 | 3 | 4;
   concepts: readonly SemanticConcept[];
   affordances: readonly GestureProposal[];
 }
 
-const constraintFor = (situation: Situation, component: SceneComponentName) => {
+const constraintFor = (situation: Resolved, component: SceneComponentName) => {
   const kind = component === "RangeMeter" ? "range"
     : component === "PriorityBalance" ? "priority"
       : component === "PeopleChips" ? "quantity"
@@ -35,7 +41,7 @@ const constraintFor = (situation: Situation, component: SceneComponentName) => {
   return situation.constraints.find((constraint) => constraint.definition.kind === kind) ?? null;
 };
 
-function propsFor(component: SceneComponentName, situation: Situation): Record<string, unknown> {
+function propsFor(component: SceneComponentName, situation: Resolved): Record<string, unknown> {
   const focusId = situation.focus.id;
   const objectIds = situation.objects.map((object) => object.id);
   const constraint = constraintFor(situation, component);
@@ -77,7 +83,14 @@ function propsFor(component: SceneComponentName, situation: Situation): Record<s
       };
     }
     case "EvidenceMeter": return { objectId: focusId, disclosure: situation.layer };
-    case "EmptySlot": return { meaning: situation.meaning, label: `Add ${situation.meaning}` };
+    case "EmptySlot": return { meaning: situation.meaning, label: situation.knowledge && situation.knowledge.unknown > 0
+      ? `${situation.knowledge.unknown} still unknown — a source or a question goes here` : `Add ${situation.meaning}` };
+    case "ThinkingTable": return { worldId: situation.worldId, selectedId: situation.focus.kind === "object" ? focusId : null };
+    case "SupportMap": return { objectId: focusId, lanes: [], disclosure: situation.layer };
+    case "FormStrip": return { objectId: focusId, selectedRole: null, showFileNames: false };
+    case "ImpactReview": return { objectId: focusId, compact: situation.layer < 3 };
+    case "ReadinessBoard": return { objectId: focusId, showAll: false };
+    case "TrustStrip": return { objectId: focusId, compact: situation.layer < 3 };
     case "ReviewSheet": return {
       objectId: focusId, title: `Review ${situation.focus.label}`,
       sections: ["Intent", "Changes", "Evidence", "Process provenance"],
@@ -102,19 +115,29 @@ function propsFor(component: SceneComponentName, situation: Situation): Record<s
   }
 }
 
-const focusComponent = (situation: Situation): SceneComponentName =>
+const focusComponent = (situation: Resolved): SceneComponentName =>
   situation.capabilities.some((capability) => capability.startsWith("focus:")) ? "FocusView"
     : situation.focus.kind === "decision" ? "DecisionCard"
     : situation.focus.kind === "constraints" ? "ConstraintStrip" : "ObjectOrbit";
 
-/** Pure semantic compiler: it chooses concepts and affordances, never geometry. */
+type Resolved = Situation & { meaning: Meaning; interaction: Interaction };
+
+/** Pure semantic compiler: it chooses the question, then concepts and affordances, never geometry. */
 export function compileSituation(situationInput: Situation): SemanticPlan {
   const allowed = situationInput.scope.objectIds ? new Set(situationInput.scope.objectIds) : null;
   const scopedObjects = allowed
     ? situationInput.objects.filter((object) => allowed.has(object.id))
     : situationInput.objects;
-  const situation: Situation = {
+  // Which question the person is at. The zone's meaning/interaction, when given, still win.
+  const need: Need = situationInput.need ?? needFor({
+    status: situationInput.goal.status, goalKind: situationInput.goal.kind, focusKind: situationInput.focus.kind,
+    knowledge: situationInput.knowledge, changes: situationInput.changes.length, hasChoices: situationInput.choices.length > 0,
+  });
+  const representation = NEED_REPRESENTATION[need];
+  const situation: Resolved = {
     ...situationInput,
+    meaning: situationInput.meaning ?? representation.meaning,
+    interaction: situationInput.interaction ?? representation.interaction,
     objects: scopedObjects,
     changes: allowed ? situationInput.changes.filter((change) => allowed.has(change.objectId)) : situationInput.changes,
     constraints: allowed
@@ -189,11 +212,25 @@ export function compileSituation(situationInput: Situation): SemanticPlan {
       props: propsFor("RecipeGraph", situation), role: "supporting" });
   }
 
+  // The question's own representations, laid beside the focus. Once each; the focus is never repeated.
+  for (const component of representation.components) {
+    if (concepts.some((concept) => concept.component === component)) continue;
+    if (component === "EmptySlot" && !(situation.knowledge && situation.knowledge.unknown > 0)) continue;
+    if (component === "SupportMap" && !(situation.knowledge && situation.knowledge.disputed + situation.knowledge.proposed > 0)) continue;
+    if (component === "CausalPath" && situation.changes.length === 0) continue;
+    if (component === "ChoiceCards" && situation.choices.length === 0) continue;
+    concepts.push({
+      id: `need-${component}`, component, subjectId: component === "ThinkingTable" ? null : situation.focus.id,
+      props: propsFor(component, situation), role: "supporting",
+    });
+  }
+
   return {
     worldId: situation.worldId, title: situation.title,
     layoutId: `${situation.goal.kind}.${situation.meaning}.${situation.interaction}.${situation.focus.kind}`,
     focusId: situation.focus.id, focusLabel: situation.focus.label,
-    goal: situation.goal, scope: situation.scope,
+    goal: situation.goal, scope: situation.scope, need,
+    meaning: situation.meaning, interaction: situation.interaction,
     disclosure: situation.layer as 1 | 2 | 3 | 4, concepts, affordances,
   };
 }

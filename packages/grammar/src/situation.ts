@@ -75,13 +75,23 @@ export const SituationChoiceSchema = z.object({
   cost: z.number().nonnegative().nullable().default(null),
 }).strict();
 
+/** Counts of the five knowledge states, from `standingFor`. Refines which question is next. */
+export const KnowledgeCountsSchema = z.object({
+  known: z.number().int().nonnegative(), proposed: z.number().int().nonnegative(), disputed: z.number().int().nonnegative(),
+  unknown: z.number().int().nonnegative(), chosenDespite: z.number().int().nonnegative(),
+}).strict();
+
 export const SituationSchema = z.object({
   worldId: UuidSchema,
   title: z.string().min(1),
   goal: GoalSchema,
   scope: SituationScopeSchema,
-  meaning: MeaningSchema,
-  interaction: InteractionSchema,
+  /** Optional now: when absent, the need chosen from the goal supplies them. A zone the person clicked sets them. */
+  meaning: MeaningSchema.optional(),
+  interaction: InteractionSchema.optional(),
+  knowledge: KnowledgeCountsSchema.optional(),
+  /** A host may name the question directly; otherwise `needFor` chooses it. */
+  need: z.enum(["know_more", "understand_conflict", "decide", "make", "see_change", "finish"]).optional(),
   taskStates: z.array(TaskStateSchema).default([]),
   focus: FocusSchema,
   objects: z.array(SituationObjectSchema).default([]),

@@ -1,7 +1,7 @@
 import type {
   ActionPlan, ActionRecord, Capability, Cost, InputRole, ObjectState, Representation, Tool,
 } from "@xeniur/core";
-import type { Authorization, StaleBaseVersion } from "@xeniur/core";
+import type { Authorization, SemanticRelation, StaleBaseVersion } from "@xeniur/core";
 import {
   BudgetExceeded, CapabilityUnavailable, TOOL_SPECS, addCost, specOf, zeroCost,
 } from "@xeniur/core";
@@ -284,17 +284,51 @@ export class CapabilityRouter {
       const current = this.graph.currentState(objectId);
       if (!current) throw new Error(`no such object: ${objectId}`);
 
-      // Property edits commit a version like anything else — that is what keeps a rename
-      // or a move inside Undo instead of quietly outside it.
-      const patch: Record<string, unknown> = {};
-      if (typeof plan.args["title"] === "string") patch["title"] = plan.args["title"];
-      if (typeof plan.args["semanticType"] === "string") patch["semanticType"] = plan.args["semanticType"];
-      if (plan.tool === "object.move") {
-        patch["settings"] = { ...current.properties.settings, x: plan.args["x"], y: plan.args["y"] };
+      // A gesture's outcome, applied. These were proposed by a drop and chosen by the person;
+      // this is the one route that lands them, and it lands them here rather than as an
+      // empty version. Each is recorded against the action like any other change.
+      const operation = plan.args["operation"];
+      if (operation === "semantic_link") {
+        this.graph.decisions.link({
+          fromObjectId: String(plan.args["fromObjectId"]), toObjectId: String(plan.args["toObjectId"]),
+          relation: plan.args["relation"] as SemanticRelation, note: String(plan.args["note"] ?? ""),
+        });
+        state = current;
+      } else if (operation === "composition") {
+        this.graph.db.prepare(`UPDATE objects SET parent_id = ? WHERE id = ?`)
+          .run(String(plan.args["toObjectId"]), String(plan.args["fromObjectId"]));
+        state = this.graph.currentState(objectId) ?? current;
+      } else if (operation === "decision_option") {
+        // An alternative laid beside a decision becomes one of its options, unchosen.
+        const decision = this.graph.decisions.detail(String(plan.args["decisionId"]));
+        if (!decision) throw new Error("that decision is no longer here");
+        const key = String(plan.args["key"] ?? plan.args["label"]).toLowerCase().replace(/[^a-z0-9]+/g, "_").slice(0, 40);
+        if (!decision.options.some((o) => o.key === key)) {
+          this.graph.decisions.update(decision.objectId, {
+            options: [...decision.options.map((o) => ({ key: o.key, label: o.label, note: o.note })),
+              { key, label: String(plan.args["label"]), note: String(plan.args["note"] ?? "") }],
+          });
+        }
+        state = current;
+      } else if (operation === "next_action") {
+        // A question dropped on the Work zone becomes a next action on the World's goal.
+        const goal = this.graph.goals.current(ctx.worldId);
+        if (!goal) throw new Error("this World has no goal to add a next action to");
+        this.graph.goals.addNextAction(goal.id, { text: String(plan.args["text"]), objectId: String(plan.args["questionId"]) });
+        state = current;
+      } else {
+        // Property edits commit a version like anything else — that is what keeps a rename
+        // or a move inside Undo instead of quietly outside it.
+        const patch: Record<string, unknown> = {};
+        if (typeof plan.args["title"] === "string") patch["title"] = plan.args["title"];
+        if (typeof plan.args["semanticType"] === "string") patch["semanticType"] = plan.args["semanticType"];
+        if (plan.tool === "object.move") {
+          patch["settings"] = { ...current.properties.settings, x: plan.args["x"], y: plan.args["y"] };
+        }
+        state = this.graph.commitVersion({
+          objectId, properties: patch, causeActionId: action.id, label: plan.intent,
+        });
       }
-      state = this.graph.commitVersion({
-        objectId, properties: patch, causeActionId: action.id, label: plan.intent,
-      });
     }
 
     const completed = this.graph.completeAction(action.id, { cost: zeroCost() });

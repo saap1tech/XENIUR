@@ -43,7 +43,7 @@ const SCHEMAS = {
   }),
   "gestures:choose": z.object({
     worldId: UuidSchema, sourceId: UuidSchema, targetId: z.string().min(1).max(200),
-    targetKind: z.enum(["claim", "object", "print", "delivery", "version", "question_lane"]),
+    targetKind: z.enum(["claim", "object", "print", "delivery", "version", "question_lane", "decision", "work"]),
     label: z.string().min(1).max(100),
   }),
   "tasks:active": z.undefined(),
@@ -309,7 +309,11 @@ export function registerIpc(services: Services): void {
       if (source.object.worldId !== worldId || (target && target.object.worldId !== worldId)) {
         return { accepted: false, taskId: null, plan: null, error: "gesture subjects must share this world" };
       }
-      const expectedKind = target?.properties.semanticType === "claim" ? "claim" : target ? "object" : targetKind;
+      // What the target is, from the graph — not from the caller's word. A decision is a
+      // decision, a claim a claim, anything else an Object; the Work zone has no Object.
+      const expectedKind = target
+        ? (services.graph.decisions.get(targetId) ? "decision" : target.properties.semanticType === "claim" ? "claim" : "object")
+        : targetKind;
       if (target && targetKind !== expectedKind) {
         return { accepted: false, taskId: null, plan: null, error: "target kind no longer applies" };
       }

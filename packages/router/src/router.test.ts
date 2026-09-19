@@ -7,6 +7,7 @@ import { ObjectGraph } from "@xeniur/graph";
 import { PermissionBroker } from "@xeniur/permissions";
 import { loadProvidersConfig, ProviderRegistry, type ProviderEnv } from "@xeniur/providers";
 import { CapabilityRouter } from "./index.js";
+import { planForProposal, proposalsFor } from "@xeniur/grammar";
 
 const ROOT = process.cwd();
 let dir: string, g: ObjectGraph, router: CapabilityRouter, worldId: string, objectId: string;
@@ -176,5 +177,53 @@ describe("budget ceilings", () => {
     });
     await expect(tight.image({ prompt: "expensive" }, { worldId, objectId }))
       .rejects.toThrow("perActionUsdMax");
+  });
+});
+
+/* M6 A3 — a chosen drop lands. It had been enqueued and committed as an empty version. */
+describe("gesture outcomes are applied, not merely versioned", () => {
+  it("a semantic link drop creates the link", async () => {
+    const claim = g.createObject({ worldId, semanticType: "claim", title: "Taped seams hold" }).object.id;
+    const proposal = proposalsFor(
+      { id: claim, title: "Taped seams hold", semanticType: "claim" },
+      { id: objectId, title: "Rocket", kind: "object" },
+    ).find((p) => p.label === "Inform design decision")!;
+    await router.execute(planForProposal(proposal), { worldId, objectId: claim });
+    expect(g.decisions.linksFrom(claim).map((l) => [l.toObjectId, l.relation])).toEqual([[objectId, "informed_by"]]);
+  });
+
+  it("an alternative dropped on a decision becomes an unchosen option", async () => {
+    const decision = g.decisions.create({ worldId, question: "Which seam?", options: [{ key: "welded", label: "Welded", note: "" }], chosenOption: null });
+    const alt = g.createObject({ worldId, semanticType: "alternative", title: "Taped" }).object.id;
+    const proposal = proposalsFor(
+      { id: alt, title: "Taped", semanticType: "alternative" },
+      { id: decision.objectId, title: "Which seam?", kind: "decision" },
+    )[0]!;
+    expect(proposal.label).toBe("Add as an option");
+    await router.execute(planForProposal(proposal), { worldId, objectId: decision.objectId });
+    const detail = g.decisions.detail(decision.objectId)!;
+    expect(detail.options.map((o) => o.label)).toEqual(["Welded", "Taped"]);
+    expect(detail.chosenOption).toBeNull();
+  });
+
+  it("a question dropped on Work becomes a next action on the goal — and refuses without a goal", async () => {
+    const q = g.createObject({ worldId, semanticType: "question", title: "Does the 63% hold in mild climates?" }).object.id;
+    const proposal = proposalsFor(
+      { id: q, title: "Does the 63% hold in mild climates?", semanticType: "question" },
+      { id: worldId, title: "Work", kind: "work" },
+    )[0]!;
+    await expect(router.execute(planForProposal(proposal), { worldId, objectId: q })).rejects.toThrow(/no goal/);
+    const goal = g.goals.create(worldId, "Decide the seam");
+    await router.execute(planForProposal(proposal), { worldId, objectId: q });
+    const next = g.goals.get(goal.id)!.nextActions;
+    expect(next.map((a) => [a.text, a.objectId])).toEqual([["Does the 63% hold in mild climates?", q]]);
+  });
+
+  it("a source dropped on a claim proposes evidence and counter-evidence, never a fact", () => {
+    const labels = proposalsFor(
+      { id: objectId, title: "Study 4", semanticType: "paper" },
+      { id: "11111111-1111-4111-8111-111111111111", title: "A claim", kind: "claim" },
+    ).map((p) => p.label);
+    expect(labels).toEqual(["Propose as evidence", "Propose as counter-evidence"]);
   });
 });

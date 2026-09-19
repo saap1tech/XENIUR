@@ -134,7 +134,7 @@ export interface XeniurBridge {
   gestures: {
     choose(input: {
       worldId: string; sourceId: string; targetId: string;
-      targetKind: "claim" | "object" | "print" | "delivery" | "version" | "question_lane";
+      targetKind: "claim" | "object" | "print" | "delivery" | "version" | "question_lane" | "decision" | "work";
       label: string;
     }): Promise<IntentResult>;
   };

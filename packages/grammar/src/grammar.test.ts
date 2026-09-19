@@ -6,7 +6,7 @@ import { ApprovalRequired, SEMANTIC_TRAITS } from "@xeniur/core";
 import { ObjectGraph } from "@xeniur/graph";
 import { PermissionBroker } from "@xeniur/permissions";
 import {
-  INTERACTIONS, MEANINGS, TASK_STATES, SituationSchema, chooseProposal, compileSituation,
+  GRAPH_COMPONENTS, INTERACTIONS, MEANINGS, graphAllowed, TASK_STATES, SituationSchema, chooseProposal, compileSituation,
   layoutScene, meaningsForTraits, modifiersFor, primitiveFor, proposalsFor, type GestureProposal,
 } from "./index.js";
 
@@ -202,5 +202,57 @@ describe("a WorkGoal in the Situation", () => {
   it("scope narrows the centre to what the goal is about; the rest of the World stays out of the Scene", () => {
     const plan = compileSituation(situation({ scope: { worldId: WORLD, objectIds: [FOCUS], externalContextAllowed: false } }));
     expect(plan.concepts.some((c) => c.subjectId === OTHER)).toBe(false);
+  });
+});
+
+/* M6 A3 — the Thinking Surface: the compiler chooses the next human question. */
+describe("the next human question", () => {
+  const k = (over: Partial<{ known: number; proposed: number; disputed: number; unknown: number; chosenDespite: number }> = {}) =>
+    ({ known: 0, proposed: 0, disputed: 0, unknown: 0, chosenDespite: 0, ...over });
+  const goal = (status: string) => ({ outcome: "Ship it", status });
+
+  it("covers the six needs from status, focus and knowledge", () => {
+    expect(compileSituation(situation({ goal: goal("exploring"), meaning: undefined, interaction: undefined, knowledge: k({ unknown: 3 }) })).need).toBe("know_more");
+    expect(compileSituation(situation({ goal: goal("understanding"), meaning: undefined, interaction: undefined, knowledge: k({ disputed: 1 }) })).need).toBe("understand_conflict");
+    expect(compileSituation(situation({ goal: goal("making"), meaning: undefined, interaction: undefined })).need).toBe("make");
+    expect(compileSituation(situation({ goal: goal("reviewing"), meaning: undefined, interaction: undefined,
+      changes: [{ objectId: FOCUS, kind: "review", subject: "brief", because: "the brief changed" }], taskStates: ["selected", "changed"] })).need).toBe("see_change");
+    expect(compileSituation(situation({ goal: goal("ready"), meaning: undefined, interaction: undefined })).need).toBe("finish");
+    expect(compileSituation(situation({ goal: goal("making"), meaning: undefined, interaction: undefined,
+      choices: [{ id: "a", label: "Matte" }, { id: "b", label: "Gloss" }] })).need).toBe("decide");
+  });
+
+  it("the same World compiles to different centres as the way of working and the knowledge change", () => {
+    const exploring = compileSituation(situation({ goal: goal("exploring"), meaning: undefined, interaction: undefined, knowledge: k({ unknown: 2 }) }));
+    const conflicted = compileSituation(situation({ goal: goal("understanding"), meaning: undefined, interaction: undefined, knowledge: k({ disputed: 2, proposed: 1 }) }));
+    const making = compileSituation(situation({ goal: goal("making"), meaning: undefined, interaction: undefined }));
+    const finishing = compileSituation(situation({ goal: goal("ready"), meaning: undefined, interaction: undefined }));
+    const names = (p: ReturnType<typeof compileSituation>) => p.concepts.map((c) => c.component);
+    expect(names(exploring)).toEqual(expect.arrayContaining(["ThinkingTable", "EmptySlot"]));
+    expect(names(conflicted)).toEqual(expect.arrayContaining(["SupportMap"]));
+    expect(names(making)).toEqual(expect.arrayContaining(["FormStrip"]));
+    expect(names(finishing)).toEqual(expect.arrayContaining(["ReadinessBoard", "TrustStrip"]));
+    expect(new Set([exploring.layoutId, conflicted.layoutId, making.layoutId, finishing.layoutId]).size).toBe(4);
+  });
+
+  it("the zone the person clicked still wins over the need's defaults", () => {
+    const p = compileSituation(situation({ goal: goal("making"), meaning: "cost", interaction: "adjust" }));
+    expect(p.need).toBe("make");
+    expect(p.meaning).toBe("cost");
+    expect(p.interaction).toBe("adjust");
+  });
+
+  it("draws a graph only when the meaning is relationship, a map when it is where, or the machinery was asked for", () => {
+    expect(graphAllowed("SpatialCanvas", "where", 2)).toBe(true);
+    expect(graphAllowed("RecipeGraph", "cost", 4)).toBe(true);
+    expect(graphAllowed("RecipeGraph", "cost", 2)).toBe(false);
+    expect(GRAPH_COMPONENTS.has("ThinkingMap")).toBe(true);
+    for (const status of ["exploring", "understanding", "making", "reviewing", "ready"]) {
+      for (const meaning of ["cost", "when", "priority", "sequence", "quantity", "who", "where"] as const) {
+        const p = compileSituation(situation({ goal: goal(status), meaning, interaction: undefined, knowledge: k({ disputed: 1, unknown: 1 }) }));
+        const graphs = p.concepts.filter((c) => !graphAllowed(c.component, meaning, 2)).map((c) => c.component);
+        expect(graphs, `${status} × ${meaning}`).toEqual([]);
+      }
+    }
   });
 });

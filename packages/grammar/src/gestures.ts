@@ -11,7 +11,7 @@ export interface DragSubject {
 export interface DropTarget {
   id: string;
   title: string;
-  kind: "claim" | "object" | "print" | "delivery" | "version" | "question_lane";
+  kind: "claim" | "object" | "print" | "delivery" | "version" | "question_lane" | "decision" | "work";
   semanticType?: string;
   versionId?: string;
 }
@@ -36,8 +36,22 @@ export interface ConstraintDraft {
   questionLaneId: string;
 }
 
+export interface DecisionOptionDraft {
+  kind: "decision_option";
+  decisionId: string;
+  label: string;
+  note: string;
+  fromObjectId: string;
+}
+
+export interface NextActionDraft {
+  kind: "next_action";
+  questionId: string;
+  text: string;
+}
+
 export interface ActionPlanOutcome { kind: "action"; plan: ActionPlan; }
-export type GestureOutcome = ActionPlanOutcome | SemanticLinkDraft | CompositionDraft | ConstraintDraft;
+export type GestureOutcome = ActionPlanOutcome | SemanticLinkDraft | CompositionDraft | ConstraintDraft | DecisionOptionDraft | NextActionDraft;
 
 export interface GestureProposal {
   id: string;
@@ -73,6 +87,26 @@ export function proposalsFor(
 ): GestureProposal[] {
   const type = source.semanticType.toLowerCase();
 
+  // The six nouns — Source · Idea/claim · Question · Alternative · Decision · Outcome — and
+  // what dropping one on another proposes. A drop proposes; the person confirms.
+  const SOURCE_TYPES = new Set(["source", "article", "paper", "document", "note", "file", "image", "book", "video", "podcast"]);
+  if (SOURCE_TYPES.has(type) && target.kind === "claim") return [
+    semantic(source, target, "Propose as evidence", "supports"),
+    semantic(source, target, "Propose as counter-evidence", "contradicts"),
+  ];
+  if ((type === "alternative" || type === "option" || type === "claim" || type === "concept") && target.kind === "decision") return [{
+    id: idFor(source, target, "Add as an option"), label: "Add as an option", interaction: "choose",
+    outcome: { kind: "decision_option", decisionId: target.id, label: source.title, note: "", fromObjectId: source.id },
+    reversible: true, because: `"${source.title}" becomes one of the options of "${target.title}", unchosen.`,
+  }];
+  if (type === "question" && target.kind === "work") return [{
+    id: idFor(source, target, "Make it a next action"), label: "Make it a next action", interaction: "commit",
+    outcome: { kind: "next_action", questionId: source.id, text: source.title },
+    reversible: true, because: `"${source.title}" becomes something to do next on this goal.`,
+  }];
+  if (type === "decision" && target.kind === "object") return [
+    semantic(source, target, "Propose as influence", "satisfies"),
+  ];
   if (type === "claim" && target.kind === "claim") return [
     semantic(source, target, "Supports", "supports"),
     semantic(source, target, "Contradicts", "contradicts"),
@@ -80,9 +114,6 @@ export function proposalsFor(
   ];
   if (type === "claim" && target.kind === "object") return [
     semantic(source, target, "Inform design decision", "informed_by"),
-  ];
-  if (type === "decision" && target.kind === "object") return [
-    semantic(source, target, "Attach as influence", "satisfies"),
   ];
   if (target.kind === "print" && type !== "version") return [{
     id: idFor(source, target, "Prepare for print"), label: "Prepare for print", interaction: "commit",
@@ -143,6 +174,14 @@ export function planForProposal(proposal: GestureProposal): ActionPlan {
   if (proposal.outcome.kind === "composition") return {
     intent: proposal.label, objects: [proposal.outcome.fromObjectId, proposal.outcome.toObjectId],
     tool: "object.update", args: { operation: "composition", ...proposal.outcome }, confirmation: false,
+  };
+  if (proposal.outcome.kind === "decision_option") return {
+    intent: proposal.label, objects: [proposal.outcome.decisionId, proposal.outcome.fromObjectId],
+    tool: "object.update", args: { operation: "decision_option", ...proposal.outcome }, confirmation: false,
+  };
+  if (proposal.outcome.kind === "next_action") return {
+    intent: proposal.label, objects: [proposal.outcome.questionId],
+    tool: "object.update", args: { operation: "next_action", ...proposal.outcome }, confirmation: false,
   };
   return {
     intent: proposal.label, objects: [proposal.outcome.passageId], tool: "object.create",
