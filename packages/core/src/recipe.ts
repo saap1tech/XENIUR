@@ -28,7 +28,7 @@ export const CAPABILITY_VERSIONS: Readonly<Record<Tool, string>> = {
   "3d.solidify": "1.0.0", "3d.render": "1.0.0", "3d.turntable": "1.0.0",
   "video.generate": "1.0.0", "video.edit": "1.0.0", "video.export": "1.0.0",
   "code.scaffold": "1.0.0", "code.patch": "1.0.0", "code.run": "1.0.0",
-  "doc.write": "1.0.0",
+  "doc.write": "1.0.0", "knowledge.propose": "1.0.0",
   "browser.search": "1.0.0", "browser.open": "1.0.0", "browser.extract": "1.0.0",
   "browser.fill": "1.0.0", "browser.click": "1.0.0", "browser.submit": "1.0.0",
   "export.file": "1.0.0",

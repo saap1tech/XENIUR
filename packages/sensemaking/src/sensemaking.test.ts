@@ -622,3 +622,66 @@ describe("what would change your mind", () => {
     expect(queue.map((r) => r.objectId)).toContain(claim.objectId);
   });
 });
+
+describe("a model's proposal enters as candidates, and compression bounds only what is shown", () => {
+  const passage = "A 2024 study found that 63% of warranty returns were caused by seam failure rather than fabric failure.";
+
+  const bound = (sv: string) => ({
+    headline: "Seams drive returns",
+    claims: [
+      { text: "Most returns are caused by seam failure.", stance: "assertion" as const,
+        citations: [{ sourceVersionId: sv, exact: "63% of warranty returns were caused by seam failure",
+                      start: passage.indexOf("63%"), proposedStatus: "supported" as const }], unsupported: false },
+      { text: "Welded seams are cheaper at volume.", stance: "assertion" as const, citations: [], unsupported: true },
+    ],
+    steps: Array.from({ length: 12 }, (_, i) => ({ order: i + 1, text: `Do thing ${i + 1}`, restsOn: [0] })),
+    uncertain: [], droppedCitations: 1,
+  });
+
+  it("files every claim and step as a candidate; nothing becomes an atom", async () => {
+    const { proposeFromBound } = await import("./propose.js");
+    const source = store.recordSource({ worldId, kind: "paper", title: "Seam study", text: passage });
+    const sv = store.latestVersionOf(source.id)!.id;
+    const out = proposeFromBound(store, worldId, bound(sv), { sourceTexts: new Map([[sv, passage]]) });
+    expect(out.claimCandidates).toHaveLength(2);
+    expect(out.stepCandidates).toHaveLength(12);
+    expect(store.listAtoms(worldId)).toHaveLength(0);
+    expect(out.unsupportedClaimIds).toHaveLength(1);
+  });
+
+  it("a supported claim cannot be accepted until a person reviews the model's citation", async () => {
+    const { proposeFromBound } = await import("./propose.js");
+    const source = store.recordSource({ worldId, kind: "paper", title: "Seam study", text: passage });
+    const sv = store.latestVersionOf(source.id)!.id;
+    const out = proposeFromBound(store, worldId, bound(sv), { sourceTexts: new Map([[sv, passage]]) });
+    const supported = out.claimCandidates[0]!;
+    expect(() => store.accept(supported.id)).toThrow(UnreviewedCitations);
+
+    const atom = store.accept(supported.id, { acceptUnreviewed: true })!;
+    const rows = store.supportOf(atom.objectId);
+    expect(rows[0]!.checkedBy).toBe("model");
+    expect(rows[0]!.status).toBe("supported");
+    // Traceable: the locator resolves to the exact stored words.
+    expect(store.passageOf(atom.objectId)!.text).toBe("63% of warranty returns were caused by seam failure");
+    // Not yet supported: nobody has reviewed.
+    expect(store.supportSummary(atom.objectId).reviewedSupported).toBe(false);
+  });
+
+  it("a step is a direction, needs no source, and lands in Build when accepted", async () => {
+    const { proposeFromBound, acceptStep } = await import("./propose.js");
+    const source = store.recordSource({ worldId, kind: "paper", title: "Seam study", text: passage });
+    const sv = store.latestVersionOf(source.id)!.id;
+    const out = proposeFromBound(store, worldId, bound(sv), { sourceTexts: new Map([[sv, passage]]) });
+    const step = acceptStep(store, out.stepCandidates[0]!.id)!;
+    expect(step.stance).toBe("direction");
+    expect(step.lane).toBe("build");
+  });
+
+  it("compression shows seven and keeps the rest one layer down — nothing is discarded", async () => {
+    const { compressForScene } = await import("@xeniur/core");
+    const { primary, supporting } = compressForScene(bound("00000000-0000-4000-8000-000000000000").steps);
+    expect(primary).toHaveLength(7);
+    expect(supporting).toHaveLength(5);
+    expect(primary.length + supporting.length).toBe(12);
+  });
+});

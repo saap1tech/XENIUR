@@ -11,8 +11,8 @@ export type { BrainContext } from "./context.js";
 export type { LlmClient, LlmRequest, LlmResponse } from "./llm.js";
 export { GatedBrain, INTENT_TOOLS } from "./gated.js";
 export type { GatedBrainOptions, GatedResult, Pricing, SpendReserver, ModelResolver, ResolvedModel } from "./gated.js";
-export { bindOutcome, normalisePlan } from "./binding.js";
-export type { RuntimeRegistry, BindingProblem } from "./binding.js";
+export { bindOutcome, normalisePlan, bindProposal } from "./binding.js";
+export type { RuntimeRegistry, BindingProblem, BoundProposal, BoundClaim, BoundCitation } from "./binding.js";
 export {
   BrainOutcomeSchema, BrainIntentSchema, BRAIN_INTENTS,
   ExecutableSchema, ClarificationSchema, UnsupportedSchema,

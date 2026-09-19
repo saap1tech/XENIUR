@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { Tool } from "@xeniur/core";
 import { TOOLS, authorizeFor, untrusted } from "@xeniur/core";
 import { ObjectGraph, SpendLedger } from "@xeniur/graph";
-import { GatedBrain, bindOutcome, normalisePlan, type RuntimeRegistry } from "./index.js";
+import { GatedBrain, bindOutcome, bindProposal, normalisePlan, type RuntimeRegistry } from "./index.js";
 import { BRAIN_INTENTS, BrainOutcomeSchema } from "./outcome.js";
 import type { LlmClient, LlmRequest, LlmResponse } from "./llm.js";
 
@@ -601,7 +601,9 @@ describe("text that arrives from a page is data, not instructions", () => {
 
 describe("what the Brain is allowed to be asked", () => {
   it("names its intents, and each one navigates what XENIUR already does", () => {
-    expect(BRAIN_INTENTS).toHaveLength(6);
+    // Eight: M5 added research_plan (proposes candidates through a local, reversible tool)
+    // and write_document (prose, through the existing doc.write, because prose was asked for).
+    expect(BRAIN_INTENTS).toHaveLength(8);
     // None of them generates media, spends money, or decides whether something is safe.
     for (const intent of BRAIN_INTENTS) {
       expect(intent).not.toMatch(/generate|buy|purchase|approve|authorise|authorize/);
@@ -773,5 +775,95 @@ describe("an approval covers exactly this context", () => {
     });
     expect(result.status).toBe("gated");
     if (result.status === "gated") expect(result.reason).toContain("restricted source");
+  });
+});
+
+/* ======================================================== compression === */
+
+describe("a model does not default to prose when the intent has a visual form", () => {
+  const SV = "77777777-7777-4777-8777-777777777777";
+  const passage = "A 2024 study found that 63% of warranty returns were caused by seam failure rather than fabric failure.";
+  const texts = new Map([[SV, passage]]);
+
+  const proposal = (over: Record<string, unknown> = {}) => ({
+    worldId: WORLD, headline: "Seams, not fabric, drive returns",
+    claims: [
+      { text: "Most warranty returns are caused by seam failure.", stance: "assertion",
+        citations: [{ sourceVersionId: SV, exact: "63% of warranty returns were caused by seam failure", bears: "supported" }] },
+      { text: "Welded seams are cheaper at volume.", stance: "assertion",
+        citations: [{ sourceVersionId: SV, exact: "welded seams are cheaper at volume", bears: "supported" }] },   // not in the passage
+      { text: "I suspect taping is worth the margin.", stance: "hypothesis", citations: [] },
+    ],
+    steps: [
+      { order: 1, text: "Pull last quarter's returns by failure mode.", restsOn: [0] },
+      { order: 2, text: "Cost taped seams at volume.", restsOn: [1] },
+    ],
+    uncertain: ["whether the 63% holds outside cold climates"],
+    ...over,
+  });
+
+  it("accepts a research plan as an executable knowledge.propose, bound to the sources shown", () => {
+    const problems = bindOutcome(BrainOutcomeSchema.parse({
+      kind: "executable",
+      plan: plan({ tool: "knowledge.propose", objects: [], args: proposal() }), why: "w",
+    }), registry({ availableTools: new Set<Tool>(["knowledge.propose"]), sourceTexts: texts }));
+    expect(problems).toEqual([]);
+  });
+
+  it("refuses a citation of a copy the model was never shown", () => {
+    const problems = bindOutcome(BrainOutcomeSchema.parse({
+      kind: "executable",
+      plan: plan({ tool: "knowledge.propose", objects: [], args: proposal({
+        claims: [{ text: "x claim here", stance: "assertion",
+                   citations: [{ sourceVersionId: INVENTED, exact: "words that were never shown", bears: "supported" }] }],
+      }) }), why: "w",
+    }), registry({ availableTools: new Set<Tool>(["knowledge.propose"]), sourceTexts: texts }));
+    expect(problems.map((p) => p.detail).join(" ")).toContain("was not shown");
+  });
+
+  it("binds citations word by word: a quotation not in the copy is dropped, and the claim is kept as unsupported", () => {
+    const bound = bindProposal(proposal(), texts);
+    expect(bound.claims[0]!.citations).toHaveLength(1);
+    expect(bound.claims[0]!.citations[0]!.start).toBeGreaterThanOrEqual(0);
+    expect(bound.claims[0]!.unsupported).toBe(false);
+    // The second claim quoted words the passage does not contain.
+    expect(bound.claims[1]!.citations).toHaveLength(0);
+    expect(bound.claims[1]!.unsupported).toBe(true);
+    expect(bound.droppedCitations).toBe(1);
+  });
+
+  it("does not call a hypothesis unsupported for lacking a citation", () => {
+    const bound = bindProposal(proposal(), texts);
+    expect(bound.claims[2]!.stance).toBe("hypothesis");
+    expect(bound.claims[2]!.unsupported).toBe(false);
+  });
+
+  it("keeps a model's 'supported' as a proposal on the citation, never as a review", () => {
+    const bound = bindProposal(proposal(), texts);
+    expect(bound.claims[0]!.citations[0]!.proposedStatus).toBe("supported");
+    // Nothing here is checked_by human; that is the store's job at acceptance (Stage 1).
+  });
+
+  it("carries the uncertain remainder rather than smoothing it over", () => {
+    expect(bindProposal(proposal(), texts).uncertain).toEqual(["whether the 63% holds outside cold climates"]);
+  });
+
+  it("refuses an over-long proposal at the schema — the record has a bound too", () => {
+    const tooMany = proposal({ claims: Array.from({ length: 30 }, (_, i) => ({ text: `claim ${i}`, stance: "assertion", citations: [] })) });
+    expect(BrainOutcomeSchema.parse({
+      kind: "executable", plan: plan({ tool: "knowledge.propose", objects: [], args: tooMany }), why: "w",
+    })).toBeTruthy();   // the outer plan parses…
+    expect(bindOutcome(BrainOutcomeSchema.parse({
+      kind: "executable", plan: plan({ tool: "knowledge.propose", objects: [], args: tooMany }), why: "w",
+    }), registry({ availableTools: new Set<Tool>(["knowledge.propose"]), sourceTexts: texts }))
+      .map((p) => p.detail).join(" ")).toContain("not a well-formed proposal");   // …the binder refuses
+  });
+
+  it("lets a document intent be prose: doc.write is the right tool when prose is the artifact", () => {
+    const problems = bindOutcome(BrainOutcomeSchema.parse({
+      kind: "executable",
+      plan: plan({ tool: "doc.write", objects: [OBJ], args: { text: "The introduction, as asked for." } }), why: "w",
+    }), registry({ availableTools: new Set<Tool>(["doc.write"]) }), { allowGeneration: true });
+    expect(problems).toEqual([]);
   });
 });

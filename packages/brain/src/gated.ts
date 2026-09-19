@@ -360,4 +360,6 @@ export const INTENT_TOOLS: Record<BrainIntent, readonly Tool[]> = {
                      "object.update", "object.move"],
   describe_impact: [],
   prepare_delivery: ["export.package", "export.file"],
+  research_plan: ["knowledge.propose"],
+  write_document: ["doc.write"],
 };

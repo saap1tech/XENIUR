@@ -6,3 +6,5 @@ export {
 } from "./extract.js";
 export type { Candidate } from "./extract.js";
 export { resolvePassage, normaliseText, contextAround, CONTEXT_CHARS } from "./locator.js";
+export { proposeFromBound, acceptStep } from "./propose.js";
+export type { BoundProposalInput, ProposalOutcome } from "./propose.js";

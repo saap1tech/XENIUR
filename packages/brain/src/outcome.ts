@@ -57,6 +57,8 @@ export const BRAIN_INTENTS = [
   "choose_transform",     // which local, deterministic tool does what was asked
   "describe_impact",      // what changed, and what that means for the next delivery
   "prepare_delivery",     // assemble the preview of what would go out
+  "research_plan",        // claims → steps, each bound to a stored passage; never prose
+  "write_document",       // prose, because prose is the artifact that was asked for
 ] as const;
 export const BrainIntentSchema = z.enum(BRAIN_INTENTS);
 export type BrainIntent = z.infer<typeof BrainIntentSchema>;

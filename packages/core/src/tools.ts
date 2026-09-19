@@ -20,6 +20,7 @@ export const TOOLS = [
   "video.generate", "video.edit", "video.export",
   "code.scaffold", "code.patch", "code.run",
   "doc.write",
+  "knowledge.propose",
   "browser.search", "browser.open", "browser.extract",
   "browser.fill", "browser.click", "browser.submit",
   "export.file",
@@ -63,6 +64,7 @@ export const TOOL_SPECS: Readonly<Record<Tool, ToolSpec>> = {
   "code.run":        { capability: "code",      permission: "MODIFY", external: false, summary: "Run a code Object in an isolated runtime." },
 
   "doc.write":       { capability: "code",      permission: "MODIFY", external: true,  summary: "Write or revise document text." },
+  "knowledge.propose": { capability: "transform", permission: "CREATE", external: false, summary: "Propose claims and steps as candidates bound to stored passages. Nothing becomes a fact." },
 
   "browser.search":  { capability: "browser",   permission: "READ",   external: true,  summary: "Search the web." },
   "browser.open":    { capability: "browser",   permission: "READ",   external: true,  summary: "Open a page and read it." },
