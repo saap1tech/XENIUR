@@ -26,10 +26,12 @@ type Phase =
   | { kind: "answered"; result: Asked; prepared: Prepared }
   | { kind: "failed"; reason: string };
 
-export function Ask({ worldId, utterance, selection, bindings, onCandidates, onClose, onTrail, onNeedsKey }: {
+export function Ask({ worldId, utterance, selection, intent, bindings, onCandidates, onClose, onTrail, onNeedsKey }: {
   worldId: string;
   utterance: string;
   selection: string[];
+  /** A thinking move names its intent; the reading step is then skipped. */
+  intent?: string;
   bindings: SceneBindings;
   /** Candidates arrived; the host re-reads the tray. */
   onCandidates(): void;
@@ -43,8 +45,10 @@ export function Ask({ worldId, utterance, selection, bindings, onCandidates, onC
   const [contexts, setContexts] = useState<NonNullable<SceneBindings["contexts"]>>({});
 
   useEffect(() => {
+    if (intent) { void prepare(intent, selection); return; }
     void bridge?.brain?.resolve(utterance, selection).then((resolved) => setPhase({ kind: "reading", resolved }));
-  }, [bridge, utterance, selection]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bridge, utterance, selection, intent]);
 
   const prepare = async (intent: string, objects: string[]) => {
     const objectId = objects[0] ?? selection[0];

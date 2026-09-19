@@ -789,3 +789,32 @@ describe("ContextIndicator", () => {
     expect(html).toContain("what it sees");
   });
 });
+
+/* M6 A5 — thinking moves make something persistent; none makes "a longer answer". */
+describe("ThinkingMoves", () => {
+  const moves = (over: Partial<SceneBindings> = {}) => render({ id: "m", component: "ThinkingMoves", objectId: ATOM },
+    bindings({ brainAvailable: false, onThinkingMove: () => {}, onProposeConnection: () => {}, ...over }));
+
+  it("shows the four moves beside a claim and disables the two that need a model, with the reason", () => {
+    const html = moves();
+    for (const m of ["Find the basis", "Challenge it", "Connect it", "Test it"]) expect(html).toContain(m);
+    expect((html.match(/disabled=""/g) ?? []).length).toBe(2);
+    expect(html).toContain("needs a model — none is connected");
+    expect(html).not.toMatch(/think deeper|elaborate|longer/i);
+  });
+
+  it("enables every move when a model is available", () => {
+    expect(moves({ brainAvailable: true })).not.toContain('disabled=""');
+  });
+
+  it("lists connections found in the graph with why they may connect, each a proposal", () => {
+    const html = moves({ connections: { [ATOM]: [{ objectId: DEC, title: "Which finish for the 2027 shell?", because: "This decision cites \"Study 4\" too.", by: "linked_decision" }] } });
+    expect(html).toContain("Which finish for the 2027 shell?");
+    expect(html).toContain("cites");
+    expect(html).toContain("Propose link");
+  });
+
+  it("renders nothing beside an Object that is not an idea", () => {
+    expect(render({ id: "m", component: "ThinkingMoves", objectId: OBJ }, bindings({ brainAvailable: true }))).not.toContain("xr-moves");
+  });
+});

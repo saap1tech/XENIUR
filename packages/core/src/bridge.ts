@@ -351,6 +351,10 @@ export interface XeniurBridge {
     /** Settle whether a cited passage bears on its claim. A person's answer; a model only proposed. */
     reviewSupport(supportId: string, status: SupportStatus, note?: string): Promise<ClaimSupport | null>;
     pendingCandidates(worldId: string): Promise<CandidateRecord[]>;
+    /** Find the basis: the passage behind a claim, with a support row to review for each cited copy. */
+    basis(claimObjectId: string): Promise<{ passage: (ResolvedPassage & { sourceTitle: string }) | null; support: ClaimSupport[] }>;
+    /** Connect it: relationships the graph already knows, each with why it may connect. */
+    connections(objectId: string): Promise<Array<{ objectId: string; title: string; because: string; by: string }>>;
     /** Returns null when the candidate is an assertion whose citations are unreviewed and the person did not say so. */
     acceptCandidate(candidateId: string, edit?: { acceptUnreviewed?: boolean }): Promise<Atom | null>;
     rejectCandidate(candidateId: string): Promise<void>;

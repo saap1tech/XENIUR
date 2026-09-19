@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ConstraintRecord, DecisionDetail, FrictionState, ImpactReport, Lane, ObjectState, ProcessProof,
   CandidateRecord, ChallengeRecord, EntryRecord, GoalStatus, PackageInspectionView, Representation, Scene, Standing, SupportMap, Task,
@@ -93,7 +93,9 @@ export function World({
   const [relevant, setRelevant] = useState<string[] | null>(null);
   const [editingGoal, setEditingGoal] = useState(false);
   const [standing, setStanding] = useState<Standing | null>(null);
-  const [ask, setAsk] = useState<{ utterance: string; selection: string[] } | null>(null);
+  const [ask, setAsk] = useState<{ utterance: string; selection: string[]; intent?: string } | null>(null);
+  const [connections, setConnections] = useState<Record<string, Array<{ objectId: string; title: string; because: string; by: string }>>>({});
+  const [brainAvailable, setBrainAvailable] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<CandidateRecord[]>([]);
   const [showStanding, setShowStanding] = useState(false);
@@ -114,6 +116,7 @@ export function World({
     setCandidates((await bridge?.sense?.pendingCandidates?.(worldId)) ?? []);
   }, [bridge, worldId]);
   useEffect(() => { void refreshCandidates(); }, [refreshCandidates]);
+  useEffect(() => { void bridge?.system?.info().then((info) => setBrainAvailable(!!info && !info.brainIsMock)); }, [bridge]);
 
   useEffect(() => {
     void bridge?.constraints?.list(worldId).then((items) => setConstraints(items ?? []));
@@ -193,6 +196,7 @@ export function World({
     ? snapshot.states.find((s) => s.object.id === selectedId)
     : undefined;
 
+  const bindingsRef = useRef<SceneBindings | null>(null);
   const bindings: SceneBindings = useMemo(() => ({
     states: Object.fromEntries(snapshot.states.map((s) => [s.object.id, s])),
     representations: Object.fromEntries(byId),
@@ -207,6 +211,33 @@ export function World({
     supportMaps: supportMap ? { [supportMap.objectId]: supportMap } : {},
     standings: standing ? { [standing.goal.id]: standing } : {},
     candidates: { [worldId]: candidates },
+    connections, brainAvailable,
+    onThinkingMove: async (move, objectId) => {
+      const title = snapshot.states.find((st) => st.object.id === objectId)?.properties.title ?? "this";
+      if (move === "basis") {
+        const r = await bridge?.sense?.basis?.(objectId);
+        if (r?.passage) bindingsRef.current?.onOpenSource?.(objectId);
+        await refreshThinking();
+      } else if (move === "connect") {
+        setConnections((prev) => ({ ...prev, [objectId]: [] }));
+        const found = (await bridge?.sense?.connections?.(objectId)) ?? [];
+        setConnections((prev) => ({ ...prev, [objectId]: found }));
+      } else {
+        setAsk({ utterance: move === "challenge" ? `Challenge "${title}"` : `How could we test "${title}"?`, selection: [objectId],
+          intent: move === "challenge" ? "challenge_claim" : "propose_test" });
+      }
+    },
+    onProposeConnection: (fromObjectId, toObjectId) => {
+      const source = snapshot.states.find((st) => st.object.id === fromObjectId);
+      const target = snapshot.states.find((st) => st.object.id === toObjectId);
+      if (!source || !target) return;
+      const targetKind = decisions.some((d) => d.objectId === toObjectId) ? "decision" : target.properties.semanticType === "claim" ? "claim" : "object";
+      setGesturePair({ sourceId: fromObjectId, targetId: toObjectId, targetKind });
+      setGestureProposals(proposalsFor(
+        { id: fromObjectId, title: source.properties.title, semanticType: source.properties.semanticType },
+        { id: toObjectId, title: target.properties.title, kind: targetKind },
+      ));
+    },
     onAcceptCandidate: async (id, edit) => {
       const atom = await bridge?.sense?.acceptCandidate?.(id, edit);
       if (atom === null) return;                       // the tray already offers Accept anyway
@@ -285,7 +316,9 @@ export function World({
     },
   }), [snapshot, byId, tasks, map, friction, decisions, impact, worldId, bridge,
        onApprove, onReject, onImported, refreshThinking, refreshChallenge, refreshStanding, refreshGoal, constraints, proof, trust, supportMap, trailRows,
-       standing, candidates, refreshCandidates, challenge, entries, selfKey, selectedId, gestureProposals, gesturePair, zone]);
+       standing, candidates, refreshCandidates, connections, brainAvailable, challenge, entries, selfKey, selectedId,
+       gestureProposals, gesturePair, zone]);
+  bindingsRef.current = bindings;
 
   /** One thing at a time in the centre, chosen by the zone and what is selected. */
   const scene: Scene = useMemo(() => {
@@ -399,6 +432,7 @@ export function World({
       children: [
         // "Can I trust this work?" is answered before any question is asked of it.
         { id: "trust", component: "TrustStrip", objectId: selected.object.id, compact: true } as never,
+        { id: "moves", component: "ThinkingMoves", objectId: selected.object.id } as never,
         { id: "questions", component: "InspectorQuestions", objectId: selected.object.id, open: "what" } as never,
         // What did the agent see, decide, authorise and execute — the enterprise question, always answerable.
         ...(trailRows.length > 0 ? [{ id: "trail", component: "AgentTrail", objectId: selected.object.id } as never] : []),
@@ -524,7 +558,7 @@ export function World({
             onDismiss={() => setArrival(null)} />
         )}
         {ask && (
-          <Ask worldId={worldId} utterance={ask.utterance} selection={ask.selection} bindings={bindings}
+          <Ask worldId={worldId} utterance={ask.utterance} selection={ask.selection} intent={ask.intent} bindings={bindings}
             onCandidates={() => { void refreshCandidates(); }}
             onTrail={(row) => { if (row && selectedId) setTrailRows((rows) => [row, ...rows.filter((r) => r.id !== row.id)]); }}
             onNeedsKey={() => setNotice("This task can use cloud AI. Connect a key in Settings › Your models, or continue with local capabilities.")}

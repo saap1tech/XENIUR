@@ -38,6 +38,8 @@ export const SCENE_COMPONENTS = [
   "Standing",
   // A model's proposals before they are knowledge; the compact context indicator
   "ProposalsTray", "ContextIndicator",
+  // Four moves beside a selected idea, each making something persistent
+  "ThinkingMoves",
 ] as const;
 export const SceneComponentSchema = z.enum(SCENE_COMPONENTS);
 export type SceneComponentName = z.infer<typeof SceneComponentSchema>;
@@ -410,6 +412,9 @@ const ProposalsTrayNode = z.object({ ...base, component: z.literal("ProposalsTra
 /** An ordinary request's context, in one line: scope, exclusions, destination. */
 const ContextIndicatorNode = z.object({ ...base, component: z.literal("ContextIndicator"), contextDigest: z.string().min(1) }).strict();
 
+/** Find the basis · Challenge it · Connect it · Test it, beside a claim, question or decision. */
+const ThinkingMovesNode = z.object({ ...base, component: z.literal("ThinkingMoves"), objectId: UuidSchema }).strict();
+
 const LeafNodeSchema = z.discriminatedUnion("component", [
   ObjectCardNode, InspectorNode, DocumentNode, TimelineNode, TaskProgressNode,
   ComparisonNode, BrowserNode, CodePreviewNode, Viewport3DNode, ApprovalDialogNode,
@@ -424,7 +429,7 @@ const LeafNodeSchema = z.discriminatedUnion("component", [
   ChoiceCardsNode, StepperNode, EvidenceMeterNode, EmptySlotNode, ReviewSheetNode,
   ClaimPairNode, TrustStripNode, ModelSetupNode, ContextReviewNode,
   FocusContractNode, ChallengeBoardNode, SupportMapNode, AgentTrailNode, StandingNode,
-  ProposalsTrayNode, ContextIndicatorNode,
+  ProposalsTrayNode, ContextIndicatorNode, ThinkingMovesNode,
 ]);
 export type LeafSceneNode = z.infer<typeof LeafNodeSchema>;
 

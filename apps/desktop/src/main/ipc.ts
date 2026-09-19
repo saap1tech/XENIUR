@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { extractCandidates } from "@xeniur/sensemaking";
 import { z } from "zod";
 import { ChallengeRulesSchema, ExitReasonSchema, GoalStatusSchema, ModeEnvelopeSchema, ModeKindSchema, OutreachEnvelopeSchema, PublisherRefSchema, ReportReasonSchema, TrustLevelSchema, authorizeFor, campaignPlan, campaignScope, describeEnvelope, describeRecipients, needsCampaign, planDigest, sha256Hex, UuidSchema, type ActionPlan, type IntentResult, type WorldSnapshot } from "@xeniur/core";
-import { contextMaterialFor, standingFor, importPackage, inspectPackage, outcomeOf, renderAuditPage, renderProofPage, supportMapFor, todayFor, trustFactsFor, trustFactsForWorld } from "@xeniur/graph";
+import { connectionsFor, contextMaterialFor, standingFor, importPackage, inspectPackage, outcomeOf, renderAuditPage, renderProofPage, supportMapFor, todayFor, trustFactsFor, trustFactsForWorld } from "@xeniur/graph";
 import { compileContext } from "@xeniur/grammar";
 import { policyFrom } from "@xeniur/models";
 import { proposeFromBound } from "@xeniur/sensemaking";
@@ -163,6 +163,8 @@ const SCHEMAS = {
 
   "sense:reviewSupport": z.object({ id: UuidSchema, status: SupportStatusSchema, note: z.string().max(500) }),
   "sense:pendingCandidates": Uuid,
+  "sense:basis": Uuid,
+  "sense:connections": Uuid,
   "sense:acceptCandidate": z.object({ id: UuidSchema, acceptUnreviewed: z.boolean() }),
   "sense:rejectCandidate": Uuid,
 
@@ -667,6 +669,16 @@ export function registerIpc(services: Services): void {
       return row;
     },
     "sense:pendingCandidates": ({ id }) => services.sense.pendingCandidates(id),
+    "sense:basis": ({ id }) => {
+      // Where it came from, and a support row to review for the copy it cites — created
+      // unresolved if none exists yet. Deterministic; no model.
+      const atom = services.sense.getAtom(id);
+      if (atom?.sourceVersionId && !services.graph.support.of(id).some((s) => s.sourceVersionId === atom.sourceVersionId)) {
+        services.graph.support.record({ claimObjectId: id, sourceVersionId: atom.sourceVersionId, locator: atom.locator });
+      }
+      return { passage: services.passageOf(id), support: services.graph.support.of(id) };
+    },
+    "sense:connections": ({ id }) => connectionsFor(services.graph, id),
     "sense:acceptCandidate": ({ id, acceptUnreviewed }) => {
       try {
         const atom = services.sense.accept(id, { acceptUnreviewed });

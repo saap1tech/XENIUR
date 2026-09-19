@@ -1984,3 +1984,18 @@ input[type="range"] { accent-color: var(--text); }
 /* A processing permission on the focused Object. */
 .xr-aiperm { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-top: var(--s-4); padding-top: var(--s-3); border-top: 1px solid var(--line-soft); font-size: 12px; }
 .xr-aiperm__state { color: var(--review); font: 11px var(--font-mono); text-transform: uppercase; letter-spacing: .06em; }
+
+/* ---- Thinking moves: four verbs beside an idea, each making something persistent --------- */
+.xr-moves { display: grid; gap: var(--s-2); margin-top: var(--s-3); }
+.xr-moves h3 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; }
+.xr-moves__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden; }
+.xr-move { display: grid; gap: 3px; padding: var(--s-2) var(--s-3); background: var(--surface); border: 0; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.xr-move:hover:not(:disabled) { background: var(--surface-2); }
+.xr-move:disabled { color: var(--faint); cursor: not-allowed; }
+.xr-move strong { font-size: 13px; font-weight: 600; }
+.xr-move span { font-size: 11px; color: var(--dim); line-height: 1.4; }
+.xr-moves__connections { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 12px; }
+.xr-moves__connections li { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; padding: 6px 8px; border: 1px dashed var(--line); border-radius: var(--r-card); }
+.xr-moves__target { background: none; border: 0; padding: 0; color: var(--text); font: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); }
+.xr-moves__because { grid-column: 1; color: var(--dim); font-size: 11px; }
+.xr-moves__connections .xr-button { grid-column: 2; grid-row: 1 / span 2; }

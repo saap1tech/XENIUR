@@ -231,6 +231,8 @@ contextBridge.exposeInMainWorld("xeniur", {
     reviewSupport: (supportId: string, status: string, note?: string) =>
       call("sense:reviewSupport", { id: supportId, status, note: note ?? "" }),
     pendingCandidates: (worldId: string) => call("sense:pendingCandidates", { id: worldId }),
+    basis: (claimObjectId: string) => call("sense:basis", { id: claimObjectId }),
+    connections: (objectId: string) => call("sense:connections", { id: objectId }),
     acceptCandidate: (candidateId: string, edit?: { acceptUnreviewed?: boolean }) =>
       call("sense:acceptCandidate", { id: candidateId, acceptUnreviewed: edit?.acceptUnreviewed ?? false }),
     rejectCandidate: (candidateId: string) => call("sense:rejectCandidate", { id: candidateId }),

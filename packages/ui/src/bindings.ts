@@ -74,6 +74,10 @@ export interface SceneBindings {
     modelLabel: string | null;
     estimatedUsd: number;
   }>>;
+  /** Deterministic connections per Object, for Connect it. */
+  connections?: Readonly<Record<string, Array<{ objectId: string; title: string; because: string; by: string }>>>;
+  /** Whether a model can be asked right now. Moves that need one are disabled with the reason when it cannot. */
+  brainAvailable?: boolean;
   /** A model's proposals awaiting review, per World. */
   candidates?: Readonly<Record<string, CandidateRecord[]>>;
   /** Where you stand, per goal. */
@@ -162,6 +166,10 @@ export interface SceneBindings {
   onEnterChallenge?(challengeWorldId: string, objectId: string): void;
   onNextActionDone?(goalId: string, actionId: string): void;
   onAcceptCandidate?(candidateId: string, edit: { acceptUnreviewed?: boolean }): void;
+  /** A thinking move. `basis` and `connect` are deterministic; `challenge` and `test` open Ask with an intent. */
+  onThinkingMove?(move: "basis" | "challenge" | "connect" | "test", objectId: string): void;
+  /** Propose a link found by Connect it; goes through the gesture route, the person confirms. */
+  onProposeConnection?(fromObjectId: string, toObjectId: string): void;
   onRejectCandidate?(candidateId: string): void;
   /** Open the full "what the model sees" sheet from the compact indicator. */
   onOpenContext?(contextDigest: string): void;

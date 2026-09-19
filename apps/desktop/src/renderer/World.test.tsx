@@ -23,6 +23,7 @@ beforeAll(async () => {
     xeniur: {
       blobs: { url: (h: string) => `xeniur-blob://asset/${h}` },
       sense: { map: async () => null, friction: async () => null, pendingCandidates: async () => [] },
+      system: { info: async () => ({ version: "0", brainIsMock: true, brainModel: null, capabilities: [], firstRun: false }) },
     },
     addEventListener: () => {}, removeEventListener: () => {},
   };

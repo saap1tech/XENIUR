@@ -24,3 +24,4 @@ export { ChallengeBoard, ComplianceTag, PolicyTag } from "./components/challenge
 export { AgentTrail, SupportMap } from "./components/lenses.jsx";
 export { Standing } from "./components/standing.jsx";
 export { ProposalsTray, ContextIndicator } from "./components/proposals.jsx";
+export { ThinkingMoves } from "./components/moves.jsx";
