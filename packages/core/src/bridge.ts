@@ -3,6 +3,7 @@ import type { DecisionDetail, InfluenceReport } from "./decisions.js";
 import type { ImpactReport, OutcomeLedger, TrustFacts } from "./impact.js";
 import type { EnvelopeSheet, ExitReason, ModeEnvelopeInput, ModeKind, ModeRecord, Reward, Streak } from "./modes.js";
 import type { PublisherReport, PublisherView, ReportReason, TrustLevel } from "./publisher.js";
+import type { CampaignRecord, OutboundMessage, OutreachEnvelopeInput } from "./outreach.js";
 
 /** What the renderer learns about a package before deciding. No manifest, no rows — the shape. */
 export interface PackageInspectionView {
@@ -245,6 +246,19 @@ export interface XeniurBridge {
     import(path: string, input: { as: "work" | "critique"; worldId?: string | null }): Promise<{
       objectId: string; worldId: string; alreadyPresent: boolean;
     }>;
+  };
+
+  /* Delegated outreach — one approval over one envelope; every send receipted */
+  outreach: {
+    /** The sheet: what a campaign would allow, as lines, plus the digest an approval must echo. */
+    describe(envelope: OutreachEnvelopeInput): Promise<{ lines: Array<{ label: string; value: string }>; digest: string; needsCampaign: boolean }>;
+    /** Creates the campaign from the envelope the sheet showed. The approval is recorded here, once. */
+    create(worldId: string, envelope: OutreachEnvelopeInput, digest: string): Promise<CampaignRecord>;
+    send(campaignId: string, message: OutboundMessage): Promise<{ outcome: "sent" | "refused" | "failed"; reason: string | null; receiptObjectId: string }>;
+    list(worldId: string): Promise<CampaignRecord[]>;
+    revoke(campaignId: string): Promise<CampaignRecord | null>;
+    /** Whether anything can actually leave. False until a mail key exists. */
+    transportConfigured(): Promise<boolean>;
   };
 
   /* Who sent what — identity, trust the person set, block and report */

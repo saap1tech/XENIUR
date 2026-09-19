@@ -32,6 +32,7 @@ export const CAPABILITY_VERSIONS: Readonly<Record<Tool, string>> = {
   "browser.search": "1.0.0", "browser.open": "1.0.0", "browser.extract": "1.0.0",
   "browser.fill": "1.0.0", "browser.click": "1.0.0", "browser.submit": "1.0.0",
   "export.file": "1.0.0",
+  "outreach.send": "1.0.0",
 };
 
 export const capabilityVersionFor = (tool: Tool): string => CAPABILITY_VERSIONS[tool] ?? "0.0.0";

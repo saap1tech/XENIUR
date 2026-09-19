@@ -979,6 +979,36 @@ CREATE TABLE circle_milestones (
 );
 `;
 
+/**
+ * Migration 20 — delegated outreach.
+ *
+ * A campaign is the envelope the person approved, once, and a count. Every send is an
+ * action with a receipt; the sends table is the join between the two so "how many, to whom,
+ * with what outcome" is one query and never an estimate.
+ */
+const OUTREACH = `
+CREATE TABLE outreach_campaigns (
+  id            TEXT PRIMARY KEY,
+  world_id      TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+  envelope      TEXT NOT NULL,             -- JSON, as approved
+  authorization TEXT NOT NULL,             -- JSON: the approval over the campaign plan
+  sent          INTEGER NOT NULL DEFAULT 0,
+  state         TEXT NOT NULL DEFAULT 'active',   -- active | exhausted | expired | revoked
+  created_at    INTEGER NOT NULL
+);
+CREATE INDEX idx_outreach_world ON outreach_campaigns(world_id, created_at);
+
+CREATE TABLE outreach_sends (
+  id          TEXT PRIMARY KEY,
+  campaign_id TEXT NOT NULL REFERENCES outreach_campaigns(id) ON DELETE CASCADE,
+  action_id   TEXT NOT NULL REFERENCES actions(id) ON DELETE RESTRICT,
+  recipient   TEXT NOT NULL,
+  outcome     TEXT NOT NULL,               -- sent | refused | failed
+  at          INTEGER NOT NULL
+);
+CREATE INDEX idx_outreach_sends ON outreach_sends(campaign_id, at);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: INIT },
   { version: 2, name: "object_model", sql: OBJECT_MODEL },
@@ -999,4 +1029,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 17, name: "modes", sql: MODES },
   { version: 18, name: "publishers", sql: PUBLISHERS },
   { version: 19, name: "shared_worlds", sql: SHARED_WORLDS },
+  { version: 20, name: "outreach", sql: OUTREACH },
 ];

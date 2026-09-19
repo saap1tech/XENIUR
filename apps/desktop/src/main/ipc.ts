@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { extractCandidates } from "@xeniur/sensemaking";
 import { z } from "zod";
-import { ExitReasonSchema, ModeEnvelopeSchema, ModeKindSchema, PublisherRefSchema, ReportReasonSchema, TrustLevelSchema, describeEnvelope, sha256Hex, UuidSchema, type ActionPlan, type IntentResult, type WorldSnapshot } from "@xeniur/core";
+import { ExitReasonSchema, ModeEnvelopeSchema, ModeKindSchema, OutreachEnvelopeSchema, PublisherRefSchema, ReportReasonSchema, TrustLevelSchema, authorizeFor, campaignPlan, campaignScope, describeEnvelope, describeRecipients, needsCampaign, planDigest, sha256Hex, UuidSchema, type ActionPlan, type IntentResult, type WorldSnapshot } from "@xeniur/core";
 import { importPackage, inspectPackage, outcomeOf, renderProofPage, trustFactsFor } from "@xeniur/graph";
 import { InvalidPlanError } from "@xeniur/brain";
 import { planForProposal, proposalsFor } from "@xeniur/grammar";
@@ -90,6 +90,15 @@ const SCHEMAS = {
   "packages:inspect": z.object({ path: z.string().min(1).endsWith(".xeniur") }),
   "packages:import": z.object({ path: z.string().min(1).endsWith(".xeniur"), as: z.enum(["work", "critique"]),
     worldId: UuidSchema.nullable() }),
+  "outreach:describe": z.object({ envelope: OutreachEnvelopeSchema }),
+  "outreach:create": z.object({ worldId: UuidSchema, envelope: OutreachEnvelopeSchema, digest: z.string().min(1) }),
+  "outreach:send": z.object({ id: UuidSchema, message: z.object({
+    to: z.string().email(), subject: z.string().min(1).max(200), body: z.string().min(1).max(20_000),
+    fields: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])),
+  }).strict() }),
+  "outreach:list": Uuid,
+  "outreach:revoke": Uuid,
+  "outreach:transportConfigured": z.undefined(),
   "publishers:self": z.undefined(),
   "publishers:list": z.undefined(),
   "publishers:setTrust": PublisherRefSchema.extend({ level: TrustLevelSchema }),
@@ -394,6 +403,40 @@ export function registerIpc(services: Services): void {
       services.metrics.record(as === "critique" ? "critique_received" : "package_imported");
       return { objectId: r.objectId, worldId: r.worldId, alreadyPresent: r.alreadyPresent };
     },
+    "outreach:describe": ({ envelope }) => {
+      const plan = campaignPlan(envelope);
+      const r = envelope.recipients;
+      return {
+        needsCampaign: needsCampaign(r),
+        digest: planDigest(plan),
+        lines: [
+          { label: "Purpose", value: envelope.purpose },
+          { label: "To", value: describeRecipients(r) + (r.kind === "list" ? `: ${r.addresses.join(", ")}` : "") },
+          { label: "At most", value: `${envelope.maxSends} send${envelope.maxSends === 1 ? "" : "s"}` },
+          { label: "Until", value: new Date(envelope.expiresAt).toISOString().slice(0, 16).replace("T", " ") },
+          { label: "May leave", value: envelope.dataAllowed.length > 0 ? envelope.dataAllowed.join(", ") : "nothing beyond the template" },
+          { label: "Each send", value: "is a COMMUNICATE with its own receipt" },
+        ],
+      };
+    },
+    "outreach:create": ({ worldId, envelope, digest }) => {
+      // The approval is minted here, from the envelope the sheet showed. A digest that does
+      // not match means the person read a different envelope than the one being created.
+      const plan = campaignPlan(envelope);
+      if (planDigest(plan) !== digest) throw new Error("the envelope changed after it was shown — review it again");
+      const authorization = authorizeFor(plan, {
+        scope: campaignScope(envelope), ttlMs: Math.max(60_000, envelope.expiresAt - Date.now()),
+      });
+      return services.graph.outreach.create(worldId, envelope, authorization);
+    },
+    "outreach:send": async ({ id, message }) => {
+      const r = await services.graph.outreach.send(id, message, services.mail);
+      if (r.outcome === "sent") services.metrics.record("outreach_sent");
+      return { outcome: r.outcome, reason: r.reason, receiptObjectId: r.receiptObjectId };
+    },
+    "outreach:list": ({ id }) => services.graph.outreach.list(id),
+    "outreach:revoke": ({ id }) => services.graph.outreach.revoke(id),
+    "outreach:transportConfigured": () => services.mail.configured(),
     "publishers:self": () => services.graph.publishers.self().ref(),
     "publishers:list": () => services.graph.publishers.list(),
     "publishers:setTrust": ({ publicKey, displayName, level }) => {

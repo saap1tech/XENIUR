@@ -1,9 +1,9 @@
 import type { BrowserWindow } from "electron";
-import type {
+import type { OutreachTransport,
   Authorization, HistoryPayload, LineagePayload, ObjectDetail, SystemInfo, Task, TaskEvent, Tool,
 } from "@xeniur/core";
 import {
-  ObjectGraph, ReadinessEvaluator, RhythmStore, ideaDna, loadProfiles, loadRhythmConfig, exportPackage, impactOf, SpendLedger,
+  DisabledTransport, ObjectGraph, ReadinessEvaluator, RhythmStore, ideaDna, loadProfiles, loadRhythmConfig, exportPackage, impactOf, SpendLedger,
   MetricsStore,
   ComputeLedger, WorkflowLibrary,
 } from "@xeniur/graph";
@@ -70,6 +70,8 @@ export interface Services {
   compute: ComputeLedger;
   workflows: WorkflowLibrary;
   webRisk: WebRiskChecker;
+  /** Outreach transport. Disabled with an empty key: the mechanism is complete, nothing is reachable. */
+  mail: OutreachTransport;
   router: CapabilityRouter;
   brain: Brain;
   /**
@@ -450,7 +452,7 @@ export function createServices(window: BrowserWindow): Services {
     graph.getWorld(worldId) ? buildThinkingMap(graph, sense, worldId) : null;
 
   return {
-    graph, models, queue, broker, sessions, metrics, compute, workflows, webRisk, router, brain, gatedBrain, spend, config, env, browser, preview,
+    graph, models, queue, broker, sessions, metrics, compute, workflows, webRisk, mail: new DisabledTransport(), router, brain, gatedBrain, spend, config, env, browser, preview,
     rebuild, validation, readiness, rhythm, sense,
     detailOf, historyOf, thinkingMap,
     impactOf: impactOfObject, passageOf,

@@ -3,7 +3,7 @@ import type { PermissionLevel } from "./permissions.js";
 
 /** The eight Capability Router interfaces. Nothing reaches the outside world otherwise. */
 export const CAPABILITIES = [
-  "think", "image", "video", "to3D", "code", "browser", "transform", "export",
+  "think", "image", "video", "to3D", "code", "browser", "transform", "export", "outreach",
 ] as const;
 export const CapabilitySchema = z.enum(CAPABILITIES);
 export type Capability = z.infer<typeof CapabilitySchema>;
@@ -24,6 +24,7 @@ export const TOOLS = [
   "browser.search", "browser.open", "browser.extract",
   "browser.fill", "browser.click", "browser.submit",
   "export.file",
+  "outreach.send",
 ] as const;
 export const ToolSchema = z.enum(TOOLS);
 export type Tool = z.infer<typeof ToolSchema>;
@@ -74,6 +75,7 @@ export const TOOL_SPECS: Readonly<Record<Tool, ToolSpec>> = {
   "browser.submit":  { capability: "browser",   permission: "COMMIT", external: true,  summary: "Submit a form. Always confirmed." },
 
   "export.file":     { capability: "export",    permission: "CREATE", external: false, summary: "Write a representation out to a user-chosen path." },
+  "outreach.send":   { capability: "outreach",  permission: "COMMUNICATE", external: true, summary: "Send one message to one recipient, inside a campaign the person bounded." },
 };
 
 export const specOf = (tool: Tool): ToolSpec => TOOL_SPECS[tool];

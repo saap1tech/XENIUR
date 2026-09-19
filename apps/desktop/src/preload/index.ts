@@ -145,6 +145,16 @@ contextBridge.exposeInMainWorld("xeniur", {
       call("packages:import", { path, as: input.as, worldId: input.worldId ?? null }),
   },
 
+  outreach: {
+    describe: (envelope: Record<string, unknown>) => call("outreach:describe", { envelope }),
+    create: (worldId: string, envelope: Record<string, unknown>, digest: string) =>
+      call("outreach:create", { worldId, envelope, digest }),
+    send: (campaignId: string, message: Record<string, unknown>) => call("outreach:send", { id: campaignId, message }),
+    list: (worldId: string) => call("outreach:list", { id: worldId }),
+    revoke: (campaignId: string) => call("outreach:revoke", { id: campaignId }),
+    transportConfigured: () => call("outreach:transportConfigured"),
+  },
+
   publishers: {
     self: () => call("publishers:self"),
     list: () => call("publishers:list"),

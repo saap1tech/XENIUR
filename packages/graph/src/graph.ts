@@ -17,6 +17,7 @@ import { ProcessStore } from "./process.js";
 import { ModeStore } from "./modes.js";
 import { PublisherStore } from "./publishers.js";
 import { CircleStore } from "./shared.js";
+import { OutreachStore } from "./outreach.js";
 import { ActionReceiptStore } from "./action-receipts.js";
 import { json, openDatabase, type Db } from "./db.js";
 import * as rows from "./rows.js";
@@ -74,6 +75,8 @@ export class ObjectGraph {
   readonly publishers: PublisherStore;
   /** Opt-in groups around commitments. Counts, never scores. */
   readonly circles: CircleStore;
+  /** Bounded campaigns; every send a receipted COMMUNICATE. */
+  readonly outreach: OutreachStore;
 
   private constructor(readonly db: Db, readonly blobs: BlobStore, signingKeys: SigningKeyStore) {
     this.recipes = new RecipeStore(db, {
@@ -88,6 +91,7 @@ export class ObjectGraph {
     this.modes = new ModeStore(db);
     this.publishers = new PublisherStore(db, signingKeys);
     this.circles = new CircleStore(db, this);
+    this.outreach = new OutreachStore(db, this);
   }
 
   static open(opts: GraphOptions): ObjectGraph {

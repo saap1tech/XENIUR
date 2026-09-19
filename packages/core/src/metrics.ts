@@ -35,6 +35,7 @@ export const SESSION_EVENT_KINDS = [
   "streak_day",
   "critique_received",        // someone else's reasoned disagreement arrived and was opened
   "package_imported",
+  "outreach_sent",            // one receipted send inside a bounded campaign
   "reflection_dismissed",     // friction turned off; a prompt nobody wants is a bad prompt
   "session_ended",
 ] as const;
@@ -124,5 +125,6 @@ export const EVENT_MEANINGS: Record<SessionEventKind, string> = {
   streak_day: "a day on which something became",
   critique_received: "you opened someone's critique beside your work",
   package_imported: "you brought a package in",
+  outreach_sent: "a message left inside a campaign you bounded",
   session_ended: "you closed XENIUR",
 };
