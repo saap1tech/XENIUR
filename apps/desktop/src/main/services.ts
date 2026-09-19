@@ -19,13 +19,17 @@ import { CapabilityRouter, RebuildRunner } from "@xeniur/router";
 import { ValidationRunner } from "@xeniur/validators";
 import { SensemakingStore, buildThinkingMap } from "@xeniur/sensemaking";
 import {
-  Brain, GatedBrain, MockLlmClient, OpenAiClient, type LlmClient,
+  Brain, GatedBrain, MockLlmClient, OllamaClient, OpenAiClient,
+  type LlmClient, type ModelResolver,
 } from "@xeniur/brain";
 import {
   ALL_PROVIDERS, loadProvidersConfig, type ProviderEnv, type ProvidersConfig,
 } from "@xeniur/providers";
 import type { ImpactReport, ResolvedPassage } from "@xeniur/core";
-import { ModelRegistry, verifyKey, type KeyStore, type ModelProvider } from "@xeniur/models";
+import {
+  ModelRegistry, RESTRICTED_CONSTRAINT, STRENGTH_CONSTRAINT, DEFAULT_POLICY, policyFrom, routeModel,
+  verifyKey, type KeyStore, type ModelEntry, type ModelProvider, type RoutedIntent,
+} from "@xeniur/models";
 import type { ModelProviderView } from "@xeniur/core";
 import { appPaths, BINARIES } from "./paths.js";
 import { SafeStorageKeyStore } from "./keys.js";
@@ -110,7 +114,82 @@ function makeBrain(config: ProvidersConfig): Brain {
  * config *and* its price must be marked verified. Both are false in the shipped config, so
  * this milestone makes no request under any circumstances and holds no key.
  */
-function makeGatedBrain(config: ProvidersConfig, ledger: SpendLedger): GatedBrain {
+/**
+ * The routing policy as two Constraint Objects in a settings World, and a resolver that
+ * applies them.
+ *
+ * The World is created on first use and hidden from Home by its summary marker. The
+ * constraints are ordinary Objects: versioned, undoable, rendered by PriorityBalance and a
+ * toggle. Providers without a transport wired yet are simply not candidates — the registry
+ * lists them, the model view says "transport not wired yet", and routing never pretends.
+ */
+const SETTINGS_WORLD = "__xeniur_settings__";
+const WIRED_PROVIDERS: ReadonlySet<ModelProvider> = new Set<ModelProvider>(["openai", "ollama"]);
+
+function settingsWorldId(graph: ObjectGraph): string {
+  const existing = graph.listWorlds().find((w) => w.summary === SETTINGS_WORLD);
+  if (existing) return existing.id;
+  return graph.createWorld({ title: "XENIUR settings", emoji: "⚙", summary: SETTINGS_WORLD }).id;
+}
+
+function policyConstraints(graph: ObjectGraph): { strengthId: string; restrictedId: string } {
+  const worldId = settingsWorldId(graph);
+  const find = (tag: string) => graph.listStates(worldId).find((s) => s.properties.tags.includes(tag))?.object.id;
+  let strengthId = find("routing.strength");
+  let restrictedId = find("routing.restricted");
+  if (!strengthId) {
+    strengthId = graph.createObject({
+      worldId, semanticType: "constraint", title: "How strong a model, per task",
+      properties: { tags: ["constraint", "routing.strength"] },
+    }).object.id;
+    graph.constraints.define(strengthId, STRENGTH_CONSTRAINT, worldId, DEFAULT_POLICY.strength);
+  }
+  if (!restrictedId) {
+    restrictedId = graph.createObject({
+      worldId, semanticType: "constraint", title: "Keep restricted sources on this machine",
+      properties: { tags: ["constraint", "routing.restricted"] },
+    }).object.id;
+    graph.constraints.define(restrictedId, RESTRICTED_CONSTRAINT, worldId, DEFAULT_POLICY.localOnlyForRestricted);
+  }
+  return { strengthId, restrictedId };
+}
+
+function makeResolver(graph: ObjectGraph, registry: ModelRegistry, keys: KeyStore): ModelResolver {
+  const clientFor = (m: ModelEntry): LlmClient | null => {
+    if (m.provider === "ollama") return new OllamaClient({ model: m.model });
+    if (m.provider === "openai") {
+      // The key comes from the keychain, never from the environment.
+      return new OpenAiClient({ apiKey: keys.read("openai") ?? undefined, model: m.model, modelVerified: m.modelVerified });
+    }
+    return null;
+  };
+  return {
+    resolve(intent, ctx) {
+      const { strengthId, restrictedId } = policyConstraints(graph);
+      const policy = policyFrom(
+        graph.constraints.get(strengthId)?.value, graph.constraints.get(restrictedId)?.value,
+      );
+      const wired = new ModelRegistry({
+        ...registry.config, models: registry.config.models.filter((m) => WIRED_PROVIDERS.has(m.provider)),
+      });
+      const route = routeModel(intent as RoutedIntent, policy, wired, (p) => keys.has(p), ctx);
+      if (!route) return null;
+      const client = clientFor(route.model);
+      if (!client) return null;
+      return {
+        id: route.model.id, client,
+        pricing: {
+          inputPerMTok: route.model.price.inputPerMTok, outputPerMTok: route.model.price.outputPerMTok,
+          verified: route.model.price.verifiedOn !== null || route.model.tags.includes("local"),
+          verifiedOn: route.model.price.verifiedOn,
+        },
+        because: route.because, escalation: route.escalation,
+      };
+    },
+  };
+}
+
+function makeGatedBrain(config: ProvidersConfig, ledger: SpendLedger, resolver?: ModelResolver): GatedBrain {
   const entry = config.brain.providers[config.brain.default];
   const price = (entry?.price ?? {}) as {
     inputPerMTok?: number; outputPerMTok?: number; unverified?: boolean; verifiedOn?: string;
@@ -126,6 +205,7 @@ function makeGatedBrain(config: ProvidersConfig, ledger: SpendLedger): GatedBrai
 
   return new GatedBrain(client, {
     ledger,
+    ...(resolver ? { resolver } : {}),
     pricing: {
       inputPerMTok: price.inputPerMTok ?? 0,
       outputPerMTok: price.outputPerMTok ?? 0,
@@ -207,7 +287,7 @@ export function createServices(window: BrowserWindow): Services {
   } });
   const brain = makeBrain(config);
   const spend = new SpendLedger(graph.db, config.budget);
-  const gatedBrain = makeGatedBrain(config, spend);
+  const gatedBrain = makeGatedBrain(config, spend, makeResolver(graph, modelRegistry, keyStore));
   const queue = new TaskQueue(graph.db, { concurrency: 3 });
   const rebuild = new RebuildRunner(graph, router);
   const validation = new ValidationRunner(graph, env);

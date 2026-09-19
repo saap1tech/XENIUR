@@ -41,8 +41,30 @@ export interface SpendReserver {
   release(holdId: string): void;
 }
 
+/**
+ * A routed choice of model for one attempt: the client to call and its own verified price.
+ *
+ * Supplied by the models package's policy. When present, each attempt asks the resolver with
+ * the escalation count, so a repair after unusable output steps up to a stronger model —
+ * cheap-first, on the person's own keys — and is billed at *that* model's price.
+ */
+export interface ResolvedModel {
+  id: string;
+  client: LlmClient;
+  pricing: Pricing;
+  /** Why this model, in the words shown in the receipt. */
+  because: string;
+  escalation: number;
+}
+
+export interface ModelResolver {
+  resolve(intent: BrainIntent, ctx: { escalation: number; hasRestrictedSources: boolean }): ResolvedModel | null;
+}
+
 export interface GatedBrainOptions {
   ledger: SpendReserver;
+  /** Routes each attempt to a model by policy. Without one, the fixed client and pricing are used. */
+  resolver?: ModelResolver;
   pricing: Pricing;
   /**
    * The switch. False means no request is made under any circumstances — not "no key
@@ -55,7 +77,9 @@ export interface GatedBrainOptions {
 }
 
 export type GatedResult =
-  | { status: "ok"; outcome: BrainOutcome; attempts: number; usd: number; model: string | null }
+  | { status: "ok"; outcome: BrainOutcome; attempts: number; usd: number; model: string | null;
+      /** Which models were tried, in order, and why. Escalation is visible here, not hidden. */
+      routed: Array<{ model: string; escalation: number; because: string }> }
   | { status: "gated"; reason: string }
   | { status: "refused"; reason: string; problems: BindingProblem[] }
   | { status: "over_budget"; reason: string };
@@ -96,9 +120,8 @@ export class GatedBrain {
   get model(): string | null { return this.client.model; }
   get enabled(): boolean { return this.opts.liveCallsEnabled; }
 
-  /** What one attempt would cost at the configured price, before it is made. */
-  estimateUsd(): number {
-    const { pricing } = this.opts;
+  /** What one attempt would cost at a price, before it is made. */
+  estimateUsd(pricing: Pricing = this.opts.pricing): number {
     // A generous ceiling on input rather than a guess at it: an estimate that turns out
     // to be low is a reservation that did not reserve enough.
     const inputMTok = 8_000 / 1_000_000;
@@ -108,7 +131,7 @@ export class GatedBrain {
 
   async ask(
     intent: BrainIntent, utterance: string, context: BrainContext, registry: RuntimeRegistry,
-    opts: { taskId?: string | null; allowGeneration?: boolean } = {},
+    opts: { taskId?: string | null; allowGeneration?: boolean; hasRestrictedSources?: boolean } = {},
   ): Promise<GatedResult> {
     /* 1 — the switch. */
     if (!this.opts.liveCallsEnabled) {
@@ -119,8 +142,9 @@ export class GatedBrain {
       };
     }
 
-    /* 2 — an unknown price is not a free one. */
-    if (!this.opts.pricing.verified) {
+    /* 2 — an unknown price is not a free one. Without a resolver, the fixed price is checked
+     *     here once; with one, each routed model's price is checked as it is chosen. */
+    if (!this.opts.resolver && !this.opts.pricing.verified) {
       return {
         status: "gated",
         reason: "The price of this model has not been verified, so XENIUR will not call it. " +
@@ -128,22 +152,47 @@ export class GatedBrain {
       };
     }
 
-    const estimate = this.estimateUsd();
     const user = renderRequest(context, utterance);
 
     let attempts = 0;
     let spent = 0;
     let lastReply = "";
     let lastErrors = "";
+    const routed: Array<{ model: string; escalation: number; because: string }> = [];
 
     for (let attempt = 0; attempt <= this.maxRepairs; attempt += 1) {
       attempts += 1;
+
+      // Which model, at which price. A resolver routes by policy and escalates on repair;
+      // restricted material may leave no route at all, which is a refusal, not a fallback.
+      let client = this.client;
+      let pricing = this.opts.pricing;
+      let because = "the configured model";
+      if (this.opts.resolver) {
+        const r = this.opts.resolver.resolve(intent, {
+          escalation: attempt, hasRestrictedSources: opts.hasRestrictedSources ?? false,
+        });
+        if (!r) {
+          return {
+            status: "gated",
+            reason: opts.hasRestrictedSources
+              ? "A restricted source is in view and no local model is available, so nothing was sent."
+              : "No model with a verified price is available for this. Add a key, or verify a price.",
+          };
+        }
+        if (!r.pricing.verified) {
+          return { status: "gated", reason: `The price of ${r.id} has not been verified, so XENIUR will not call it.` };
+        }
+        client = r.client; pricing = r.pricing; because = r.because;
+        routed.push({ model: r.id, escalation: r.escalation, because });
+      }
+      const estimate = this.estimateUsd(pricing);
 
       /* 3 — reserve before dispatch, every attempt including repairs. */
       let hold: { id: string };
       try {
         hold = this.opts.ledger.reserve({
-          estimateUsd: estimate, provider: this.client.id, model: this.client.model,
+          estimateUsd: estimate, provider: client.id, model: client.model,
           taskId: opts.taskId ?? null, attempt: attempts,
         });
       } catch (err) {
@@ -157,12 +206,12 @@ export class GatedBrain {
       /* 4 — dispatch, and settle whatever happened. */
       let text: string;
       try {
-        const response = await this.client.complete({
+        const response = await client.complete({
           system: GATED_SYSTEM_PROMPT(intent),
           user: attempt === 0 ? user : `${user}\n\n${REPAIR_PROMPT(lastReply, lastErrors)}`,
           maxOutputTokens: this.maxOutputTokens,
         });
-        const usd = this.actualUsd(response.inputTokens, response.outputTokens);
+        const usd = this.actualUsd(response.inputTokens, response.outputTokens, pricing);
         spent += usd;
         text = response.text;
         lastReply = text;
@@ -202,7 +251,7 @@ export class GatedBrain {
         return {
           status: "ok",
           outcome: normalisePlan(parsed.outcome),
-          attempts, usd: spent, model: response.model,
+          attempts, usd: spent, model: response.model, routed,
         };
       } catch (err) {
         // A call that threw may still have been billed; the hold is settled at the
@@ -224,8 +273,7 @@ export class GatedBrain {
   }
 
   /** What a call actually cost, from measured usage rather than the estimate. */
-  actualUsd(inputTokens: number, outputTokens: number): number {
-    const { pricing } = this.opts;
+  actualUsd(inputTokens: number, outputTokens: number, pricing: Pricing = this.opts.pricing): number {
     return (inputTokens / 1_000_000) * pricing.inputPerMTok +
            (outputTokens / 1_000_000) * pricing.outputPerMTok;
   }

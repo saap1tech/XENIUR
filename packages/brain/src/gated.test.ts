@@ -654,3 +654,69 @@ describe("no request was made by any of this", () => {
     expect(config.brain.providers.openai.price.unverified).toBe(true);
   });
 });
+
+/* ============================================================ routing === */
+
+describe("a resolver routes every attempt, and escalation is visible in the result", () => {
+  const scripted = (id: string, replies: string[]) => {
+    const c = new Scripted(replies);
+    return Object.assign(c, { id }) as unknown as LlmClient & { calls: LlmRequest[] };
+  };
+
+  it("bills each attempt at the routed model's own price, and names the escalation", async () => {
+    const cheap = scripted("cheap", ["not json", "still not json"]);
+    const strong = scripted("strong", [executable()]);
+    const resolver = {
+      resolve(_intent: string, ctx: { escalation: number }) {
+        const model = ctx.escalation === 0
+          ? { id: "a.cheap", client: cheap, price: { inputPerMTok: 1, outputPerMTok: 1 } }
+          : { id: "a.strong", client: strong, price: { inputPerMTok: 10, outputPerMTok: 10 } };
+        return {
+          id: model.id, client: model.client,
+          pricing: { ...model.price, verified: true, verifiedOn: "2026-09-16" },
+          because: ctx.escalation === 0 ? "nearest the slider" : "escalated 1 step",
+          escalation: ctx.escalation,
+        };
+      },
+    };
+    const result = await brain(new Forbidden(), { resolver }).ask("draft_decision", "x", {
+      world: { id: WORLD, title: "W", emoji: "W" }, selected: [], activeTasks: [],
+    }, registry());
+
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.routed.map((r) => r.model)).toEqual(["a.cheap", "a.strong"]);
+      expect(result.routed[1]!.because).toContain("escalated");
+    }
+    // Two rows in the ledger, at two different prices — the escalation is in the receipt.
+    const rows = g.db.prepare(`SELECT model, provider, actual_usd FROM spend ORDER BY rowid`).all() as
+      Array<{ model: string; provider: string; actual_usd: number }>;
+    expect(rows.map((r) => r.provider)).toEqual(["cheap", "strong"]);
+    expect(rows[1]!.actual_usd).toBeGreaterThan(rows[0]!.actual_usd);
+  });
+
+  it("refuses when a restricted source is in view and the resolver has no local route", async () => {
+    const resolver = { resolve: () => null };
+    const result = await brain(new Forbidden(), { resolver }).ask("draft_decision", "x", {
+      world: { id: WORLD, title: "W", emoji: "W" }, selected: [], activeTasks: [],
+    }, registry(), { hasRestrictedSources: true });
+    expect(result.status).toBe("gated");
+    if (result.status === "gated") expect(result.reason).toContain("restricted source");
+    expect(ledger.summary().calls).toBe(0);
+  });
+
+  it("refuses a routed model whose price is unverified, before reserving anything", async () => {
+    const resolver = {
+      resolve: () => ({
+        id: "o.unverified", client: new Forbidden(),
+        pricing: { inputPerMTok: 1, outputPerMTok: 1, verified: false, verifiedOn: null },
+        because: "x", escalation: 0,
+      }),
+    };
+    const result = await brain(new Forbidden(), { resolver }).ask("explain_check", "x", {
+      world: { id: WORLD, title: "W", emoji: "W" }, selected: [], activeTasks: [],
+    }, registry());
+    expect(result.status).toBe("gated");
+    expect(ledger.summary().committedUsd).toBe(0);
+  });
+});

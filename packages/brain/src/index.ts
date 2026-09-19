@@ -2,13 +2,15 @@ export { Brain, InvalidPlanError } from "./brain.js";
 export type { BrainOptions, PlanResult } from "./brain.js";
 export { MockLlmClient, ScriptedLlmClient } from "./mock.js";
 export { OpenAiClient } from "./openai.js";
+export { OllamaClient } from "./ollama.js";
+export type { OllamaOptions } from "./ollama.js";
 export type { OpenAiOptions } from "./openai.js";
 export { SYSTEM_PROMPT, REPAIR_PROMPT } from "./prompt.js";
 export { renderContext, renderRequest } from "./context.js";
 export type { BrainContext } from "./context.js";
 export type { LlmClient, LlmRequest, LlmResponse } from "./llm.js";
 export { GatedBrain, INTENT_TOOLS } from "./gated.js";
-export type { GatedBrainOptions, GatedResult, Pricing, SpendReserver } from "./gated.js";
+export type { GatedBrainOptions, GatedResult, Pricing, SpendReserver, ModelResolver, ResolvedModel } from "./gated.js";
 export { bindOutcome, normalisePlan } from "./binding.js";
 export type { RuntimeRegistry, BindingProblem } from "./binding.js";
 export {
