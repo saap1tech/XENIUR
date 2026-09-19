@@ -31,6 +31,7 @@ export * from "./challenges.js";
 export * from "./trail.js";
 export * from "./support-map.js";
 export * from "./today.js";
+export * from "./goal.js";
 export * from "./web.js";
 export * from "./compute.js";
 export * from "./workflow.js";

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ConstraintRecordSchema, SemanticTraitsSchema, UuidSchema } from "@xeniur/core";
+import { ConstraintRecordSchema, GoalStatusSchema, SemanticTraitsSchema, UuidSchema, goalKindFor, type GoalStatus } from "@xeniur/core";
 import { InteractionSchema, MeaningSchema, TaskStateSchema } from "./dimensions.js";
 import { DisclosureLayerSchema } from "./density.js";
 
@@ -13,11 +13,31 @@ export type Focus = z.infer<typeof FocusSchema>;
 export const GOAL_KINDS = [
   "understand", "decide", "create", "transform", "validate", "deliver", "act",
 ] as const;
-export const GoalSchema = z.object({
+
+/**
+ * The goal the Scene is compiled for.
+ *
+ * `kind` is what the compiler acts on. When a Situation carries a WorkGoal — the person's
+ * `outcome` and `status` — the kind is derived from the status and need not be given: the
+ * status is how the person is working, the kind is what the compiler does about it.
+ */
+export const GoalSchema = z.preprocess((raw) => {
+  if (raw && typeof raw === "object" && !("kind" in raw) && "status" in raw) {
+    return { ...raw, kind: goalKindFor((raw as { status: GoalStatus }).status) };
+  }
+  return raw;
+}, z.object({
   kind: z.enum(GOAL_KINDS),
   description: z.string().min(1).max(500).optional(),
   deliverableId: UuidSchema.optional(),
-}).strict();
+  /* From a WorkGoal, when the World has one. */
+  id: UuidSchema.optional(),
+  outcome: z.string().min(1).max(500).optional(),
+  status: GoalStatusSchema.optional(),
+  requiredOutputs: z.array(z.string().min(1)).default([]),
+  openQuestions: z.array(UuidSchema).default([]),
+  nextActions: z.array(z.object({ id: z.string().min(1), text: z.string().min(1), objectId: UuidSchema.nullable().default(null) }).strict()).default([]),
+}).strict());
 export type Goal = z.infer<typeof GoalSchema>;
 
 export const SituationScopeSchema = z.object({

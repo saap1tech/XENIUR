@@ -22,6 +22,7 @@ export { CircleStore, critiquePairs, importedFrom } from "./shared.js";
 export { OutreachStore, DisabledTransport, MockTransport } from "./outreach.js";
 export { ChallengeStore, rulesDigest } from "./challenges.js";
 export { TrailStore } from "./trail.js";
+export { GoalStore } from "./goals.js";
 export { supportMapFor } from "./support-map.js";
 export { todayFor } from "./today.js";
 export { renderAuditPage } from "./audit.js";

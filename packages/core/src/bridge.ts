@@ -7,6 +7,7 @@ import type { CampaignRecord, OutboundMessage, OutreachEnvelopeInput } from "./o
 import type { ChallengeRecord, ChallengeRulesInput, EntryRecord } from "./challenges.js";
 import type { TrailRow } from "./trail.js";
 import type { Today } from "./today.js";
+import type { GoalStatus, WorkGoal } from "./goal.js";
 import type { SupportMap } from "./support-map.js";
 import type { CandidateRecord, ClaimSupport, SupportStatus } from "./sensemaking.js";
 
@@ -217,6 +218,19 @@ export interface XeniurBridge {
     passage(atomObjectId: string): Promise<(ResolvedPassage & { sourceTitle: string }) | null>;
     /** Which accepted decisions and source copies a delivery was made under. */
     influence(objectId: string, releaseId?: string): Promise<InfluenceReport | null>;
+  };
+
+  /* What the person is trying to accomplish — one sentence, theirs */
+  goals: {
+    current(worldId: string): Promise<WorkGoal | null>;
+    create(worldId: string, outcome: string, focusObjectId?: string | null): Promise<WorkGoal>;
+    setStatus(goalId: string, status: GoalStatus): Promise<WorkGoal | null>;
+    setOutcome(goalId: string, outcome: string): Promise<WorkGoal | null>;
+    setFocus(goalId: string, objectId: string | null): Promise<WorkGoal | null>;
+    addNextAction(goalId: string, text: string, objectId?: string | null): Promise<WorkGoal | null>;
+    doneNextAction(goalId: string, actionId: string): Promise<WorkGoal | null>;
+    /** The Objects the goal is about — what the centre shows around the focus. */
+    relevant(goalId: string): Promise<string[]>;
   };
 
   /* What should I do with my time? — at most seven situations, never a feed */

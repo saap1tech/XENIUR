@@ -175,3 +175,32 @@ describe("constraint-driven recompilation", () => {
     expect(low.concepts.map((concept) => concept.component)).toEqual(high.concepts.map((concept) => concept.component));
   });
 });
+
+/* M6 A1 — the goal is the reason; the compiler derives what to do from how the person is working. */
+describe("a WorkGoal in the Situation", () => {
+  it("derives the compiler's kind from the status when none is given", () => {
+    const s = situation({ goal: { id: "77777777-7777-4777-8777-777777777777", outcome: "Ship the jacket", status: "making", deliverableId: FOCUS } });
+    expect(s.goal.kind).toBe("create");
+    expect(s.goal.outcome).toBe("Ship the jacket");
+    expect(situation({ goal: { outcome: "Understand the returns", status: "exploring" } }).goal.kind).toBe("understand");
+    expect(situation({ goal: { outcome: "Check it", status: "reviewing" } }).goal.kind).toBe("validate");
+    expect(situation({ goal: { outcome: "Send it", status: "ready" } }).goal.kind).toBe("deliver");
+  });
+
+  it("keeps an explicit kind when a host gives one", () => {
+    expect(situation({ goal: { kind: "decide", outcome: "Pick a finish", status: "making" } }).goal.kind).toBe("decide");
+  });
+
+  it("the layout id follows the goal's kind, so the same World compiles differently as the way of working changes", () => {
+    const making = compileSituation(situation({ goal: { outcome: "Ship it", status: "making", deliverableId: FOCUS } }));
+    const exploring = compileSituation(situation({ goal: { outcome: "Ship it", status: "exploring", deliverableId: FOCUS } }));
+    expect(making.layoutId.startsWith("create.")).toBe(true);
+    expect(exploring.layoutId.startsWith("understand.")).toBe(true);
+    expect(making.layoutId).not.toBe(exploring.layoutId);
+  });
+
+  it("scope narrows the centre to what the goal is about; the rest of the World stays out of the Scene", () => {
+    const plan = compileSituation(situation({ scope: { worldId: WORLD, objectIds: [FOCUS], externalContextAllowed: false } }));
+    expect(plan.concepts.some((c) => c.subjectId === OTHER)).toBe(false);
+  });
+});

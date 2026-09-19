@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { InputRole, WorldSnapshot } from "@xeniur/core";
+import type { InputRole, WorkGoal, WorldSnapshot } from "@xeniur/core";
 import { ObjectGraph } from "@xeniur/graph";
 import { PermissionBroker } from "@xeniur/permissions";
 import { loadProvidersConfig, type ProviderEnv } from "@xeniur/providers";
@@ -146,5 +146,45 @@ describe("the World shows what the loop produced", () => {
     expect(html).not.toContain("<script");
     expect(html).not.toContain("<iframe");
     expect(html).toContain("xr-scene");
+  });
+});
+
+/* M6 A1 — the goal is first-class: the reason above the thing in the hands. */
+describe("the World organises around the goal", () => {
+  const goal = (over: Partial<WorkGoal> = {}): WorkGoal => ({
+    id: "77777777-7777-4777-8777-777777777777", worldId: snapshot.world.id,
+    outcome: "Choose a jacket finish the client will accept", status: "making",
+    focusObjectId: snapshot.states[0]!.object.id, requiredOutputs: [], openQuestionIds: [], nextActions: [],
+    createdAt: 1, updatedAt: 1, lastActiveAt: 1, ...over,
+  });
+  const renderWith = (g: WorkGoal | null) => renderToStaticMarkup(
+    <World snapshot={snapshot} tasks={[]} busy={false} initialSelection={snapshot.states[0]!.object.id} initialGoal={g}
+      onBack={() => {}} onOpenObject={() => {}} onSubmit={() => {}} onApprove={() => {}} onReject={() => {}} />,
+  );
+
+  it("asks what the person is trying to accomplish when a World has no goal — and asks nothing else", () => {
+    const html = renderWith(null);
+    expect(html).toContain("What are you trying to accomplish?");
+    expect(html).toContain("One sentence, in your words");
+    expect(html).toContain(">Set it<");
+    expect(html).not.toMatch(/profession|role|researcher|designer/i);
+    expect(html).not.toContain("xr-goalbar");
+  });
+
+  it("shows the goal as a sentence with the way of working, above the focus, once one exists", () => {
+    const html = renderWith(goal());
+    expect(html).toContain("xr-goalbar");
+    expect(html).toContain("Choose a jacket finish the client will accept");
+    expect(html).toContain('<option value="making" selected="">making</option>');
+    expect(html).not.toContain("What are you trying to accomplish?");
+    // The reason comes before the thing in the hands.
+    expect(html.indexOf("xr-goalbar")).toBeLessThan(html.indexOf("xr-focusbar"));
+  });
+
+  it("offers every way of working, in any order — statuses are not stages", () => {
+    const html = renderWith(goal({ status: "exploring" }));
+    for (const s of ["exploring", "understanding", "making", "reviewing", "ready", "finished"]) {
+      expect(html).toContain(`<option value="${s}"`);
+    }
   });
 });

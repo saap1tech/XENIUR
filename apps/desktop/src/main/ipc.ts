@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { extractCandidates } from "@xeniur/sensemaking";
 import { z } from "zod";
-import { ChallengeRulesSchema, ExitReasonSchema, ModeEnvelopeSchema, ModeKindSchema, OutreachEnvelopeSchema, PublisherRefSchema, ReportReasonSchema, TrustLevelSchema, authorizeFor, campaignPlan, campaignScope, describeEnvelope, describeRecipients, needsCampaign, planDigest, sha256Hex, UuidSchema, type ActionPlan, type IntentResult, type WorldSnapshot } from "@xeniur/core";
+import { ChallengeRulesSchema, ExitReasonSchema, GoalStatusSchema, ModeEnvelopeSchema, ModeKindSchema, OutreachEnvelopeSchema, PublisherRefSchema, ReportReasonSchema, TrustLevelSchema, authorizeFor, campaignPlan, campaignScope, describeEnvelope, describeRecipients, needsCampaign, planDigest, sha256Hex, UuidSchema, type ActionPlan, type IntentResult, type WorldSnapshot } from "@xeniur/core";
 import { contextMaterialFor, importPackage, inspectPackage, outcomeOf, renderAuditPage, renderProofPage, supportMapFor, todayFor, trustFactsFor, trustFactsForWorld } from "@xeniur/graph";
 import { compileContext } from "@xeniur/grammar";
 import { policyFrom } from "@xeniur/models";
@@ -116,6 +116,14 @@ const SCHEMAS = {
   "publishers:list": z.undefined(),
   "publishers:setTrust": PublisherRefSchema.extend({ level: TrustLevelSchema }),
   "publishers:report": PublisherRefSchema.extend({ reason: ReportReasonSchema, note: z.string().max(500) }),
+  "goals:current": Uuid,
+  "goals:create": z.object({ worldId: UuidSchema, outcome: z.string().min(1).max(500), focusObjectId: UuidSchema.nullable() }),
+  "goals:setStatus": z.object({ id: UuidSchema, status: GoalStatusSchema }),
+  "goals:setOutcome": z.object({ id: UuidSchema, outcome: z.string().min(1).max(500) }),
+  "goals:setFocus": z.object({ id: UuidSchema, objectId: UuidSchema.nullable() }),
+  "goals:addNextAction": z.object({ id: UuidSchema, text: z.string().min(1).max(200), objectId: UuidSchema.nullable() }),
+  "goals:doneNextAction": z.object({ id: UuidSchema, actionId: z.string().min(1) }),
+  "goals:relevant": Uuid,
   "today:get": z.undefined(),
   "trust:facts": Uuid,
   "trust:world": Uuid,
@@ -488,6 +496,22 @@ export function registerIpc(services: Services): void {
     },
     "publishers:report": ({ publicKey, displayName, reason, note }) =>
       services.graph.publishers.report({ publicKey, displayName }, reason, { note }),
+    "goals:current": ({ id }) => services.graph.goals.current(id),
+    "goals:create": ({ worldId, outcome, focusObjectId }) => {
+      const goal = services.graph.goals.create(worldId, outcome, { focusObjectId });
+      services.metrics.record("goal_set", { detail: { status: goal.status } });
+      return goal;
+    },
+    "goals:setStatus": ({ id, status }) => {
+      const goal = services.graph.goals.setStatus(id, status);
+      if (goal) services.metrics.record(status === "finished" ? "goal_finished" : "goal_status_changed", { detail: { status } });
+      return goal;
+    },
+    "goals:setOutcome": ({ id, outcome }) => services.graph.goals.setOutcome(id, outcome),
+    "goals:setFocus": ({ id, objectId }) => services.graph.goals.setFocus(id, objectId),
+    "goals:addNextAction": ({ id, text, objectId }) => services.graph.goals.addNextAction(id, { text, objectId }),
+    "goals:doneNextAction": ({ id, actionId }) => services.graph.goals.doneNextAction(id, actionId),
+    "goals:relevant": ({ id }) => services.graph.goals.relevantObjects(id),
     "today:get": () => todayFor(services.graph, { rhythm: services.rhythm }),
     "trust:world": ({ id }) => trustFactsForWorld(services.graph, id),
     "trust:supportMap": ({ id }) => supportMapFor(services.graph, id),

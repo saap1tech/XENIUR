@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   ConstraintRecord, DecisionDetail, FrictionState, ImpactReport, Lane, ObjectState, ProcessProof,
-  ChallengeRecord, EntryRecord, PackageInspectionView, Representation, Scene, SupportMap, Task, ThinkingMap, TrailRow, TrustFacts, WorldSnapshot,
+  ChallengeRecord, EntryRecord, GoalStatus, PackageInspectionView, Representation, Scene, SupportMap, Task, ThinkingMap, TrailRow, TrustFacts,
+  WorkGoal, WorldSnapshot,
 } from "@xeniur/core";
 import { SceneRenderer, type SceneBindings } from "@xeniur/ui";
 import {
   SituationSchema, compileSituation, layoutScene, proposalsFor,
   type GestureProposal,
 } from "@xeniur/grammar";
+import { GOAL_STATUSES, GOAL_STATUS_WORDS } from "@xeniur/core";
 import { BrandMark } from "./BrandMark.js";
 import { Arrival } from "./Arrival.js";
 
@@ -41,6 +43,8 @@ export interface WorldProps {
   onReject(taskId: string): void;
   /** Something arrived and was opened; the World should be re-read (and maybe another World shown). */
   onImported?(result: { objectId: string; worldId: string }): void;
+  /** The goal as already known (a host or a test); undefined means read it from the bridge. */
+  initialGoal?: WorkGoal | null;
 }
 
 /**
@@ -57,7 +61,7 @@ export interface WorldProps {
  */
 export function World({
   snapshot, tasks, busy, initialSelection = null, initialZone = "work",
-  onBack, onOpenObject, onSubmit, onApprove, onReject, onImported,
+  onBack, onOpenObject, onSubmit, onApprove, onReject, onImported, initialGoal,
 }: WorldProps) {
   const [zone, setZone] = useState<Zone>(initialZone);
   const [selectedId, setSelectedId] = useState<string | null>(
@@ -82,6 +86,10 @@ export function World({
   const [entries, setEntries] = useState<EntryRecord[]>([]);
   const [selfKey, setSelfKey] = useState<string | null>(null);
   const [supportMap, setSupportMap] = useState<SupportMap | null>(null);
+  const [goal, setGoal] = useState<WorkGoal | null | undefined>(initialGoal);   // undefined: not read yet
+  const [relevant, setRelevant] = useState<string[] | null>(null);
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [goalDraft, setGoalDraft] = useState("");
   const [trailRows, setTrailRows] = useState<TrailRow[]>([]);
 
   const bridge = window.xeniur;
@@ -98,6 +106,29 @@ export function World({
   useEffect(() => {
     void bridge?.constraints?.list(worldId).then((items) => setConstraints(items ?? []));
   }, [bridge, worldId]);
+
+  // The goal — what the person is trying to accomplish — and the Objects it is about.
+  const refreshGoal = useCallback(async () => {
+    if (!bridge?.goals) return;                       // a static render keeps what it was given
+    const g = (await bridge.goals.current(worldId)) ?? null;
+    setGoal(g);
+    setRelevant(g ? (await bridge.goals.relevant(g.id)) ?? [] : null);
+  }, [bridge, worldId]);
+  useEffect(() => { void refreshGoal(); }, [refreshGoal]);
+
+  // The centre follows the goal's focus on open; afterwards the goal follows the centre.
+  useEffect(() => {
+    if (goal?.focusObjectId && !initialSelection && selectedId === (snapshot.states[0]?.object.id ?? null)) {
+      setSelectedId(goal.focusObjectId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goal?.id]);
+  useEffect(() => {
+    if (goal && selectedId && goal.focusObjectId !== selectedId) {
+      void bridge?.goals?.setFocus(goal.id, selectedId).then((g) => { if (g) setGoal(g); });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
 
   // A challenge World's centre is its board. Read once, and again when an entry changes.
   const refreshChallenge = useCallback(async () => {
@@ -268,12 +299,21 @@ export function World({
     ];
     const intent = ZONE_INTENT[zone];
     const isDecision = decisions.some((decision) => decision.objectId === selected.object.id);
+    // With a goal, the centre shows what the goal is about; without one, the whole World.
+    const goalScope = goal && relevant
+      ? [...new Set([selected.object.id, ...relevant, ...(zone === "deliveries" ? [selected.object.id] : [])])]
+      : snapshot.states.map((state) => state.object.id);
     const situation = SituationSchema.parse({
       worldId, title: snapshot.world.title,
       meaning: intent.meaning, interaction: intent.interaction, layer: intent.layer, taskStates,
-      goal: { kind: intent.goal, description: `${intent.goal} ${selected.properties.title}`,
-        ...(zone === "deliveries" ? { deliverableId: selected.object.id } : {}) },
-      scope: { worldId, objectIds: snapshot.states.map((state) => state.object.id), externalContextAllowed: false },
+      goal: goal
+        ? { id: goal.id, outcome: goal.outcome, status: goal.status, requiredOutputs: goal.requiredOutputs,
+            openQuestions: goal.openQuestionIds,
+            nextActions: goal.nextActions.filter((a) => !a.doneAt).map((a) => ({ id: a.id, text: a.text, objectId: a.objectId })),
+            description: goal.outcome, ...(zone === "deliveries" ? { deliverableId: selected.object.id } : {}) }
+        : { kind: intent.goal, description: `${intent.goal} ${selected.properties.title}`,
+            ...(zone === "deliveries" ? { deliverableId: selected.object.id } : {}) },
+      scope: { worldId, objectIds: goalScope, externalContextAllowed: false },
       focus: { kind: isDecision ? "decision" : "object", id: selected.object.id, label: selected.properties.title },
       objects: snapshot.states.map((state) => ({
         id: state.object.id, title: state.properties.title, semanticType: state.properties.semanticType,
@@ -295,7 +335,7 @@ export function World({
       root.children.push({ id: "support-map", component: "SupportMap", objectId: selected.object.id, lanes: [], disclosure: intent.layer } as never);
     }
     return compiled;
-  }, [zone, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints, challenge, supportMap]);
+  }, [zone, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints, challenge, supportMap, goal, relevant]);
 
   const inspector: Scene | null = useMemo(() => selected ? {
     worldId, title: "", reason: "",
@@ -311,9 +351,17 @@ export function World({
     },
   } : null, [selected, worldId, trailRows]);
 
+  // Until a World has a goal, the first thing the dock asks is what the person is trying to
+  // accomplish. The answer is stored verbatim; nothing about a profession or a model is asked.
+  const askingForGoal = goal === null && snapshot.world.kind === "work";
   const submit = () => {
     const text = utterance.trim();
     if (text === "") return;
+    if (askingForGoal) {
+      void bridge?.goals?.create(worldId, text, selectedId).then(() => refreshGoal());
+      setUtterance(""); setLanguageOpen(false);
+      return;
+    }
     void bridge?.metrics?.record("typed_instead", ZONE_INTENT[zone].meaning);
     onSubmit(text, selectedId ? [selectedId] : []);
     setUtterance("");
@@ -332,6 +380,26 @@ export function World({
         <button type="button" className="xr-back" onClick={onBack}>←</button>
         <BrandMark compact />
         <h1>{snapshot.world.title}</h1>
+        {goal && snapshot.world.kind === "work" && (
+          <div className="xr-goalbar">
+            {editingGoal ? (
+              <input className="xr-goalbar__edit" autoFocus value={goalDraft} aria-label="What you are trying to accomplish"
+                onChange={(e) => setGoalDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && goalDraft.trim()) { void bridge?.goals?.setOutcome(goal.id, goalDraft).then((g) => { if (g) setGoal(g); }); setEditingGoal(false); }
+                  if (e.key === "Escape") setEditingGoal(false);
+                }} onBlur={() => setEditingGoal(false)} />
+            ) : (
+              <button type="button" className="xr-goalbar__outcome" title="Edit what you are trying to accomplish"
+                onClick={() => { setGoalDraft(goal.outcome); setEditingGoal(true); }}>{goal.outcome}</button>
+            )}
+            <select className="xr-goalbar__status" value={goal.status} aria-label="How you are working on it"
+              title={GOAL_STATUS_WORDS[goal.status].means}
+              onChange={(e) => { void bridge?.goals?.setStatus(goal.id, e.target.value as GoalStatus).then((g) => { if (g) setGoal(g); }); }}>
+              {GOAL_STATUSES.map((st) => <option key={st} value={st}>{GOAL_STATUS_WORDS[st].label}</option>)}
+            </select>
+          </div>
+        )}
         <div className="xr-focusbar" aria-live="polite">
           <span>Focus</span><strong>{selected?.properties.title ?? "Nothing selected"}</strong>
         </div>
@@ -379,18 +447,20 @@ export function World({
           <SceneRenderer scene={scene} bindings={bindings} />
         </div>
 
-        <footer className={`xr-language-dock${languageOpen ? " is-open" : ""}`}>
-          {!languageOpen ? <button type="button" className="xr-language-dock__trigger" onClick={() => setLanguageOpen(true)}>
+        <footer className={`xr-language-dock${languageOpen || askingForGoal ? " is-open" : ""}`}>
+          {!languageOpen && !askingForGoal ? <button type="button" className="xr-language-dock__trigger" onClick={() => setLanguageOpen(true)}>
             Use language for this <span>⌘K also works</span>
           </button> : <>
-            <label htmlFor="world-language">Describe a shortcut for {selected?.properties.title ?? "this World"}</label>
+            <label htmlFor="world-language">{askingForGoal
+              ? "What are you trying to accomplish?"
+              : `Describe a shortcut for ${selected?.properties.title ?? "this World"}`}</label>
             <input id="world-language" autoFocus value={utterance}
-              placeholder="For example: make a delivery preview"
+              placeholder={askingForGoal ? "One sentence, in your words" : "For example: make a delivery preview"}
               onChange={(e) => setUtterance(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") setLanguageOpen(false); }} />
             <button type="button" className={`xr-button ${busy ? "xr-button--running" : "xr-button--primary"}`}
-              onClick={submit} disabled={busy}>{busy ? "Working…" : "Go"}</button>
-            <button type="button" className="xr-button" onClick={() => setLanguageOpen(false)}>Close</button>
+              onClick={submit} disabled={busy}>{busy ? "Working…" : askingForGoal ? "Set it" : "Go"}</button>
+            {!askingForGoal && <button type="button" className="xr-button" onClick={() => setLanguageOpen(false)}>Close</button>}
           </>}
         </footer>
       </main>

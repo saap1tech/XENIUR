@@ -175,6 +175,19 @@ contextBridge.exposeInMainWorld("xeniur", {
       call("publishers:report", { publicKey, displayName, reason, note: note ?? "" }),
   },
 
+  goals: {
+    current: (worldId: string) => call("goals:current", { id: worldId }),
+    create: (worldId: string, outcome: string, focusObjectId?: string | null) =>
+      call("goals:create", { worldId, outcome, focusObjectId: focusObjectId ?? null }),
+    setStatus: (goalId: string, status: string) => call("goals:setStatus", { id: goalId, status }),
+    setOutcome: (goalId: string, outcome: string) => call("goals:setOutcome", { id: goalId, outcome }),
+    setFocus: (goalId: string, objectId: string | null) => call("goals:setFocus", { id: goalId, objectId }),
+    addNextAction: (goalId: string, text: string, objectId?: string | null) =>
+      call("goals:addNextAction", { id: goalId, text, objectId: objectId ?? null }),
+    doneNextAction: (goalId: string, actionId: string) => call("goals:doneNextAction", { id: goalId, actionId }),
+    relevant: (goalId: string) => call("goals:relevant", { id: goalId }),
+  },
+
   today: {
     get: () => call("today:get"),
   },

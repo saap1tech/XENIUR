@@ -1147,6 +1147,20 @@ button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px 
   padding-left: 18px;
 }
 .xr-focusbar span { color: var(--faint); font: 10px/1 var(--font-mono); text-transform: uppercase; letter-spacing: .1em; }
+/* The goal: one sentence in the person's words, and the way they are working on it. It sits
+   between the World's name and the focus — the reason, then the thing in the hands. */
+.xr-goalbar { display: flex; align-items: center; gap: var(--s-2); min-width: 0; flex: 1; border-left: 1px solid var(--line); padding-left: var(--s-4); }
+.xr-goalbar__outcome {
+  background: none; border: 0; padding: 0; color: var(--text); font: 500 14px/1.3 var(--font-sans); text-align: left; cursor: text;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.xr-goalbar__outcome:hover { color: var(--dim); }
+.xr-goalbar__edit { flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-control); color: var(--text); font: 500 14px/1.3 var(--font-sans); padding: 4px 8px; }
+.xr-goalbar__status {
+  appearance: none; background: transparent; border: 1px solid var(--line); border-radius: var(--r-tag); color: var(--dim);
+  font: 11px/1 var(--font-mono); letter-spacing: .04em; padding: 3px 10px; cursor: pointer;
+}
+.xr-goalbar__status:hover { border-color: var(--dim); color: var(--text); }
 .xr-focusbar strong { font-size: 13px; font-weight: 600; }
 .xr-rail { border-right: 1px solid var(--line-soft); padding: 18px 10px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
 .xr-rail__item {

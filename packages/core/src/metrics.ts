@@ -25,6 +25,10 @@ export const SESSION_EVENT_KINDS = [
   "gesture_used",            // completed through a direct visual path
   "typed_instead",           // typed where a visual path existed; concept only, never words
   "delivery_mistake",         // a release later superseded or withdrawn
+  // The goal — what the person is trying to accomplish
+  "goal_set",                 // a goal was written, in the person's words
+  "goal_status_changed",      // they moved to another way of working
+  "goal_finished",
   // The model layer, made inspectable
   "model_routed",             // which model an intent went to, and whether it escalated
   "context_reviewed",         // a person confirmed what the model would see
@@ -125,6 +129,9 @@ export const EVENT_MEANINGS: Record<SessionEventKind, string> = {
   typed_instead: "you typed where a visual path was available",
   delivery_mistake: "a delivery was later replaced",
   reflection_dismissed: "you dismissed a reflection prompt",
+  goal_set: "you wrote down what you are trying to accomplish",
+  goal_status_changed: "you moved to another way of working on it",
+  goal_finished: "you finished a goal",
   model_routed: "an intent was routed to a model, cheap first",
   context_reviewed: "you read what the model would see before it saw it",
   context_excluded: "something was left out of a context, and why",

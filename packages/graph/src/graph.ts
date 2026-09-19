@@ -20,6 +20,7 @@ import { CircleStore } from "./shared.js";
 import { OutreachStore } from "./outreach.js";
 import { ChallengeStore } from "./challenges.js";
 import { TrailStore } from "./trail.js";
+import { GoalStore } from "./goals.js";
 import { ActionReceiptStore } from "./action-receipts.js";
 import { json, openDatabase, type Db } from "./db.js";
 import * as rows from "./rows.js";
@@ -83,6 +84,8 @@ export class ObjectGraph {
   readonly challenges: ChallengeStore;
   /** Saw · decided · authorised · executed, one row per model call or consequential action. */
   readonly trail: TrailStore;
+  /** What the person is trying to accomplish, per World, in their words. */
+  readonly goals: GoalStore;
 
   private constructor(readonly db: Db, readonly blobs: BlobStore, signingKeys: SigningKeyStore) {
     this.recipes = new RecipeStore(db, {
@@ -100,6 +103,7 @@ export class ObjectGraph {
     this.outreach = new OutreachStore(db, this);
     this.challenges = new ChallengeStore(db, this);
     this.trail = new TrailStore(db);
+    this.goals = new GoalStore(db, this);
   }
 
   static open(opts: GraphOptions): ObjectGraph {

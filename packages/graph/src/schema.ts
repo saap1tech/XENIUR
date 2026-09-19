@@ -1075,6 +1075,30 @@ CREATE INDEX idx_agent_trail_world ON agent_trail(world_id, at);
 CREATE INDEX idx_agent_trail_object ON agent_trail(object_id, at);
 `;
 
+/**
+ * Migration 23 — goals.
+ *
+ * What the person is trying to accomplish, in their words, with the status they are working
+ * in, the Object in the centre, what must be produced, what is open and what comes next. One
+ * current goal per World at a time (older ones stay as history, `finished` or superseded).
+ */
+const GOALS = `
+CREATE TABLE goals (
+  id                TEXT PRIMARY KEY,
+  world_id          TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+  outcome           TEXT NOT NULL,
+  status            TEXT NOT NULL DEFAULT 'exploring',   -- exploring | understanding | making | reviewing | ready | finished
+  focus_object_id   TEXT REFERENCES objects(id) ON DELETE SET NULL,
+  required_outputs  TEXT NOT NULL DEFAULT '[]',
+  open_question_ids TEXT NOT NULL DEFAULT '[]',
+  next_actions      TEXT NOT NULL DEFAULT '[]',
+  created_at        INTEGER NOT NULL,
+  updated_at        INTEGER NOT NULL,
+  last_active_at    INTEGER NOT NULL
+);
+CREATE INDEX idx_goals_world ON goals(world_id, last_active_at);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: INIT },
   { version: 2, name: "object_model", sql: OBJECT_MODEL },
@@ -1098,4 +1122,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 20, name: "outreach", sql: OUTREACH },
   { version: 21, name: "challenges", sql: CHALLENGES },
   { version: 22, name: "agent_trail", sql: AGENT_TRAIL },
+  { version: 23, name: "goals", sql: GOALS },
 ];
