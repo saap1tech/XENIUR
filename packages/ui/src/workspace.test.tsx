@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type {
   DecisionDetail, ImpactReport, ObjectState, Representation, Scene,
 } from "@xeniur/core";
-import { planDigest } from "@xeniur/core";
+import { describeEnvelope, planDigest, type ModeRecord } from "@xeniur/core";
 import { SceneRenderer, emptyBindings, type SceneBindings } from "./index.js";
 
 const OBJ = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -497,5 +497,55 @@ describe("what the model will see is shown, and what was left out is named", () 
   it("renders nothing for a digest it does not know — a stale card is not a card", () => {
     expect(render({ id: "c", component: "ContextReview", contextDigest: "other" }, bindings({ contexts: { [digest]: ctx } })))
       .not.toContain("xr-context");
+  });
+});
+
+/* M5 Stage 8 — a mode is a contract the person read, and can leave. */
+describe("FocusContract", () => {
+  const sheet = describeEnvelope("focus_contract", {
+    durationMinutes: 25, restrictions: ["no task toasts", "no suggestions"], exitPolicy: "always",
+  });
+  const MODE = "9d9d9d9d-9d9d-4d9d-8d9d-9d9d9d9d9d9d";
+  const running: ModeRecord = {
+    id: MODE, kind: "focus_contract", worldId: null, startedAt: Date.now(), endedAt: null, exitReason: null,
+    sheetDigest: sheet.digest,
+    envelope: { durationMinutes: 25, restrictions: ["no task toasts"], windows: [], maxFrequencyPerDay: 0,
+      categories: [], exitPolicy: "always", resumeObjectId: null },
+  };
+
+  it("renders the envelope before anything starts: duration, restrictions, exit, and a verb", () => {
+    const html = render({ id: "m", component: "FocusContract", phase: "review", sheetDigest: sheet.digest, modeId: null },
+                        bindings({ modeSheets: { [sheet.digest]: sheet } }));
+    expect(html).toContain("Focus Contract");
+    expect(html).toContain("25 min");
+    expect(html).toContain("no task toasts · no suggestions");
+    expect(html).toContain("leave at any moment");
+    expect(html).toContain("Begin focus");
+    expect(html).toContain("Not now");
+    expect(html).not.toMatch(/>OK</);
+  });
+
+  it("cannot render a sheet it was not given — no envelope, no start button", () => {
+    const html = render({ id: "m", component: "FocusContract", phase: "review", sheetDigest: "unknown", modeId: null },
+                        bindings({ modeSheets: { [sheet.digest]: sheet } }));
+    expect(html).not.toContain("Begin focus");
+    expect(html).not.toContain("xr-mode-sheet");
+  });
+
+  it("while running shows the name, the clock, and an Exit reachable by keyboard", () => {
+    const html = render({ id: "m", component: "FocusContract", phase: "running", sheetDigest: null, modeId: MODE },
+                        bindings({ modes: { [MODE]: running } }));
+    expect(html).toContain("xr-mode-rule--running");
+    expect(html).toContain("Focus Contract");
+    expect(html).toMatch(/\d\d?:\d\d/);
+    expect(html).toContain(">Exit<");
+    expect(html).toContain('aria-keyshortcuts="Escape"');
+  });
+
+  it("renders nothing for a mode that has ended — a mode is invisible when it is not running", () => {
+    const ended = { ...running, endedAt: Date.now(), exitReason: "emergency" as const };
+    const html = render({ id: "m", component: "FocusContract", phase: "running", sheetDigest: null, modeId: MODE },
+                        bindings({ modes: { [MODE]: ended } }));
+    expect(html).not.toContain("xr-mode-rule");
   });
 });

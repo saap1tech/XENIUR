@@ -1,6 +1,7 @@
 import type { ObjectState, Representation, World } from "./object.js";
 import type { DecisionDetail, InfluenceReport } from "./decisions.js";
 import type { ImpactReport, OutcomeLedger, TrustFacts } from "./impact.js";
+import type { EnvelopeSheet, ExitReason, ModeEnvelopeInput, ModeKind, ModeRecord, Reward, Streak } from "./modes.js";
 import type { Check, ReadinessReport, Release } from "./readiness.js";
 import type { RebuildPlan, StepStatus } from "./recipe.js";
 import type { DnaReport } from "./ingredients.js";
@@ -205,6 +206,23 @@ export interface XeniurBridge {
     facts(objectId: string): Promise<TrustFacts | null>;
     /** What a delivery cost, joined to its spend rows. Latest release when none is given. */
     outcome(objectId: string, releaseId?: string): Promise<OutcomeLedger | null>;
+  };
+
+  /* Bounded, visible, leavable contracts */
+  modes: {
+    /** The sheet to read before starting. Its digest is what `start` requires. */
+    describe(kind: ModeKind, envelope: ModeEnvelopeInput): Promise<EnvelopeSheet>;
+    start(kind: ModeKind, envelope: ModeEnvelopeInput, sheetDigest: string, worldId?: string | null): Promise<ModeRecord | null>;
+    /** The same exit for every mode. */
+    exit(modeId: string, reason: ExitReason): Promise<ModeRecord | null>;
+    active(): Promise<ModeRecord[]>;
+    restrictions(): Promise<string[]>;
+  };
+  rhythm: {
+    /** One offer if one is due and the graph holds something matched to the focus; else null. */
+    offer(worldId: string, objectId: string | null): Promise<{ id: string; reward: Reward } | null>;
+    resolve(offerId: string, outcome: "taken" | "skipped"): Promise<void>;
+    streak(): Promise<Streak>;
   };
 
   constraints: {

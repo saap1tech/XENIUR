@@ -1,51 +1,85 @@
-import { useEffect, useMemo, useState } from "react";
-import type { ObjectDetail, Scene } from "@xeniur/core";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { EnvelopeSheet, ExitReason, ModeEnvelopeInput, ModeRecord, ObjectDetail, Scene } from "@xeniur/core";
 import { SceneRenderer, type SceneBindings } from "@xeniur/ui";
 import { SituationSchema, compileSituation, layoutScene } from "@xeniur/grammar";
 
 /**
- * Focus Mode.
+ * Focus Mode — the host for a Focus Contract.
  *
  * XENIUR goes quiet: no Active list, no suggestions, no task toasts, no navigation, one
  * thing in view. It does *not* touch anything outside this window, and it says so — a mode
  * that claimed to silence the machine would be a lie the person discovers the first time a
  * notification arrives mid-session.
  *
- * Leaving is always one obvious click. A focus mode that is hard to escape is a trap.
+ * Nothing starts until the envelope has been read. The sheet comes first — duration, what is
+ * quiet, the exit — and its digest is what `start` requires. While running, a thin rule at
+ * the top carries the name, the remaining time and Exit; Escape is the emergency exit and
+ * asks nothing. When the mode ends, for any reason, the host hands back the Object that had
+ * the centre slot so it can be restored exactly.
  */
-export function FocusMode({ objectId, minutes, onExit }: {
+export function FocusMode({ objectId, minutes, worldId, onExit }: {
   objectId: string;
   minutes: number;
-  onExit(): void;
+  worldId: string;
+  /** Called once when the mode is over, with the Object to restore to the centre. */
+  onExit(resumeObjectId: string): void;
 }) {
   const [detail, setDetail] = useState<ObjectDetail | null>(null);
-  const [remaining, setRemaining] = useState(minutes * 60);
+  const [sheet, setSheet] = useState<EnvelopeSheet | null>(null);
+  const [mode, setMode] = useState<ModeRecord | null>(null);
   const bridge = window.xeniur;
+
+  const envelope: ModeEnvelopeInput = useMemo(() => ({
+    durationMinutes: Math.max(1, minutes),
+    restrictions: ["no task toasts", "no suggestions", "no navigation"],
+    exitPolicy: "always",
+    resumeObjectId: objectId,
+  }), [minutes, objectId]);
 
   useEffect(() => {
     void bridge?.living.detail(objectId).then(setDetail);
-  }, [bridge, objectId]);
+    void bridge?.modes?.describe("focus_contract", envelope).then(setSheet);
+  }, [bridge, objectId, envelope]);
 
-  useEffect(() => {
-    if (minutes <= 0) return;
-    const timer = setInterval(() => setRemaining((r) => Math.max(0, r - 1)), 1000);
-    return () => clearInterval(timer);
-  }, [minutes]);
+  const leave = useCallback((reason: ExitReason) => {
+    if (mode) void bridge?.modes?.exit(mode.id, reason);
+    onExit(objectId);
+  }, [bridge, mode, objectId, onExit]);
 
-  // Escape leaves. Nothing else is bound, because nothing else should happen in here.
+  // Escape before the mode starts is simply "Not now". Once running, the rule owns Escape.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onExit(); };
+    if (mode) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onExit(objectId); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onExit]);
+  }, [mode, objectId, onExit]);
+
+  // The mode completes itself by duration; poll the record so the rule can end on time.
+  useEffect(() => {
+    if (!mode) return;
+    const timer = setInterval(() => {
+      void bridge?.modes?.active().then((running) => {
+        if (!running.some((m) => m.id === mode.id)) { clearInterval(timer); onExit(objectId); }
+      });
+    }, 5_000);
+    return () => clearInterval(timer);
+  }, [bridge, mode, objectId, onExit]);
 
   const bindings: SceneBindings = useMemo(() => ({
     states: detail ? { [objectId]: detail.state } : {},
     representations: Object.fromEntries((detail?.representations ?? []).map((r) => [r.id, r])),
     tasks: {},
+    modeSheets: sheet ? { [sheet.digest]: sheet } : {},
+    modes: mode ? { [mode.id]: mode } : {},
     blobUrl: (hash) => bridge?.blobs.url(hash) ?? "",
-    onExitFocus: onExit,
-  }), [detail, objectId, bridge, onExit]);
+    onExitFocus: () => leave("left"),
+    onStartMode: async (kind, sheetDigest) => {
+      const started = await bridge?.modes?.start(kind, envelope, sheetDigest, worldId);
+      if (started) setMode(started);
+    },
+    onDeclineMode: () => onExit(objectId),
+    onExitMode: (_modeId, reason) => leave(reason),
+  }), [detail, objectId, sheet, mode, bridge, envelope, worldId, leave, onExit]);
 
   const scene: Scene | null = detail ? (() => {
     const semantic = compileSituation(SituationSchema.parse({
@@ -63,14 +97,29 @@ export function FocusMode({ objectId, minutes, onExit }: {
     return layoutScene(semantic, { layoutId: semantic.layoutId });
   })() : null;
 
-  const mm = Math.floor(remaining / 60);
-  const ss = String(remaining % 60).padStart(2, "0");
+  // Review first. The work is not shown until the contract has been read and begun.
+  if (!mode) {
+    const review: Scene | null = sheet ? {
+      worldId, title: "", reason: "",
+      root: { id: "mode", component: "Canvas", layout: "column",
+        children: [{ id: "sheet", component: "FocusContract", phase: "review", sheetDigest: sheet.digest, modeId: null } as never] },
+    } : null;
+    return (
+      <div className="xr-focusmode xr-focusmode--review">
+        {review ? <SceneRenderer scene={review} bindings={bindings} /> : <p className="xr-empty">Loading…</p>}
+      </div>
+    );
+  }
+
+  const rule: Scene = {
+    worldId, title: "", reason: "",
+    root: { id: "rule", component: "Canvas", layout: "column",
+      children: [{ id: "running", component: "FocusContract", phase: "running", sheetDigest: null, modeId: mode.id } as never] },
+  };
 
   return (
     <div className="xr-focusmode">
-      {minutes > 0 && (
-        <div className="xr-focusmode__clock" aria-live="off">{mm}:{ss}</div>
-      )}
+      <SceneRenderer scene={rule} bindings={bindings} />
       {scene
         ? <SceneRenderer scene={scene} bindings={bindings} />
         : <p className="xr-empty">Loading…</p>}

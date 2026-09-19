@@ -20,9 +20,9 @@ const NEW_WORLD: Record<HomeEntry, { title: string; emoji: string }> = {
 
 type View =
   | { kind: "home" }
-  | { kind: "world"; snapshot: WorldSnapshot }
+  | { kind: "world"; snapshot: WorldSnapshot; selection?: string | null }
   | { kind: "object"; detail: ObjectDetail; worldSnapshot: WorldSnapshot }
-  | { kind: "focus"; objectId: string; minutes: number }
+  | { kind: "focus"; objectId: string; minutes: number; worldId: string }
   | { kind: "web" }
   | { kind: "workflows" }
   | { kind: "firstrun" };
@@ -141,7 +141,7 @@ export function App() {
         } },
       { id: "focus", group: "This object", label: "Enter Focus Mode",
         hint: "quiets XENIUR only",
-        run: () => setView({ kind: "focus", objectId: id, minutes: 25 }) },
+        run: () => setView({ kind: "focus", objectId: id, minutes: 25, worldId: view.detail.state.object.worldId }) },
     );
   }
 
@@ -181,8 +181,15 @@ export function App() {
   if (view.kind === "focus") {
     return (
       <FocusMode
-        objectId={view.objectId} minutes={view.minutes}
-        onExit={() => { void openWorld(worlds[0]?.id ?? ""); setView({ kind: "home" }); }}
+        objectId={view.objectId} minutes={view.minutes} worldId={view.worldId}
+        onExit={(resumeObjectId) => {
+          // The focus invariant: the mode ends where it began. The centre slot is restored to
+          // the exact Object, not to Home and not to the first World.
+          void bridge?.worlds.open(view.worldId).then((snapshot) => {
+            if (snapshot) setView({ kind: "world", snapshot, selection: resumeObjectId });
+            else setView({ kind: "home" });
+          });
+        }}
       />
     );
   }
@@ -216,7 +223,7 @@ export function App() {
         />
       ) : view.kind === "world" ? (
         <World
-          snapshot={view.snapshot} tasks={tasks} busy={busy}
+          snapshot={view.snapshot} tasks={tasks} busy={busy} initialSelection={view.selection ?? null}
           onBack={() => setView({ kind: "home" })}
           onOpenObject={(id) => { void openObject(id, view.snapshot); }}
           onSubmit={submit} onApprove={approve} onReject={reject}

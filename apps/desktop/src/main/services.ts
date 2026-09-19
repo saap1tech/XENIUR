@@ -3,7 +3,7 @@ import type {
   Authorization, HistoryPayload, LineagePayload, ObjectDetail, SystemInfo, Task, TaskEvent, Tool,
 } from "@xeniur/core";
 import {
-  ObjectGraph, ReadinessEvaluator, ideaDna, loadProfiles, exportPackage, impactOf, SpendLedger,
+  ObjectGraph, ReadinessEvaluator, RhythmStore, ideaDna, loadProfiles, loadRhythmConfig, exportPackage, impactOf, SpendLedger,
   MetricsStore,
   ComputeLedger, WorkflowLibrary,
 } from "@xeniur/graph";
@@ -52,6 +52,8 @@ export interface Services {
   rebuild: RebuildRunner;
   validation: ValidationRunner;
   readiness: ReadinessEvaluator;
+  /** Rewards from the graph on a predictable cadence. Off unless config says otherwise. */
+  rhythm: RhythmStore;
   sense: SensemakingStore;
   detailOf(objectId: string): ObjectDetail | null;
   /** What changed since the last delivery, split into rebuild and review. */
@@ -292,6 +294,7 @@ export function createServices(window: BrowserWindow): Services {
   const rebuild = new RebuildRunner(graph, router);
   const validation = new ValidationRunner(graph, env);
   const readiness = new ReadinessEvaluator(graph, loadProfiles(paths.projectRoot));
+  const rhythm = new RhythmStore(graph.db, graph, graph.modes, loadRhythmConfig(paths.projectRoot));
   const sense = new SensemakingStore(graph);
 
   // Readiness gates actions in the same place the Broker already gates money.
@@ -445,7 +448,7 @@ export function createServices(window: BrowserWindow): Services {
 
   return {
     graph, models, queue, broker, sessions, metrics, compute, workflows, webRisk, router, brain, gatedBrain, spend, config, env, browser, preview,
-    rebuild, validation, readiness, sense,
+    rebuild, validation, readiness, rhythm, sense,
     detailOf, historyOf, thinkingMap,
     impactOf: impactOfObject, passageOf,
     packageOf: (objectId, outPath) => exportPackage(graph, objectId, outPath)

@@ -24,6 +24,7 @@ export * from "./knowledge.js";
 export * from "./bridge.js";
 export * from "./constraints.js";
 export * from "./process.js";
+export * from "./modes.js";
 export * from "./web.js";
 export * from "./compute.js";
 export * from "./workflow.js";

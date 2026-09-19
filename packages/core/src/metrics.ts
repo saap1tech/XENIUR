@@ -25,6 +25,14 @@ export const SESSION_EVENT_KINDS = [
   "gesture_used",            // completed through a direct visual path
   "typed_instead",           // typed where a visual path existed; concept only, never words
   "delivery_mistake",         // a release later superseded or withdrawn
+  // Modes and rhythm — written here, never read by the code that chooses timing
+  "mode_started",
+  "mode_exited",
+  "mode_emergency_exit",      // the exit that always exists was used; a fact, not a failure
+  "reward_offered",
+  "reward_taken",
+  "reward_skipped",
+  "streak_day",
   "reflection_dismissed",     // friction turned off; a prompt nobody wants is a bad prompt
   "session_ended",
 ] as const;
@@ -105,5 +113,12 @@ export const EVENT_MEANINGS: Record<SessionEventKind, string> = {
   typed_instead: "you typed where a visual path was available",
   delivery_mistake: "a delivery was later replaced",
   reflection_dismissed: "you dismissed a reflection prompt",
+  mode_started: "you started a mode you set the terms of",
+  mode_exited: "you ended a mode",
+  mode_emergency_exit: "you left a mode early — recorded, not judged",
+  reward_offered: "XENIUR offered something from your own work",
+  reward_taken: "you took an offer",
+  reward_skipped: "you skipped an offer, and offers became rarer",
+  streak_day: "a day on which something became",
   session_ended: "you closed XENIUR",
 };

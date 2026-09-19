@@ -14,6 +14,7 @@ import { DecisionStore } from "./decisions.js";
 import { SupportStore } from "./support.js";
 import { ConstraintStore } from "./constraints.js";
 import { ProcessStore } from "./process.js";
+import { ModeStore } from "./modes.js";
 import { ActionReceiptStore } from "./action-receipts.js";
 import { json, openDatabase, type Db } from "./db.js";
 import * as rows from "./rows.js";
@@ -61,6 +62,8 @@ export class ObjectGraph {
   readonly process: ProcessStore;
   /** Durable Living Objects for consequential external effects. */
   readonly actionReceipts: ActionReceiptStore;
+  /** Bounded, visible, leavable contracts. The emergency exit is one method for every kind. */
+  readonly modes: ModeStore;
 
   private constructor(readonly db: Db, readonly blobs: BlobStore) {
     this.recipes = new RecipeStore(db, {
@@ -72,6 +75,7 @@ export class ObjectGraph {
     this.constraints = new ConstraintStore(db, this);
     this.process = new ProcessStore(db);
     this.actionReceipts = new ActionReceiptStore(db, this);
+    this.modes = new ModeStore(db);
   }
 
   static open(opts: GraphOptions): ObjectGraph {

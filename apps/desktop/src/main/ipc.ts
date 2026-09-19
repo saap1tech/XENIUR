@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { extractCandidates } from "@xeniur/sensemaking";
 import { z } from "zod";
-import { sha256Hex, UuidSchema, type ActionPlan, type IntentResult, type WorldSnapshot } from "@xeniur/core";
+import { ExitReasonSchema, ModeEnvelopeSchema, ModeKindSchema, describeEnvelope, sha256Hex, UuidSchema, type ActionPlan, type IntentResult, type WorldSnapshot } from "@xeniur/core";
 import { outcomeOf, renderProofPage, trustFactsFor } from "@xeniur/graph";
 import { InvalidPlanError } from "@xeniur/brain";
 import { planForProposal, proposalsFor } from "@xeniur/grammar";
@@ -78,6 +78,15 @@ const SCHEMAS = {
   "living:impact": Uuid,
   "constraints:list": Uuid,
   "constraints:setValue": z.object({ id: UuidSchema, value: z.unknown() }),
+  "modes:describe": z.object({ kind: ModeKindSchema, envelope: ModeEnvelopeSchema }),
+  "modes:start": z.object({ kind: ModeKindSchema, envelope: ModeEnvelopeSchema, sheetDigest: z.string().min(1),
+    worldId: UuidSchema.nullable() }),
+  "modes:exit": z.object({ id: UuidSchema, reason: ExitReasonSchema }),
+  "modes:active": z.undefined(),
+  "modes:restrictions": z.undefined(),
+  "rhythm:offer": z.object({ worldId: UuidSchema, objectId: UuidSchema.nullable() }),
+  "rhythm:resolve": z.object({ id: UuidSchema, outcome: z.enum(["taken", "skipped"]) }),
+  "rhythm:streak": z.undefined(),
   "trust:facts": Uuid,
   "trust:outcome": z.object({ id: UuidSchema, releaseId: UuidSchema.optional() }),
   "process:proof": Uuid,
@@ -341,6 +350,29 @@ export function registerIpc(services: Services): void {
     "constraints:list": ({ id }) => services.graph.constraints.list(id),
     "constraints:setValue": ({ id, value }) => services.graph.constraints.get(id)
       ? services.graph.constraints.setValue(id, value) : null,
+    "modes:describe": ({ kind, envelope }) => describeEnvelope(kind, envelope),
+    "modes:start": ({ kind, envelope, sheetDigest, worldId }) => {
+      const mode = services.graph.modes.start({ kind, envelope, sheetDigest, worldId });
+      services.metrics.record("mode_started", { detail: { kind } });
+      return mode;
+    },
+    "modes:exit": ({ id, reason }) => {
+      const mode = services.graph.modes.end(id, reason);
+      if (mode) services.metrics.record(reason === "emergency" ? "mode_emergency_exit" : "mode_exited", { detail: { kind: mode.kind, reason } });
+      return mode;
+    },
+    "modes:active": () => services.graph.modes.active(),
+    "modes:restrictions": () => services.graph.modes.restrictions(),
+    "rhythm:offer": ({ worldId, objectId }) => {
+      const offer = services.rhythm.offer({ worldId, objectId });
+      if (offer) services.metrics.record("reward_offered", { detail: { kind: offer.reward.kind } });
+      return offer ? { id: offer.id, reward: offer.reward } : null;
+    },
+    "rhythm:resolve": ({ id, outcome }) => {
+      services.rhythm.resolve(id, outcome);
+      services.metrics.record(outcome === "taken" ? "reward_taken" : "reward_skipped");
+    },
+    "rhythm:streak": () => services.rhythm.streak(),
     "trust:facts": ({ id }) => services.graph.getObject(id) ? trustFactsFor(services.graph, id) : null,
     "trust:outcome": ({ id, releaseId }) => services.graph.getObject(id) ? outcomeOf(services.graph, id, releaseId) : null,
     "process:proof": ({ id }) => services.graph.process.proof(id),

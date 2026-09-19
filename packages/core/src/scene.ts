@@ -28,6 +28,8 @@ export const SCENE_COMPONENTS = [
   "ModelSetup",
   // What the model will see
   "ContextReview",
+  // Bounded, visible, leavable contracts
+  "FocusContract",
 ] as const;
 export const SceneComponentSchema = z.enum(SCENE_COMPONENTS);
 export type SceneComponentName = z.infer<typeof SceneComponentSchema>;
@@ -360,6 +362,20 @@ const ContextReviewNode = z.object({
   contextDigest: z.string().min(1),
 }).strict();
 
+/**
+ * A mode in one of its two visible phases. In review, the sheet is looked up by its digest —
+ * the same digest `start` requires, so a person cannot begin from an envelope they did not
+ * read. Running, it is the thin rule at the top of the window with an Exit.
+ */
+const FocusContractNode = z.object({
+  ...base, component: z.literal("FocusContract"),
+  phase: z.enum(["review", "running"]),
+  /** Review: the sheet the person is reading. */
+  sheetDigest: z.string().min(1).nullable().default(null),
+  /** Running: the mode whose rule is shown. */
+  modeId: UuidSchema.nullable().default(null),
+}).strict();
+
 const LeafNodeSchema = z.discriminatedUnion("component", [
   ObjectCardNode, InspectorNode, DocumentNode, TimelineNode, TaskProgressNode,
   ComparisonNode, BrowserNode, CodePreviewNode, Viewport3DNode, ApprovalDialogNode,
@@ -373,6 +389,7 @@ const LeafNodeSchema = z.discriminatedUnion("component", [
   RangeMeterNode, PriorityBalanceNode, PeopleChipsNode, CalendarNode, SchematicMapNode,
   ChoiceCardsNode, StepperNode, EvidenceMeterNode, EmptySlotNode, ReviewSheetNode,
   ClaimPairNode, TrustStripNode, ModelSetupNode, ContextReviewNode,
+  FocusContractNode,
 ]);
 export type LeafSceneNode = z.infer<typeof LeafNodeSchema>;
 

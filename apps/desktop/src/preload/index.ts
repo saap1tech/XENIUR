@@ -125,6 +125,20 @@ contextBridge.exposeInMainWorld("xeniur", {
     setValue: (objectId: string, value: unknown) => call("constraints:setValue", { id: objectId, value }),
   },
 
+  modes: {
+    describe: (kind: string, envelope: Record<string, unknown>) => call("modes:describe", { kind, envelope }),
+    start: (kind: string, envelope: Record<string, unknown>, sheetDigest: string, worldId?: string | null) =>
+      call("modes:start", { kind, envelope, sheetDigest, worldId: worldId ?? null }),
+    exit: (modeId: string, reason: string) => call("modes:exit", { id: modeId, reason }),
+    active: () => call("modes:active"),
+    restrictions: () => call("modes:restrictions"),
+  },
+  rhythm: {
+    offer: (worldId: string, objectId: string | null) => call("rhythm:offer", { worldId, objectId }),
+    resolve: (offerId: string, outcome: string) => call("rhythm:resolve", { id: offerId, outcome }),
+    streak: () => call("rhythm:streak"),
+  },
+
   trust: {
     facts: (objectId: string) => call("trust:facts", { id: objectId }),
     outcome: (objectId: string, releaseId?: string) => call("trust:outcome", { id: objectId, releaseId }),

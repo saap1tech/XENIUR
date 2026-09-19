@@ -1296,3 +1296,46 @@ input[type="range"] { accent-color: var(--text); }
 .xr-context__why { color: var(--faint); font-size: 12px; }
 .xr-context__restricted { margin: 0; font-size: 12px; color: var(--review); }
 .xr-context__actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ---- Modes: a bounded, visible, leavable contract ------------------------------------- */
+/* The sheet is read before anything starts. Both verbs share a weight: leaving is not a
+   lesser choice. */
+.xr-focusmode--review { align-content: center; }
+.xr-mode-sheet {
+  width: min(52ch, 100%); display: grid; gap: 18px; padding: 28px 30px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 4px;
+}
+.xr-mode-sheet__name {
+  margin: 0; font: 600 28px/1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase;
+}
+.xr-mode-sheet__lines { margin: 0; display: grid; gap: 0; }
+.xr-mode-sheet__line {
+  display: grid; grid-template-columns: 9ch 1fr; gap: 16px; padding: 10px 0;
+  border-top: 1px solid var(--line); font-size: 14px;
+}
+.xr-mode-sheet__line:last-child { border-bottom: 1px solid var(--line); }
+.xr-mode-sheet__line dt { color: var(--dim); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; padding-top: 2px; }
+.xr-mode-sheet__line dd { margin: 0; }
+.xr-mode-sheet__exit { margin: 0; color: var(--dim); font-size: 13px; }
+.xr-mode-sheet__actions { display: flex; gap: 10px; }
+
+/* While running: a thin rule at the very top of the window. The lime is the third use —
+   work in flight — and nothing else on the screen borrows it. */
+.xr-mode-rule {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 30;
+  display: flex; align-items: center; gap: 14px; padding: 6px 16px 6px 14px;
+  font-size: 12px; color: var(--dim); background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.xr-mode-rule--running { border-top: 2px solid var(--signal); }
+.xr-mode-rule__name { font: 600 13px/1 var(--font-display); letter-spacing: .04em; text-transform: uppercase; color: var(--text); }
+.xr-mode-rule__clock { font-variant-numeric: tabular-nums; color: var(--text); }
+.xr-mode-rule__restrictions { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.xr-mode-rule__exit {
+  margin-left: auto; min-height: 24px; padding: 0 10px; border: 1px solid var(--line); border-radius: 3px;
+  background: transparent; color: var(--text); font: inherit; cursor: pointer;
+}
+.xr-mode-rule__exit:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+@media (prefers-reduced-motion: no-preference) {
+  .xr-mode-rule { transition: opacity .3s ease; }
+}

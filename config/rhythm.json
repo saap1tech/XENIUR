@@ -1,0 +1,7 @@
+{
+  "enabled": false,
+  "cadenceMinutes": 90,
+  "skipLengthens": 1.5,
+  "maxCadenceMinutes": 480,
+  "streak": { "forgivenessDays": 1 }
+}

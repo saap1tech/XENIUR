@@ -4,7 +4,7 @@ import type {
   ObjectState, PlanShape, ProcessProof, ReadinessReport, RebuildPlan, Representation, ResolvedPassage,
   SourceVersion, StepStatus, Task, ThinkingMap, ConstraintRecord, ConstraintValue,
 } from "@xeniur/core";
-import type { ModelProviderView, TrustFacts } from "@xeniur/core";
+import type { EnvelopeSheet, ExitReason, ModeKind, ModelProviderView, ModeRecord, TrustFacts } from "@xeniur/core";
 import { formOf } from "@xeniur/core";
 
 export interface LineageView {
@@ -71,6 +71,10 @@ export interface SceneBindings {
     modelLabel: string | null;
     estimatedUsd: number;
   }>>;
+  /** Envelope sheets awaiting a verb, keyed by digest — what `start` will be asked to echo. */
+  modeSheets?: Readonly<Record<string, EnvelopeSheet>>;
+  /** Modes by id; only a running one renders. */
+  modes?: Readonly<Record<string, ModeRecord>>;
   /** The providers as the first-run scene shows them. Never a key. */
   modelProviders?: readonly ModelProviderView[];
   /** The last verification result per provider, for the tag beside the card. */
@@ -137,6 +141,10 @@ export interface SceneBindings {
   onVerifyModel?(provider: string): void;
   onSkipFirstRun?(): void;
   onConfirmContext?(contextDigest: string): void;
+  onStartMode?(kind: ModeKind, sheetDigest: string): void;
+  onDeclineMode?(kind: ModeKind): void;
+  /** The same exit for every mode. "emergency" is Escape; it asks nothing. */
+  onExitMode?(modeId: string, reason: ExitReason): void;
   onDeclineContext?(contextDigest: string): void;
   onContinueFirstRun?(): void;
   /** A person reviews one citation. The only thing that settles it. */

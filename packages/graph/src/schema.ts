@@ -866,6 +866,40 @@ ALTER TABLE decision_assumptions ADD COLUMN kind TEXT NOT NULL DEFAULT 'assumpti
 ALTER TABLE decisions ADD COLUMN steelman TEXT NOT NULL DEFAULT 'none';               -- none | recorded | skipped
 `;
 
+/**
+ * Migration 17 — modes and rhythm.
+ *
+ * A mode is a bounded, visible, leavable contract. The envelope is stored as the person set
+ * it; the sheet digest proves it was shown; the exit reason is recorded, never judged.
+ * Offers are recorded so that a skip can lengthen the cadence and an Inspiration can
+ * terminate — never so that timing can be tuned. No table here holds a click or a dwell.
+ */
+const MODES = `
+CREATE TABLE modes (
+  id            TEXT PRIMARY KEY,
+  kind          TEXT NOT NULL,             -- focus_contract | serendipity | recovery | discovery
+  envelope      TEXT NOT NULL,             -- JSON, as the person set it
+  sheet_digest  TEXT NOT NULL,             -- the sheet they read before starting
+  world_id      TEXT REFERENCES worlds(id) ON DELETE SET NULL,
+  started_at    INTEGER NOT NULL,
+  ended_at      INTEGER,
+  exit_reason   TEXT                       -- completed | left | emergency
+);
+CREATE INDEX idx_modes_active ON modes(kind, ended_at);
+
+CREATE TABLE rhythm_offers (
+  id          TEXT PRIMARY KEY,
+  mode_id     TEXT REFERENCES modes(id) ON DELETE SET NULL,
+  kind        TEXT NOT NULL,               -- open_question | review_due | cited_author | inspiration
+  object_id   TEXT REFERENCES objects(id) ON DELETE CASCADE,
+  pair_key    TEXT,                        -- for inspiration: the two subjects, so a pair is offered once
+  offered_at  INTEGER NOT NULL,
+  outcome     TEXT                         -- taken | skipped | NULL while open
+);
+CREATE INDEX idx_rhythm_offers_time ON rhythm_offers(offered_at);
+CREATE INDEX idx_rhythm_offers_pair ON rhythm_offers(pair_key);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: INIT },
   { version: 2, name: "object_model", sql: OBJECT_MODEL },
@@ -883,4 +917,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 14, name: "action_receipts", sql: ACTION_RECEIPTS },
   { version: 15, name: "claim_support", sql: CLAIM_SUPPORT },
   { version: 16, name: "thinking_moves", sql: THINKING_MOVES },
+  { version: 17, name: "modes", sql: MODES },
 ];
