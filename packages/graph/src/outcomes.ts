@@ -150,3 +150,27 @@ export function trustFactsFor(graph: ObjectGraph, objectId: string): TrustFacts 
 
   return { objectId, support, evidence, provenance, actions, cost, decisionsNeedingReview, settled };
 }
+
+/**
+ * A World's Trust Strip: the facts of every Object in it, summed. Settled only when every
+ * Object is settled and there is at least one — an empty World has nothing to be settled about.
+ */
+export function trustFactsForWorld(graph: ObjectGraph, worldId: string): TrustFacts {
+  const facts = graph.listObjects(worldId)
+    .filter((o) => graph.currentState(o.id) !== null)
+    .map((o) => trustFactsFor(graph, o.id));
+  const sum = (pick: (t: TrustFacts) => number) => facts.reduce((n, t) => n + pick(t), 0);
+  return {
+    objectId: worldId,
+    support: {
+      supported: sum((t) => t.support.supported), ambiguous: sum((t) => t.support.ambiguous),
+      unresolved: sum((t) => t.support.unresolved), contradicted: sum((t) => t.support.contradicted),
+    },
+    evidence: { current: sum((t) => t.evidence.current), total: sum((t) => t.evidence.total) },
+    provenance: { human: sum((t) => t.provenance.human), tool: sum((t) => t.provenance.tool), model: sum((t) => t.provenance.model) },
+    actions: { receipted: sum((t) => t.actions.receipted), unknown: sum((t) => t.actions.unknown) },
+    cost: { usd: sum((t) => t.cost.usd), escalations: sum((t) => t.cost.escalations) },
+    decisionsNeedingReview: sum((t) => t.decisionsNeedingReview),
+    settled: facts.length > 0 && facts.every((t) => t.settled),
+  };
+}

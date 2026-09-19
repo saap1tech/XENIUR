@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { ComputeQuote, EconomySnapshot, ObjectDetail, SystemInfo, Task, World as WorldRow, WorldSnapshot } from "@xeniur/core";
+import type { Today, TrustFacts, ComputeQuote, EconomySnapshot, ObjectDetail, SystemInfo, Task, World as WorldRow, WorldSnapshot } from "@xeniur/core";
 import { Home, type HomeEntry } from "./Home.js";
 import { World } from "./World.js";
 import { ObjectView } from "./ObjectView.js";
@@ -20,7 +20,7 @@ const NEW_WORLD: Record<HomeEntry, { title: string; emoji: string }> = {
 
 type View =
   | { kind: "home" }
-  | { kind: "world"; snapshot: WorldSnapshot; selection?: string | null }
+  | { kind: "world"; snapshot: WorldSnapshot; selection?: string | null; zone?: "sources" | "decisions" | "work" | "deliveries" }
   | { kind: "object"; detail: ObjectDetail; worldSnapshot: WorldSnapshot }
   | { kind: "focus"; objectId: string; minutes: number; worldId: string }
   | { kind: "web" }
@@ -41,8 +41,20 @@ export function App() {
   const bridge = window.xeniur;
   usePaletteShortcut(setPaletteOpen);
 
+  const [today, setToday] = useState<Today | null>(null);
+  const [worldTrust, setWorldTrust] = useState<Record<string, TrustFacts>>({});
+
   const refreshWorlds = useCallback(async () => {
-    setWorlds((await bridge?.worlds.list()) ?? []);
+    const list = (await bridge?.worlds.list()) ?? [];
+    setWorlds(list);
+    // Today and each World's trust are read once per visit to Home; rows never reorder while open.
+    setToday((await bridge?.today?.get()) ?? null);
+    const facts: Record<string, TrustFacts> = {};
+    for (const w of list) {
+      const t = await bridge?.trust?.world(w.id);
+      if (t) facts[w.id] = t;
+    }
+    setWorldTrust(facts);
   }, [bridge]);
 
   const refreshTasks = useCallback(async () => {
@@ -139,6 +151,12 @@ export function App() {
           const result = await bridge?.living.exportPackage(id);
           if (result) setNotice(`Exported to ${result.path}`);
         } },
+      { id: "audit", group: "This object", label: "Export audit trail",
+        hint: "report · agent trail · ledger · process record, signed",
+        run: async () => {
+          const result = await bridge?.trust?.auditExport(id);
+          if (result) setNotice(`Audit trail written to ${result.path}`);
+        } },
       { id: "focus", group: "This object", label: "Enter Focus Mode",
         hint: "quiets XENIUR only",
         run: () => setView({ kind: "focus", objectId: id, minutes: 25, worldId: view.detail.state.object.worldId }) },
@@ -155,7 +173,13 @@ export function App() {
       ];
       return <Home worlds={sampleWorlds} active={[]} info={{ version: "0.1", brainIsMock: true, brainModel: null, capabilities: [], firstRun: false }}
         economy={{ local: { metered: false, label: "Unlimited Local" }, intelligence: { configured: true, rollingRemaining: 938, rollingLimit: 1000, reserveRemaining: 4800, reserveLimit: 5000, resetsAt: now }, compute: { configured: true, balance: 524, usdPerCompute: .02, held: 0 } }}
-        onOpen={() => undefined} onCreate={() => undefined} onApprove={() => undefined} onReject={() => undefined} onExplore={() => undefined} onWorkflows={() => undefined} />;
+        today={{ date: "2026-09-16", quiet: false, more: 0, rows: [
+          { id: "task:1", kind: "parked_approval", glyph: "▲", text: "Delivery 02 parked — $0.12 quote awaiting you", worldId: "22222222-2222-4222-8222-222222222222", worldTitle: "Launch prop", objectId: null, zone: "work", verb: "Look at it" },
+          { id: "decision:1", kind: "decision_review", glyph: "◌", text: "Decision \"orange finish\" — brief changed", worldId: "11111111-1111-4111-8111-111111111111", worldTitle: "Rainwear 2027", objectId: null, zone: "decisions", verb: "Review" },
+          { id: "streak", kind: "streak", glyph: "·", text: "Streak 6 — a decision or a claim keeps it.", worldId: null, worldTitle: null, objectId: null, zone: null, verb: "" },
+        ] }}
+        trust={{}}
+        onOpen={() => undefined} onOpenSituation={() => undefined} onCreate={() => undefined} onApprove={() => undefined} onReject={() => undefined} onDismissArrival={() => undefined} onExplore={() => undefined} onWorkflows={() => undefined} />;
     }
     return <main className="xr-home"><BrandMark />
       <p className="xr-empty">The bridge is unavailable. This window is not XENIUR's own renderer.</p>
@@ -223,7 +247,7 @@ export function App() {
         />
       ) : view.kind === "world" ? (
         <World
-          snapshot={view.snapshot} tasks={tasks} busy={busy} initialSelection={view.selection ?? null}
+          snapshot={view.snapshot} tasks={tasks} busy={busy} initialSelection={view.selection ?? null} initialZone={view.zone ?? "work"}
           onBack={() => setView({ kind: "home" })}
           onOpenObject={(id) => { void openObject(id, view.snapshot); }}
           onSubmit={submit} onApprove={approve} onReject={reject}
@@ -236,8 +260,19 @@ export function App() {
       ) : (
         <Home
           worlds={worlds} active={tasks} info={info}
-          economy={economy}
+          economy={economy} today={today} trust={worldTrust}
           onOpen={(id) => { void openWorld(id); }}
+          onOpenSituation={(row) => {
+            if (row.kind === "rhythm") return;
+            if (!row.worldId) return;
+            // The row is a compiled Situation: the World opens with focus on the Object and the zone selected.
+            void bridge?.worlds.open(row.worldId).then((snapshot) => {
+              if (snapshot) setView({ kind: "world", snapshot, selection: row.objectId, zone: row.zone ?? undefined });
+            });
+          }}
+          onDismissArrival={(challengeWorldId) => {
+            void bridge?.challenges?.dismiss(challengeWorldId).then(() => refreshWorlds());
+          }}
           onCreate={async (entry) => {
             // "Review changes" is not a new project: it opens the one that has changes.
             if (entry === "review" || entry === "continue") {

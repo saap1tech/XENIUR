@@ -32,6 +32,8 @@ export const SCENE_COMPONENTS = [
   "FocusContract",
   // Challenges: signed rules, an AI policy, a three-state verdict
   "ChallengeBoard",
+  // Lenses: a report as its claims; what the agent saw, decided, was allowed, did
+  "SupportMap", "AgentTrail",
 ] as const;
 export const SceneComponentSchema = z.enum(SCENE_COMPONENTS);
 export type SceneComponentName = z.infer<typeof SceneComponentSchema>;
@@ -383,6 +385,19 @@ const ChallengeBoardNode = z.object({
   ...base, component: z.literal("ChallengeBoard"), worldId: UuidSchema,
 }).strict();
 
+/** A report as its claims, in lanes by support state. Never a percentage. */
+const SupportMapNode = z.object({
+  ...base, component: z.literal("SupportMap"), objectId: UuidSchema,
+  /** Which lanes to show; empty means all five. A lens picks a subset. */
+  lanes: z.array(z.enum(["supported", "ambiguous", "unresolved", "contradicted", "own"])).default([]),
+  disclosure: DisclosureLayerSchema.default(2),
+}).strict();
+
+/** Saw · decided · authorised · executed. A short row stays short. */
+const AgentTrailNode = z.object({
+  ...base, component: z.literal("AgentTrail"), objectId: UuidSchema,
+}).strict();
+
 const LeafNodeSchema = z.discriminatedUnion("component", [
   ObjectCardNode, InspectorNode, DocumentNode, TimelineNode, TaskProgressNode,
   ComparisonNode, BrowserNode, CodePreviewNode, Viewport3DNode, ApprovalDialogNode,
@@ -396,7 +411,7 @@ const LeafNodeSchema = z.discriminatedUnion("component", [
   RangeMeterNode, PriorityBalanceNode, PeopleChipsNode, CalendarNode, SchematicMapNode,
   ChoiceCardsNode, StepperNode, EvidenceMeterNode, EmptySlotNode, ReviewSheetNode,
   ClaimPairNode, TrustStripNode, ModelSetupNode, ContextReviewNode,
-  FocusContractNode, ChallengeBoardNode,
+  FocusContractNode, ChallengeBoardNode, SupportMapNode, AgentTrailNode,
 ]);
 export type LeafSceneNode = z.infer<typeof LeafNodeSchema>;
 

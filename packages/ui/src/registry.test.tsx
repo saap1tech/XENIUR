@@ -53,10 +53,10 @@ describe("the registry is closed", () => {
     expect(implemented.size).toBe(SCENE_COMPONENTS.length - 1);
   });
 
-  it("contains exactly the 52 reviewed primitives", () => {
-    // M5: Stage 1 added ClaimPair and TrustStrip; Stage 3 ModelSetup; Stage 5 ContextReview; Stage 8 FocusContract; Stage 12 ChallengeBoard.
+  it("contains exactly the 54 reviewed primitives", () => {
+    // M5: Stage 1 added ClaimPair and TrustStrip; Stage 3 ModelSetup; Stage 5 ContextReview; Stage 8 FocusContract; Stage 12 ChallengeBoard; the UI layer SupportMap and AgentTrail. 54, closed.
     // Growing this number is a deliberate act: what should grow is the combination table.
-    expect(SCENE_COMPONENTS).toHaveLength(52);
+    expect(SCENE_COMPONENTS).toHaveLength(54);
   });
 
   it("refuses a node naming a component that does not exist", () => {

@@ -20,7 +20,22 @@ type Node<T extends LeafSceneNode["component"]> = Extract<LeafSceneNode, { compo
  */
 export function ModelSetup({ node, bindings }: { node: Node<"ModelSetup">; bindings: SceneBindings }) {
   const providers = bindings.modelProviders ?? [];
-  if (providers.length === 0) return <Empty>No model providers are configured.</Empty>;
+  // No providers is a state the scene has to survive: the exits are the same, and the person
+  // is never held on a screen that has nothing to offer them.
+  if (providers.length === 0) {
+    return (
+      <section className="xr-models" aria-labelledby="xr-models-title">
+        <header className="xr-models__head"><h2 id="xr-models-title">Your models</h2></header>
+        <Empty>No model providers are configured. Everything local works with no key at all.</Empty>
+        {node.firstRun && (
+          <footer className="xr-models__foot">
+            <Button onClick={() => bindings.onSkipFirstRun?.()}>Skip for now</Button>
+            <Button variant="primary" onClick={() => bindings.onContinueFirstRun?.()}>Continue</Button>
+          </footer>
+        )}
+      </section>
+    );
+  }
 
   return (
     <section className="xr-models" aria-labelledby="xr-models-title">

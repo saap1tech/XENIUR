@@ -16,13 +16,15 @@ const WORLD_PLACEHOLDER = "00000000-0000-4000-8000-000000000000";
  * three leaves every local capability usable, and every scene is reachable again from
  * Settings under the same name — a first run adds nothing that cannot be reached later.
  */
-export function FirstRun({ onDone, onImport, onOpenExample }: {
+export function FirstRun({ onDone, onImport, onOpenExample, initialStep = 0 }: {
   onDone(): void;
   onImport(): void;
   onOpenExample(): void;
+  /** Which scene to open on. The first run starts at 0; Settings reopens a scene by name. */
+  initialStep?: 0 | 1 | 2;
 }) {
-  const bridge = window.xeniur;
-  const [step, setStep] = useState<0 | 1 | 2>(0);
+  const bridge = typeof window === "undefined" ? undefined : window.xeniur;
+  const [step, setStep] = useState<0 | 1 | 2>(initialStep);
   const [providers, setProviders] = useState<ModelProviderView[]>([]);
   const [verification, setVerification] = useState<Record<string, { ok: boolean; models: string[]; reason: string | null }>>({});
 

@@ -4,7 +4,7 @@ import type {
   ObjectState, PlanShape, ProcessProof, ReadinessReport, RebuildPlan, Representation, ResolvedPassage,
   SourceVersion, StepStatus, Task, ThinkingMap, ConstraintRecord, ConstraintValue,
 } from "@xeniur/core";
-import type { ChallengeRecord, EntryRecord, EnvelopeSheet, ExitReason, ModeKind, ModelProviderView, ModeRecord, TrustFacts } from "@xeniur/core";
+import type { ChallengeRecord, EntryRecord, EnvelopeSheet, SupportMap as SupportMapData, TrailRow, ExitReason, ModeKind, ModelProviderView, ModeRecord, TrustFacts } from "@xeniur/core";
 import { formOf } from "@xeniur/core";
 
 export interface LineageView {
@@ -73,6 +73,10 @@ export interface SceneBindings {
     modelLabel: string | null;
     estimatedUsd: number;
   }>>;
+  /** The claims behind an Object, laned by support state. */
+  supportMaps?: Readonly<Record<string, SupportMapData>>;
+  /** Saw · decided · authorised · executed rows per Object. */
+  agentTrail?: Readonly<Record<string, TrailRow[]>>;
   /** Challenges by World id, and their entries. */
   challenges?: Readonly<Record<string, ChallengeRecord>>;
   challengeEntries?: Readonly<Record<string, EntryRecord[]>>;

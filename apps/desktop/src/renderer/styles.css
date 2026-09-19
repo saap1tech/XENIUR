@@ -1392,3 +1392,61 @@ input[type="range"] { accent-color: var(--text); }
 .xr-tag--compliance.is-complies { border-color: var(--ok); color: var(--ok); }
 .xr-tag--compliance.is-violates { border-color: var(--review); color: var(--review); }
 .xr-tag--compliance.is-insufficient_record { border-color: var(--blocked); color: var(--dim); }
+
+/* ---- Support Map: a report as its claims, laned by what was checked ---------------------- */
+.xr-supportmap { display: grid; gap: 12px; }
+.xr-supportmap__head { display: flex; align-items: baseline; gap: 12px; }
+.xr-supportmap__head h2 { margin: 0; font: 600 20px/1.1 var(--font-display); letter-spacing: -.01em; }
+.xr-supportmap__count { color: var(--dim); font-size: 12px; }
+.xr-supportmap__lanes { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.xr-lane { background: var(--surface); display: grid; align-content: start; gap: 8px; padding: 8px; min-height: 120px; }
+.xr-lane__head { display: flex; align-items: center; gap: 6px; background: none; border: 0; padding: 4px 2px; color: var(--dim); font: inherit; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; cursor: pointer; text-align: left; }
+.xr-lane__head[aria-pressed="false"] { opacity: .5; }
+.xr-lane__n { margin-left: auto; color: var(--text); }
+.xr-lane--supported .xr-lane__head { color: var(--ok); }
+.xr-lane--contradicted .xr-lane__head { color: var(--review); }
+.xr-lane--own .xr-lane__head { color: var(--dim); }
+.xr-claimcard { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); cursor: grab; }
+.xr-claimcard__text { background: none; border: 0; padding: 0; color: var(--text); font: inherit; font-size: 13px; line-height: 1.45; text-align: left; cursor: pointer; }
+.xr-claimcard__meta { display: flex; gap: 8px; font-size: 11px; color: var(--dim); }
+.xr-claimcard__stance { text-transform: uppercase; letter-spacing: .05em; }
+.xr-claimcard__sources { margin: 0; padding-left: 14px; font-size: 11px; color: var(--dim); }
+
+/* ---- Agent Trail: four columns, strictly ordered; a short row stays short ---------------- */
+.xr-trail { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.xr-trail__row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); }
+.xr-trail__row--head span { background: var(--surface); padding: 6px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
+.xr-trail__cell { background: var(--surface); padding: 10px; display: grid; gap: 2px; min-height: 44px; font-size: 12px; }
+.xr-trail__cell.is-empty { background: var(--bg); }
+.xr-trail__empty { display: block; height: 100%; min-height: 22px; border: 1px dashed var(--line); border-radius: 3px; }
+.xr-trail__digest { font-size: 11px; color: var(--dim); }
+.xr-trail__word { color: var(--text); }
+.xr-trail__sub { color: var(--dim); font-size: 11px; }
+.xr-trail__none { grid-column: 1 / -1; margin: 0; padding: 12px; background: var(--surface); color: var(--dim); font-size: 13px; }
+
+/* ---- Today: at most seven situations, ordered by consequence, never a feed --------------- */
+.xr-today { display: grid; align-content: start; gap: 14px; }
+.xr-today > header { display: flex; align-items: center; gap: 12px; }
+.xr-today > header h2 { margin: 0; font: 600 22px/1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase; }
+.xr-today > header small { color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.xr-today__date { margin-left: auto; color: var(--dim); font-size: 12px; }
+.xr-today__rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.xr-today__row { display: grid; grid-template-columns: 20px 1fr auto; gap: 12px; align-items: center; padding: 12px 14px; background: var(--surface); }
+.xr-today__glyph { color: var(--dim); text-align: center; }
+.xr-today__row.is-parked_approval .xr-today__glyph { color: var(--review); }
+.xr-today__row.is-decision_review .xr-today__glyph { color: var(--review); }
+.xr-today__row.is-rebuild_pending .xr-today__glyph { color: var(--rebuild); }
+.xr-today__text { display: grid; gap: 2px; background: none; border: 0; padding: 0; text-align: left; color: var(--text); font: inherit; cursor: pointer; }
+.xr-today__text:disabled { cursor: default; }
+.xr-today__text strong { font-weight: 500; font-size: 14px; }
+.xr-today__text small { color: var(--dim); font-size: 11px; }
+.xr-today__verb { display: flex; gap: 6px; }
+.xr-today__quiet { padding: 22px 16px; border: 1px dashed var(--line); border-radius: 4px; color: var(--dim); font-size: 13px; }
+.xr-today__quiet strong { display: block; color: var(--text); font-weight: 500; margin-bottom: 4px; }
+.xr-today__quiet p { margin: 0; }
+.xr-today__rest { margin: 0; color: var(--dim); font-size: 12px; text-align: right; }
+/* A World folder's Trust Strip at Layer 1: five numerals in a line. Lime only when settled. */
+.xr-folder__trust { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; font: 11px/1 ui-monospace, "SF Mono", Menlo, monospace; color: var(--dim); }
+.xr-folder__trust-sep { opacity: .5; }
+.xr-folder__trust.is-settled { color: var(--signal); }
+.xr-folder__trust-word { text-transform: uppercase; letter-spacing: .08em; }

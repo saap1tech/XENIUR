@@ -6,6 +6,8 @@ import type { PublisherReport, PublisherView, ReportReason, TrustLevel } from ".
 import type { CampaignRecord, OutboundMessage, OutreachEnvelopeInput } from "./outreach.js";
 import type { ChallengeRecord, ChallengeRulesInput, EntryRecord } from "./challenges.js";
 import type { TrailRow } from "./trail.js";
+import type { Today } from "./today.js";
+import type { SupportMap } from "./support-map.js";
 import type { CandidateRecord, ClaimSupport, SupportStatus } from "./sensemaking.js";
 
 /** What the renderer learns about a package before deciding. No manifest, no rows — the shape. */
@@ -217,9 +219,20 @@ export interface XeniurBridge {
     influence(objectId: string, releaseId?: string): Promise<InfluenceReport | null>;
   };
 
+  /* What should I do with my time? — at most seven situations, never a feed */
+  today: {
+    get(): Promise<Today>;
+  };
+
   /* Can I trust this work? — facts the graph can show, never a tick */
   trust: {
     facts(objectId: string): Promise<TrustFacts | null>;
+    /** Every Object in a World, summed. Settled only when all are. */
+    world(worldId: string): Promise<TrustFacts>;
+    /** The claims behind an Object, laned by support state. */
+    supportMap(objectId: string): Promise<SupportMap | null>;
+    /** One signed, self-contained HTML file: report, agent trail, ledger, process record. */
+    auditExport(objectId: string): Promise<{ path: string; rootHash: string }>;
     /** What a delivery cost, joined to its spend rows. Latest release when none is given. */
     outcome(objectId: string, releaseId?: string): Promise<OutcomeLedger | null>;
   };

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { extractCandidates } from "@xeniur/sensemaking";
 import { z } from "zod";
 import { ChallengeRulesSchema, ExitReasonSchema, ModeEnvelopeSchema, ModeKindSchema, OutreachEnvelopeSchema, PublisherRefSchema, ReportReasonSchema, TrustLevelSchema, authorizeFor, campaignPlan, campaignScope, describeEnvelope, describeRecipients, needsCampaign, planDigest, sha256Hex, UuidSchema, type ActionPlan, type IntentResult, type WorldSnapshot } from "@xeniur/core";
-import { contextMaterialFor, importPackage, inspectPackage, outcomeOf, renderProofPage, trustFactsFor } from "@xeniur/graph";
+import { contextMaterialFor, importPackage, inspectPackage, outcomeOf, renderAuditPage, renderProofPage, supportMapFor, todayFor, trustFactsFor, trustFactsForWorld } from "@xeniur/graph";
 import { compileContext } from "@xeniur/grammar";
 import { policyFrom } from "@xeniur/models";
 import { proposeFromBound } from "@xeniur/sensemaking";
@@ -116,7 +116,11 @@ const SCHEMAS = {
   "publishers:list": z.undefined(),
   "publishers:setTrust": PublisherRefSchema.extend({ level: TrustLevelSchema }),
   "publishers:report": PublisherRefSchema.extend({ reason: ReportReasonSchema, note: z.string().max(500) }),
+  "today:get": z.undefined(),
   "trust:facts": Uuid,
+  "trust:world": Uuid,
+  "trust:supportMap": Uuid,
+  "trust:auditExport": Uuid,
   "trust:outcome": z.object({ id: UuidSchema, releaseId: UuidSchema.optional() }),
   "process:proof": Uuid,
   "process:publish": z.object({ id: UuidSchema, privacy: z.enum(["filtered", "public"]).default("filtered") }),
@@ -484,6 +488,18 @@ export function registerIpc(services: Services): void {
     },
     "publishers:report": ({ publicKey, displayName, reason, note }) =>
       services.graph.publishers.report({ publicKey, displayName }, reason, { note }),
+    "today:get": () => todayFor(services.graph, { rhythm: services.rhythm }),
+    "trust:world": ({ id }) => trustFactsForWorld(services.graph, id),
+    "trust:supportMap": ({ id }) => supportMapFor(services.graph, id),
+    "trust:auditExport": ({ id }) => {
+      const state = services.graph.currentState(id);
+      if (!state) throw new Error("This Object no longer exists.");
+      const { html, manifest } = renderAuditPage(services.graph, id);
+      const safe = state.properties.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "object";
+      const path = join(app.getPath("downloads"), `${safe}-audit.html`);
+      writeFileSync(path, html, { encoding: "utf8", mode: 0o600 });
+      return { path, rootHash: manifest.rootHash };
+    },
     "trust:facts": ({ id }) => services.graph.getObject(id) ? trustFactsFor(services.graph, id) : null,
     "trust:outcome": ({ id, releaseId }) => services.graph.getObject(id) ? outcomeOf(services.graph, id, releaseId) : null,
     "process:proof": ({ id }) => services.graph.process.proof(id),

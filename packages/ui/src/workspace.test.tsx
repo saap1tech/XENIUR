@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type {
   DecisionDetail, ImpactReport, ObjectState, Representation, Scene,
 } from "@xeniur/core";
-import { describeEnvelope, planDigest, type ChallengeRecord, type Compliance, type EntryRecord, type ModeRecord } from "@xeniur/core";
+import { describeEnvelope, planDigest, type ChallengeRecord, type Compliance, type EntryRecord, type ModeRecord, type SupportMap as SupportMapData, type TrailRow } from "@xeniur/core";
 import { SceneRenderer, emptyBindings, type SceneBindings } from "./index.js";
 
 const OBJ = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -606,5 +606,87 @@ describe("ChallengeBoard", () => {
     expect(closed).toContain("Samir");
     expect(closed).toContain("in the order they arrived");
     expect(closed).not.toMatch(/#\d|rank|score|1st|winner/i);
+  });
+});
+
+/* UI layer — the seven lenses are one Scene family. */
+describe("SupportMap", () => {
+  const claim = (id: string, text: string, lane: SupportMapData["claims"][number]["lane"], stance: SupportMapData["claims"][number]["stance"] = "assertion"): SupportMapData["claims"][number] => ({
+    objectId: id, text, stance, lane, checkedBy: lane === "supported" ? "human" : lane === "contradicted" ? "model" : "unchecked",
+    counts: { supported: lane === "supported" ? 1 : 0, ambiguous: 0, unresolved: lane === "unresolved" ? 1 : 0, contradicted: lane === "contradicted" ? 1 : 0 },
+    sources: ["Study 4"],
+  });
+  const data: SupportMapData = {
+    objectId: OBJ, title: "Colour strategy",
+    claims: [
+      claim(ATOM, "Consumers prefer orange.", "supported"),
+      claim(DEC, "Colour stops mattering above €80.", "contradicted"),
+      claim(REP, "The margin is probably worth paying.", "own", "hypothesis"),
+    ],
+    lanes: { supported: 1, ambiguous: 0, unresolved: 0, contradicted: 1, own: 1 },
+    summary: "3 claims: 1 supported, 0 ambiguous, 0 unresolved, 1 contradicted; 1 the author's own.",
+  };
+  const map = (lanes: Array<"supported" | "ambiguous" | "unresolved" | "contradicted" | "own"> = []) =>
+    render({ id: "s", component: "SupportMap", objectId: OBJ, lanes, disclosure: 3 }, bindings({ supportMaps: { [OBJ]: data } }));
+
+  it("lays claims in lanes by support state, with a glyph and a word on every lane", () => {
+    const html = map();
+    for (const w of ["supported", "ambiguous", "unresolved", "contradicted", "the author"]) expect(html).toContain(w);
+    for (const g of ["●", "◐", "○", "◌"]) expect(html).toContain(g);
+    expect(html).toContain("Consumers prefer orange.");
+    expect(html).toContain("checked by you");
+    expect(html).toContain("proposed by a model");
+  });
+
+  it("puts a hypothesis in the author's own lane, never in unresolved", () => {
+    const html = map();
+    const own = html.slice(html.indexOf("xr-lane--own"));
+    expect(own).toContain("The margin is probably worth paying.");
+    const unresolved = html.slice(html.indexOf("xr-lane--unresolved"), html.indexOf("xr-lane--contradicted"));
+    expect(unresolved).not.toContain("The margin");
+  });
+
+  it("contains no percentage", () => {
+    expect(map()).not.toMatch(/\d+\s?%/);
+  });
+
+  it("a lens can show a subset of lanes", () => {
+    const html = map(["unresolved", "ambiguous"]);
+    expect(html).not.toContain("xr-lane--supported");
+    expect(html).toContain("xr-lane--unresolved");
+  });
+});
+
+describe("AgentTrail", () => {
+  const row = (over: Partial<TrailRow>): TrailRow => ({
+    id: "r1", worldId: "w", objectId: OBJ, intent: "research_plan", at: 1,
+    saw: { digest: "c".repeat(64), included: 7, excluded: 2 }, decided: null, authorized: null, executed: null, ...over,
+  });
+  const trail = (rows: TrailRow[]) => render({ id: "t", component: "AgentTrail", objectId: OBJ }, bindings({ agentTrail: { [OBJ]: rows } }));
+
+  it("an unsupported or gated outcome leaves the last two columns empty, not inferred", () => {
+    const html = trail([row({ decided: { kind: "gated", model: null } })]);
+    expect(html).toContain("7 items · 2 excl.");
+    expect(html).toContain("gated");
+    expect((html.match(/is-empty/g) ?? []).length).toBe(2);
+    expect((html.match(/is-filled/g) ?? []).length).toBe(2);
+    expect(html).not.toContain("CREATE");
+  });
+
+  it("a full row shows every digest, in order", () => {
+    const html = trail([row({
+      id: "r2", decided: { kind: "executable", model: "gpt-4o-mini" },
+      authorized: { planDigest: "p".repeat(64), level: "CREATE" }, executed: { actionId: "a".repeat(36), outcome: "succeeded" },
+    })]);
+    const cell = (t: string) => html.indexOf(`xr-trail__word">${t}`);
+    const digest = (d: string) => html.indexOf(`xr-mono">${d}`);
+    expect(digest("cccccccccccc")).toBeLessThan(cell("executable"));
+    expect(cell("executable")).toBeLessThan(digest("pppppppppppp"));
+    expect(digest("pppppppppppp")).toBeLessThan(cell("succeeded"));
+    expect((html.match(/is-empty/g) ?? []).length).toBe(0);
+  });
+
+  it("says plainly when nothing has been asked", () => {
+    expect(trail([])).toContain("No model has been asked anything about this yet.");
   });
 });

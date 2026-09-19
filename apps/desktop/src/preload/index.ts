@@ -175,8 +175,15 @@ contextBridge.exposeInMainWorld("xeniur", {
       call("publishers:report", { publicKey, displayName, reason, note: note ?? "" }),
   },
 
+  today: {
+    get: () => call("today:get"),
+  },
+
   trust: {
     facts: (objectId: string) => call("trust:facts", { id: objectId }),
+    world: (worldId: string) => call("trust:world", { id: worldId }),
+    supportMap: (objectId: string) => call("trust:supportMap", { id: objectId }),
+    auditExport: (objectId: string) => call("trust:auditExport", { id: objectId }),
     outcome: (objectId: string, releaseId?: string) => call("trust:outcome", { id: objectId, releaseId }),
   },
 

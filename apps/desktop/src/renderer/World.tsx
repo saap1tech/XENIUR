@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   ConstraintRecord, DecisionDetail, FrictionState, ImpactReport, Lane, ObjectState, ProcessProof,
-  ChallengeRecord, EntryRecord, PackageInspectionView, Representation, Scene, Task, ThinkingMap, TrustFacts, WorldSnapshot,
+  ChallengeRecord, EntryRecord, PackageInspectionView, Representation, Scene, SupportMap, Task, ThinkingMap, TrailRow, TrustFacts, WorldSnapshot,
 } from "@xeniur/core";
 import { SceneRenderer, type SceneBindings } from "@xeniur/ui";
 import {
@@ -81,6 +81,8 @@ export function World({
   const [challenge, setChallenge] = useState<ChallengeRecord | null>(null);
   const [entries, setEntries] = useState<EntryRecord[]>([]);
   const [selfKey, setSelfKey] = useState<string | null>(null);
+  const [supportMap, setSupportMap] = useState<SupportMap | null>(null);
+  const [trailRows, setTrailRows] = useState<TrailRow[]>([]);
 
   const bridge = window.xeniur;
   const worldId = snapshot.world.id;
@@ -117,6 +119,9 @@ export function World({
     void bridge?.trust?.facts(selectedId).then((facts) => {
       if (facts) setTrust((prev) => ({ ...prev, [selectedId]: facts }));
     });
+    // The lenses: the claims behind it, and what any agent saw, decided, was allowed and did.
+    void bridge?.trust?.supportMap(selectedId).then((m) => setSupportMap(m ?? null));
+    void bridge?.brain?.trail(selectedId).then((rows) => setTrailRows(rows ?? []));
   }, [bridge, selectedId, snapshot, decisions, proof?.counts]);
 
   const byId = useMemo(
@@ -139,6 +144,8 @@ export function World({
     constraints: Object.fromEntries(constraints.map((constraint) => [constraint.objectId, constraint])),
     processProof: proof ? { [proof.objectId]: proof } : {},
     trust,
+    supportMaps: supportMap ? { [supportMap.objectId]: supportMap } : {},
+    agentTrail: selectedId ? { [selectedId]: trailRows } : {},
     challenges: challenge ? { [challenge.worldId]: challenge } : {},
     challengeEntries: challenge ? { [challenge.worldId]: entries } : {},
     selfPublicKey: selfKey,
@@ -206,8 +213,8 @@ export function World({
       if (updated) setConstraints((items) => items.map((item) => item.objectId === constraintId ? updated : item));
     },
   }), [snapshot, byId, tasks, map, friction, decisions, impact, worldId, bridge,
-       onApprove, onReject, onImported, refreshThinking, refreshChallenge, constraints, proof, trust, challenge, entries, selfKey, selectedId,
-       gestureProposals, gesturePair, zone]);
+       onApprove, onReject, onImported, refreshThinking, refreshChallenge, constraints, proof, trust, supportMap, trailRows,
+       challenge, entries, selfKey, selectedId, gestureProposals, gesturePair, zone]);
 
   /** One thing at a time in the centre, chosen by the zone and what is selected. */
   const scene: Scene = useMemo(() => {
@@ -282,8 +289,13 @@ export function World({
     const compiled = layoutScene(semantic, { layoutId: semantic.layoutId });
     const root = compiled.root.component === "Canvas" ? compiled.root : null;
     if (root && nodes.length > 0) root.children.unshift(...nodes as never[]);
+    // The Sources zone asks "which claims are actually supported?" — the Support Map is that
+    // question as a Scene, laid under the compiled centre when the focus has claims behind it.
+    if (root && zone === "sources" && supportMap && supportMap.claims.length > 0) {
+      root.children.push({ id: "support-map", component: "SupportMap", objectId: selected.object.id, lanes: [], disclosure: intent.layer } as never);
+    }
     return compiled;
-  }, [zone, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints, challenge]);
+  }, [zone, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints, challenge, supportMap]);
 
   const inspector: Scene | null = useMemo(() => selected ? {
     worldId, title: "", reason: "",
@@ -293,9 +305,11 @@ export function World({
         // "Can I trust this work?" is answered before any question is asked of it.
         { id: "trust", component: "TrustStrip", objectId: selected.object.id, compact: true } as never,
         { id: "questions", component: "InspectorQuestions", objectId: selected.object.id, open: "what" } as never,
+        // What did the agent see, decide, authorise and execute — the enterprise question, always answerable.
+        ...(trailRows.length > 0 ? [{ id: "trail", component: "AgentTrail", objectId: selected.object.id } as never] : []),
       ],
     },
-  } : null, [selected, worldId]);
+  } : null, [selected, worldId, trailRows]);
 
   const submit = () => {
     const text = utterance.trim();

@@ -21,3 +21,4 @@ export { ThinkingMapView, IngredientPanel, FocusView } from "./components/thinki
 export { SupportChip } from "./components/trust.jsx";
 export { FocusContract } from "./components/modes.jsx";
 export { ChallengeBoard, ComplianceTag, PolicyTag } from "./components/challenges.jsx";
+export { AgentTrail, SupportMap } from "./components/lenses.jsx";
