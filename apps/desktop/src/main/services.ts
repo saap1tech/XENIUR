@@ -32,7 +32,7 @@ import {
 } from "@xeniur/models";
 import type { ModelProviderView } from "@xeniur/core";
 import { appPaths, BINARIES } from "./paths.js";
-import { SafeStorageKeyStore } from "./keys.js";
+import { SafeStorageKeyStore, SafeStorageSigningKeyStore } from "./keys.js";
 import { BrowserShell } from "./browser.js";
 import { PreviewRuntime } from "./preview.js";
 
@@ -226,7 +226,10 @@ function makeGatedBrain(config: ProvidersConfig, ledger: SpendLedger, resolver?:
 export function createServices(window: BrowserWindow): Services {
   const paths = appPaths();
   const config = loadProvidersConfig(paths.projectRoot);
-  const graph = ObjectGraph.open({ dbPath: paths.dbPath, blobDir: paths.blobDir });
+  const graph = ObjectGraph.open({
+    dbPath: paths.dbPath, blobDir: paths.blobDir,
+    signingKeys: new SafeStorageSigningKeyStore(paths.root),
+  });
 
   /* ------------------------------------------------------------ your models
    *

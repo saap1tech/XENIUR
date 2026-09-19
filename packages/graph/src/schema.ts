@@ -900,6 +900,46 @@ CREATE INDEX idx_rhythm_offers_time ON rhythm_offers(offered_at);
 CREATE INDEX idx_rhythm_offers_pair ON rhythm_offers(pair_key);
 `;
 
+/**
+ * Migration 18 — publisher identity and safety.
+ *
+ * Who sent a package, how this person trusts them, what they reported, and how many packages
+ * were taken from them today. Trust is set by the person and never computed. The private
+ * signing key is not here and must never be: it lives in the keychain.
+ */
+const PUBLISHERS = `
+CREATE TABLE publishers (
+  id                  TEXT PRIMARY KEY,      -- base64url Ed25519 public key: the identity
+  display_name        TEXT NOT NULL,
+  first_seen          INTEGER NOT NULL,
+  proof_history_count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE publisher_trust (
+  publisher_id TEXT PRIMARY KEY REFERENCES publishers(id) ON DELETE CASCADE,
+  level        TEXT NOT NULL,                -- unknown | known | trusted | blocked
+  set_by       TEXT NOT NULL,                -- always 'human'; stored so nothing else can claim it
+  set_at       INTEGER NOT NULL
+);
+
+CREATE TABLE publisher_reports (
+  id           TEXT PRIMARY KEY,
+  publisher_id TEXT NOT NULL REFERENCES publishers(id) ON DELETE CASCADE,
+  package_root TEXT,
+  reason       TEXT NOT NULL,
+  note         TEXT NOT NULL DEFAULT '',
+  at           INTEGER NOT NULL
+);
+CREATE INDEX idx_publisher_reports ON publisher_reports(publisher_id, at);
+
+CREATE TABLE import_rate (
+  publisher_id TEXT NOT NULL REFERENCES publishers(id) ON DELETE CASCADE,
+  day          TEXT NOT NULL,                -- local YYYY-MM-DD
+  count        INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (publisher_id, day)
+);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: INIT },
   { version: 2, name: "object_model", sql: OBJECT_MODEL },
@@ -918,4 +958,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 15, name: "claim_support", sql: CLAIM_SUPPORT },
   { version: 16, name: "thinking_moves", sql: THINKING_MOVES },
   { version: 17, name: "modes", sql: MODES },
+  { version: 18, name: "publishers", sql: PUBLISHERS },
 ];

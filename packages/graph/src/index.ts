@@ -17,6 +17,7 @@ export { impactOf } from "./impact.js";
 export { contextMaterialFor } from "./context-material.js";
 export { outcomeOf, trustFactsFor } from "./outcomes.js";
 export { ModeStore } from "./modes.js";
+export { PublisherStore, PublisherIdentity, verifySignature, packageRootHash } from "./publishers.js";
 export { RhythmStore, loadRhythmConfig, nextOfferAt, insideWindows } from "./rhythm.js";
 export type { Offer } from "./rhythm.js";
 export { MetricsStore } from "./metrics.js";

@@ -139,6 +139,15 @@ contextBridge.exposeInMainWorld("xeniur", {
     streak: () => call("rhythm:streak"),
   },
 
+  publishers: {
+    self: () => call("publishers:self"),
+    list: () => call("publishers:list"),
+    setTrust: (publicKey: string, displayName: string, level: string) =>
+      call("publishers:setTrust", { publicKey, displayName, level }),
+    report: (publicKey: string, displayName: string, reason: string, note?: string) =>
+      call("publishers:report", { publicKey, displayName, reason, note: note ?? "" }),
+  },
+
   trust: {
     facts: (objectId: string) => call("trust:facts", { id: objectId }),
     outcome: (objectId: string, releaseId?: string) => call("trust:outcome", { id: objectId, releaseId }),

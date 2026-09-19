@@ -2,10 +2,10 @@ import type {
   ActionRecord, ActionStatus, Branch, Cost, EdgeKind, InputRole, Modality, ObjectForm,
   ObjectProperties, ObjectState, OutputRole, Provenance, Receipt, Relationship,
   RelationshipKind, Representation, RepresentationEdge, Version, World, XeniurObject,
-  ActionPlan, PermissionLevel,
+  ActionPlan, PermissionLevel, SigningKeyStore,
 } from "@xeniur/core";
 import {
-  MAIN_BRANCH, ObjectPropertiesSchema, StaleBaseVersion, addCost, defaultProperties,
+  MAIN_BRANCH, MemorySigningKeyStore, ObjectPropertiesSchema, StaleBaseVersion, addCost, defaultProperties,
   newId, now, zeroCost,
 } from "@xeniur/core";
 import { BlobStore } from "./blobs.js";
@@ -15,11 +15,16 @@ import { SupportStore } from "./support.js";
 import { ConstraintStore } from "./constraints.js";
 import { ProcessStore } from "./process.js";
 import { ModeStore } from "./modes.js";
+import { PublisherStore } from "./publishers.js";
 import { ActionReceiptStore } from "./action-receipts.js";
 import { json, openDatabase, type Db } from "./db.js";
 import * as rows from "./rows.js";
 
-export interface GraphOptions { dbPath: string; blobDir: string; }
+export interface GraphOptions {
+  dbPath: string; blobDir: string;
+  /** Where this machine's signing key lives. Defaults to memory, which is right for tests only. */
+  signingKeys?: SigningKeyStore;
+}
 
 export interface NewRepresentation {
   objectId: string; modality: Modality; format: string;
@@ -64,8 +69,10 @@ export class ObjectGraph {
   readonly actionReceipts: ActionReceiptStore;
   /** Bounded, visible, leavable contracts. The emergency exit is one method for every kind. */
   readonly modes: ModeStore;
+  /** Who sent what, how the person trusts them, and this machine's own identity. */
+  readonly publishers: PublisherStore;
 
-  private constructor(readonly db: Db, readonly blobs: BlobStore) {
+  private constructor(readonly db: Db, readonly blobs: BlobStore, signingKeys: SigningKeyStore) {
     this.recipes = new RecipeStore(db, {
       currentState: (objectId) => this.currentState(objectId),
       blobHashOf: (representationId) => this.getRepresentation(representationId)?.blobHash ?? null,
@@ -76,10 +83,12 @@ export class ObjectGraph {
     this.process = new ProcessStore(db);
     this.actionReceipts = new ActionReceiptStore(db, this);
     this.modes = new ModeStore(db);
+    this.publishers = new PublisherStore(db, signingKeys);
   }
 
   static open(opts: GraphOptions): ObjectGraph {
-    return new ObjectGraph(openDatabase(opts.dbPath), new BlobStore(opts.blobDir));
+    return new ObjectGraph(openDatabase(opts.dbPath), new BlobStore(opts.blobDir),
+      opts.signingKeys ?? new MemorySigningKeyStore());
   }
 
   close(): void { this.db.close(); }

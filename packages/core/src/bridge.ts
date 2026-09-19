@@ -2,6 +2,7 @@ import type { ObjectState, Representation, World } from "./object.js";
 import type { DecisionDetail, InfluenceReport } from "./decisions.js";
 import type { ImpactReport, OutcomeLedger, TrustFacts } from "./impact.js";
 import type { EnvelopeSheet, ExitReason, ModeEnvelopeInput, ModeKind, ModeRecord, Reward, Streak } from "./modes.js";
+import type { PublisherReport, PublisherView, ReportReason, TrustLevel } from "./publisher.js";
 import type { Check, ReadinessReport, Release } from "./readiness.js";
 import type { RebuildPlan, StepStatus } from "./recipe.js";
 import type { DnaReport } from "./ingredients.js";
@@ -223,6 +224,15 @@ export interface XeniurBridge {
     offer(worldId: string, objectId: string | null): Promise<{ id: string; reward: Reward } | null>;
     resolve(offerId: string, outcome: "taken" | "skipped"): Promise<void>;
     streak(): Promise<Streak>;
+  };
+
+  /* Who sent what — identity, trust the person set, block and report */
+  publishers: {
+    /** This machine's identity; created on first call. Public key and name only. */
+    self(): Promise<{ publicKey: string; displayName: string }>;
+    list(): Promise<PublisherView[]>;
+    setTrust(publicKey: string, displayName: string, level: TrustLevel): Promise<PublisherView>;
+    report(publicKey: string, displayName: string, reason: ReportReason, note?: string): Promise<PublisherReport>;
   };
 
   constraints: {

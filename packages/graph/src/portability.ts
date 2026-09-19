@@ -3,7 +3,9 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
+import type { PackageSignature, PublisherView } from "@xeniur/core";
 import { KeyWouldLeak, findKeyShaped, formRoleName } from "@xeniur/core";
+import { packageRootHash, verifySignature } from "./publishers.js";
 import type { ObjectGraph } from "./graph.js";
 import { inspectArchive, verifyBlobs } from "./package-safety.js";
 import { outcomeOf } from "./outcomes.js";
@@ -12,6 +14,9 @@ const exec = promisify(execFile);
 
 /**
  * 2 — closure over decisions, sources and the Objects a build actually consumed.
+ * 3 — signed. The manifest carries its publisher and an Ed25519 signature over the root
+ *     hash of everything else in it. A package is verified before anything else is looked
+ *     at, and a bad or missing signature is refused the way a path traversal is.
  *
  * Version 1 exported one Object's own rows and nothing else, which was fine until a build
  * could consume something that belonged to another Object. An accepted decision's brief is
@@ -19,11 +24,13 @@ const exec = promisify(execFile);
  * representation itself stayed behind: the package carried a dangling foreign key, and
  * importing it failed outright rather than quietly losing the reason for the delivery.
  */
-export const PACKAGE_VERSION = 2;
+export const PACKAGE_VERSION = 3;
 
 export interface PackageManifest {
   version: number;
   exportedAt: number;
+  /** Who made this package and the signature that proves it was not altered since. */
+  publisher: PackageSignature;
   world: { id: string; title: string; emoji: string };
   object: Record<string, unknown>;
   branches: Array<Record<string, unknown>>;
@@ -125,6 +132,8 @@ export async function exportPackage(
 
   const manifest: PackageManifest = {
     version: PACKAGE_VERSION,
+    // Filled in last, over the finished manifest. A placeholder here so the type is whole.
+    publisher: null as unknown as PackageSignature,
     exportedAt: Date.now(),
     world: { id: world.id, title: world.title, emoji: world.emoji },
     object: rows(graph, `SELECT * FROM objects WHERE id = ?`, objectId)[0] ?? {},
@@ -319,6 +328,8 @@ export async function exportPackage(
     // field it hid in — a prompt, a note, a recorded plan. Refused, and the refusal names where.
     const leaks = findKeyShaped(manifest);
     if (leaks.length > 0) throw new KeyWouldLeak("a .xeniur package", leaks);
+    // Signed last, over everything above. The identity is this machine's, made on first share.
+    manifest.publisher = graph.publishers.self().sign(packageRootHash(manifest as unknown as Record<string, unknown>));
     writeFileSync(join(staging, "manifest.json"), JSON.stringify(manifest, null, 2));
     mkdirSync(join(staging, "blobs"), { recursive: true });
     for (const blob of manifest.blobs) {
@@ -386,6 +397,8 @@ export interface PackageInspection {
   /** Things somebody might not want to hand over. Listed, never stripped silently. */
   discloses: string[];
   unresolved: Array<{ kind: string; id: string; why: string }>;
+  /** Who signed it and how they are trusted here; null when the signature did not verify. */
+  publisher: PublisherView | null;
 }
 
 /**
@@ -498,14 +511,14 @@ export async function inspectPackage(
   };
   if (!existsSync(packagePath)) {
     return { ok: false, problems: [`no such package: ${packagePath}`], manifest: null,
-             relationship: "new", contents: empty, discloses: [], unresolved: [] };
+             relationship: "new", contents: empty, discloses: [], unresolved: [], publisher: null };
   }
 
   // 1. The archive itself, from its headers. Nothing is unpacked yet.
   const archive = await inspectArchive(packagePath);
   if (!archive.ok) {
     return { ok: false, problems: archive.problems, manifest: null,
-             relationship: "new", contents: empty, discloses: [], unresolved: [] };
+             relationship: "new", contents: empty, discloses: [], unresolved: [], publisher: null };
   }
 
   // 2. The manifest, unpacked alone into a scratch directory that is thrown away.
@@ -517,7 +530,7 @@ export async function inspectPackage(
       manifest = JSON.parse(readFileSync(join(staging, "manifest.json"), "utf8")) as PackageManifest;
     } catch {
       return { ok: false, problems: ["the manifest is not readable"], manifest: null,
-               relationship: "new", contents: empty, discloses: [], unresolved: [] };
+               relationship: "new", contents: empty, discloses: [], unresolved: [], publisher: null };
     }
 
     const problems: string[] = [];
@@ -525,6 +538,31 @@ export async function inspectPackage(
       problems.push(
         `this package is version ${manifest.version}; XENIUR reads version ${PACKAGE_VERSION}`);
     }
+
+    // 2a. Who, and whether it was altered — before the contents are read at all.
+    //
+    // A blocked publisher is refused here, with nothing else inspected: the person said no
+    // and the answer does not depend on what is inside. A missing or failing signature is
+    // refused like a path traversal, because a package nobody vouches for is a package that
+    // could have come from anywhere.
+    const sig = manifest.publisher;
+    const signed = !!sig && verifySignature(sig) && sig.rootHash === packageRootHash(manifest as unknown as Record<string, unknown>);
+    if (sig && typeof sig.publicKey === "string" && graph.publishers.trustOf(sig.publicKey) === "blocked") {
+      return {
+        ok: false,
+        problems: [`you have blocked "${sig.displayName}" (${sig.publicKey.slice(0, 8)}…); refused before inspection`],
+        manifest: null, relationship: "new", contents: empty, discloses: [], unresolved: [],
+        publisher: graph.publishers.view({ publicKey: sig.publicKey, displayName: String(sig.displayName) }),
+      };
+    }
+    if (!sig) {
+      problems.push("this package is not signed; XENIUR does not open packages nobody vouches for");
+    } else if (!signed) {
+      problems.push(
+        "the signature does not match the contents — the package was altered after it was signed, " +
+        "or was not signed by who it says");
+    }
+    const publisher = signed ? graph.publishers.view({ publicKey: sig.publicKey, displayName: sig.displayName }) : null;
 
     const objectId = (manifest.object?.["id"] as string | undefined) ?? null;
     if (!objectId) problems.push("the manifest names no Object");
@@ -560,6 +598,7 @@ export async function inspectPackage(
       },
       discloses: disclosures(manifest),
       unresolved: manifest.unresolved ?? [],
+      publisher,
     };
   } finally {
     rmSync(staging, { recursive: true, force: true });
@@ -681,6 +720,9 @@ export async function importPackage(
     throw new PackageRefused(inspection.problems, inspection.relationship);
   }
   const manifest = inspection.manifest!;
+  // How many of theirs today. Checked before a byte is written; counted after it succeeds.
+  const sender = { publicKey: manifest.publisher.publicKey, displayName: manifest.publisher.displayName };
+  graph.publishers.assertUnderRate(sender);
 
   const staging = mkdtempSync(join(tmpdir(), "xeniur-unpkg-"));
   try {
@@ -783,6 +825,8 @@ export async function importPackage(
       graph.db.prepare(`UPDATE objects SET current_version_id = ?, current_branch_id = ? WHERE id = ?`)
         .run(manifest.object["current_version_id"] as string | null,
              manifest.object["current_branch_id"] as string | null, objectId);
+      // Counted inside the same transaction as the write it counts.
+      graph.publishers.recordImport(sender);
     })();
 
     return {

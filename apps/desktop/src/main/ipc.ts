@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { extractCandidates } from "@xeniur/sensemaking";
 import { z } from "zod";
-import { ExitReasonSchema, ModeEnvelopeSchema, ModeKindSchema, describeEnvelope, sha256Hex, UuidSchema, type ActionPlan, type IntentResult, type WorldSnapshot } from "@xeniur/core";
+import { ExitReasonSchema, ModeEnvelopeSchema, ModeKindSchema, PublisherRefSchema, ReportReasonSchema, TrustLevelSchema, describeEnvelope, sha256Hex, UuidSchema, type ActionPlan, type IntentResult, type WorldSnapshot } from "@xeniur/core";
 import { outcomeOf, renderProofPage, trustFactsFor } from "@xeniur/graph";
 import { InvalidPlanError } from "@xeniur/brain";
 import { planForProposal, proposalsFor } from "@xeniur/grammar";
@@ -87,6 +87,10 @@ const SCHEMAS = {
   "rhythm:offer": z.object({ worldId: UuidSchema, objectId: UuidSchema.nullable() }),
   "rhythm:resolve": z.object({ id: UuidSchema, outcome: z.enum(["taken", "skipped"]) }),
   "rhythm:streak": z.undefined(),
+  "publishers:self": z.undefined(),
+  "publishers:list": z.undefined(),
+  "publishers:setTrust": PublisherRefSchema.extend({ level: TrustLevelSchema }),
+  "publishers:report": PublisherRefSchema.extend({ reason: ReportReasonSchema, note: z.string().max(500) }),
   "trust:facts": Uuid,
   "trust:outcome": z.object({ id: UuidSchema, releaseId: UuidSchema.optional() }),
   "process:proof": Uuid,
@@ -373,6 +377,14 @@ export function registerIpc(services: Services): void {
       services.metrics.record(outcome === "taken" ? "reward_taken" : "reward_skipped");
     },
     "rhythm:streak": () => services.rhythm.streak(),
+    "publishers:self": () => services.graph.publishers.self().ref(),
+    "publishers:list": () => services.graph.publishers.list(),
+    "publishers:setTrust": ({ publicKey, displayName, level }) => {
+      services.graph.publishers.setTrust({ publicKey, displayName }, level);
+      return services.graph.publishers.view({ publicKey, displayName });
+    },
+    "publishers:report": ({ publicKey, displayName, reason, note }) =>
+      services.graph.publishers.report({ publicKey, displayName }, reason, { note }),
     "trust:facts": ({ id }) => services.graph.getObject(id) ? trustFactsFor(services.graph, id) : null,
     "trust:outcome": ({ id, releaseId }) => services.graph.getObject(id) ? outcomeOf(services.graph, id, releaseId) : null,
     "process:proof": ({ id }) => services.graph.process.proof(id),
