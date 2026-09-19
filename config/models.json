@@ -1,0 +1,39 @@
+{
+  "$comment": [
+    "Your models. XENIUR routes across the keys you already pay for; there is no second bill.",
+    "Every price carries the date somebody checked it against the provider's published pricing.",
+    "An unverified price (verifiedOn: null) is not free — it is unknown, and XENIUR will not call",
+    "that model until a person fills the date in after checking. Local models are priced at zero",
+    "and verified by construction. Keys are never stored in this file, or in any file XENIUR writes."
+  ],
+  "providers": [
+    { "id": "anthropic", "label": "Anthropic", "keyName": "ANTHROPIC_API_KEY",
+      "verifyUrl": "https://api.anthropic.com/v1/models", "auth": "x-api-key", "local": false },
+    { "id": "openai", "label": "OpenAI", "keyName": "OPENAI_API_KEY",
+      "verifyUrl": "https://api.openai.com/v1/models", "auth": "bearer", "local": false },
+    { "id": "google", "label": "Google", "keyName": "GOOGLE_API_KEY",
+      "verifyUrl": "https://generativelanguage.googleapis.com/v1beta/models", "auth": "query", "local": false },
+    { "id": "ollama", "label": "Ollama (on this machine)", "keyName": null,
+      "verifyUrl": "http://127.0.0.1:11434/api/tags", "auth": "none", "local": true }
+  ],
+  "models": [
+    { "id": "anthropic.fable", "provider": "anthropic", "model": "claude-fable-5-1", "label": "Claude Fable 5.1",
+      "contextWindow": 200000, "tags": ["strong", "vision", "long_context"],
+      "price": { "inputPerMTok": 0, "outputPerMTok": 0, "currency": "USD", "verifiedOn": null }, "modelVerified": false },
+    { "id": "anthropic.sonnet", "provider": "anthropic", "model": "claude-sonnet-5", "label": "Claude Sonnet 5",
+      "contextWindow": 200000, "tags": ["fast", "vision"],
+      "price": { "inputPerMTok": 0, "outputPerMTok": 0, "currency": "USD", "verifiedOn": null }, "modelVerified": false },
+    { "id": "anthropic.haiku", "provider": "anthropic", "model": "claude-haiku-4-5-20251001", "label": "Claude Haiku 4.5",
+      "contextWindow": 200000, "tags": ["fast", "cheap"],
+      "price": { "inputPerMTok": 0, "outputPerMTok": 0, "currency": "USD", "verifiedOn": null }, "modelVerified": false },
+    { "id": "openai.luna", "provider": "openai", "model": "gpt-5.6-luna", "label": "GPT-5.6 Luna",
+      "contextWindow": 128000, "tags": ["strong"],
+      "price": { "inputPerMTok": 0, "outputPerMTok": 0, "currency": "USD", "verifiedOn": null }, "modelVerified": false },
+    { "id": "google.gemini", "provider": "google", "model": "gemini-2.5-pro", "label": "Gemini 2.5 Pro",
+      "contextWindow": 1000000, "tags": ["strong", "vision", "long_context"],
+      "price": { "inputPerMTok": 0, "outputPerMTok": 0, "currency": "USD", "verifiedOn": null }, "modelVerified": false },
+    { "id": "ollama.local", "provider": "ollama", "model": "llama3.1", "label": "Llama 3.1 (local)",
+      "contextWindow": 128000, "tags": ["local", "cheap"],
+      "price": { "inputPerMTok": 0, "outputPerMTok": 0, "currency": "USD", "verifiedOn": null }, "modelVerified": false }
+  ]
+}

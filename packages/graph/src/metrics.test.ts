@@ -107,3 +107,17 @@ describe("what XENIUR records about your own use of it", () => {
     expect(typed.detail).toEqual({ concept: "cost" });
   });
 });
+
+describe("a metrics export cannot carry a credential", () => {
+  it("strips a key-shaped detail on the way in, and the export checks again anyway", () => {
+    metrics.start();
+    metrics.record("delivery_approved", { detail: {
+      profileId: "client",
+      note: "sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789",   // dropped: free text
+    } });
+    const event = metrics.events().find((e) => e.kind === "delivery_approved")!;
+    expect(Object.keys(event.detail)).toEqual(["profileId"]);
+    expect(() => metrics.exportSummary()).not.toThrow();
+    expect(metrics.exportSummary()).not.toContain("sk-ant");
+  });
+});

@@ -1202,3 +1202,78 @@ input[type="range"] { accent-color: var(--text); }
   .xr-trust { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .xr-trust__cell { border-bottom: 1px solid var(--line-soft); }
 }
+
+/* ============================================================ your models
+ *
+ * Providers as cards on hairlines. What a key unlocks is drawn as the economy's three
+ * tiers: Unlimited Local already lit, the others outlined until a key verifies. The key
+ * field is typed into once and never echoed. Skip is the same weight as Continue.
+ */
+
+.xr-firstrun { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; background: var(--bg); }
+.xr-firstrun__steps {
+  list-style: none; margin: 0; padding: 22px 32px; display: flex; gap: 22px;
+  font-family: var(--font-sans); font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--faint); border-bottom: 1px solid var(--line-soft);
+}
+.xr-firstrun__steps li.is-current { color: var(--text); }
+.xr-firstrun__steps li.is-done { color: var(--dim); }
+.xr-firstrun__scene { max-width: 960px; width: 100%; margin: 0 auto; padding: 56px 32px 80px; }
+.xr-firstrun__welcome { display: grid; gap: 28px; justify-items: start; align-content: center; }
+.xr-firstrun__welcome h1 {
+  font-family: var(--font-display); font-size: clamp(28px, 4vw, 44px); line-height: 1.15;
+  letter-spacing: -.02em; margin: 0; max-width: 24ch; font-weight: 700;
+}
+.xr-firstrun__actions { display: flex; gap: 10px; margin-top: 18px; }
+.xr-firstrun__project h1 { font-family: var(--font-display); font-size: 34px; margin: 0 0 8px; letter-spacing: -.02em; }
+.xr-firstrun__project p { color: var(--dim); margin: 0 0 26px; max-width: 60ch; }
+.xr-firstrun__choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.xr-firstrun__choice {
+  text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 4px;
+  padding: 18px 20px; display: grid; gap: 6px; cursor: pointer; color: var(--text);
+}
+.xr-firstrun__choice:hover { border-color: var(--dim); }
+.xr-firstrun__choice strong { font-family: var(--font-display); font-size: 18px; }
+.xr-firstrun__choice span { color: var(--dim); font-size: 13px; }
+
+.xr-models { display: grid; gap: 22px; }
+.xr-models__head h2 { font-family: var(--font-display); font-size: 34px; margin: 0 0 8px; letter-spacing: -.02em; }
+.xr-models__head p { color: var(--dim); margin: 0; max-width: 62ch; }
+.xr-models__grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.xr-models__foot { display: flex; gap: 10px; justify-content: flex-end; align-items: center; }
+.xr-models__note { color: var(--faint); font-size: 12px; }
+
+.xr-model {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 4px;
+  padding: 16px 18px; display: grid; gap: 12px; align-content: start;
+}
+.xr-model.has-key { border-color: var(--ok); }
+.xr-model__head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.xr-model__head h3 { margin: 0; font-family: var(--font-display); font-size: 19px; }
+.xr-tag--ok { border-color: var(--ok); color: var(--ok); }
+
+.xr-model__tiers { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.xr-model__tiers li {
+  display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: baseline;
+  padding: 6px 10px; border: 1px dashed var(--line); border-radius: 3px; font-size: 13px; color: var(--faint);
+}
+.xr-model__tiers li small { font-size: 11px; }
+/* Lit: solid border, full ink. Unlimited Local is lit on every card, always. */
+.xr-model__tiers li.is-lit { border-style: solid; color: var(--text); }
+
+.xr-model__models { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.xr-model__models li { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; }
+.xr-model__models li .xr-tag { font-size: 10px; }
+
+.xr-model__add { display: grid; gap: 8px; }
+.xr-model__add label { display: grid; gap: 4px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.xr-model__add input {
+  font: 13px var(--font-mono); background: var(--bg); color: var(--text);
+  border: 1px solid var(--line); border-radius: 3px; padding: 8px 10px;
+}
+.xr-model__add input:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.xr-model__add input:disabled { opacity: .5; }
+.xr-model__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.xr-model__verify { margin: 0; font-size: 12px; }
+.xr-model__verify.is-ok  { color: var(--ok); }
+.xr-model__verify.is-bad { color: var(--review); }

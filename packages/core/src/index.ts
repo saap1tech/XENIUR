@@ -19,6 +19,7 @@ export * from "./sensemaking.js";
 export * from "./decisions.js";
 export * from "./impact.js";
 export * from "./metrics.js";
+export * from "./secrets.js";
 export * from "./bridge.js";
 export * from "./constraints.js";
 export * from "./process.js";

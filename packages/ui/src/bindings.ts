@@ -4,7 +4,7 @@ import type {
   ObjectState, PlanShape, ProcessProof, ReadinessReport, RebuildPlan, Representation, ResolvedPassage,
   SourceVersion, StepStatus, Task, ThinkingMap, ConstraintRecord, ConstraintValue,
 } from "@xeniur/core";
-import type { TrustFacts } from "@xeniur/core";
+import type { ModelProviderView, TrustFacts } from "@xeniur/core";
 import { formOf } from "@xeniur/core";
 
 export interface LineageView {
@@ -57,6 +57,10 @@ export interface SceneBindings {
   support?: Readonly<Record<string, ClaimSupport[]>>;
   /** Five cells of facts per Object, for the Trust Strip. */
   trust?: Readonly<Record<string, TrustFacts>>;
+  /** The providers as the first-run scene shows them. Never a key. */
+  modelProviders?: readonly ModelProviderView[];
+  /** The last verification result per provider, for the tag beside the card. */
+  modelVerification?: Readonly<Record<string, { ok: boolean; models: string[]; reason: string | null }>>;
   sourceVersions?: Readonly<Record<string, SourceVersion>>;
 
   /* The calm workspace */
@@ -114,6 +118,11 @@ export interface SceneBindings {
   onCompare?(objectId: string, formRole: string): void;
   onConvertToDecision?(atomObjectId: string): void;
   onLink?(fromObjectId: string, toObjectId: string): void;
+  onAddModelKey?(provider: string, key: string): void;
+  onRemoveModelKey?(provider: string): void;
+  onVerifyModel?(provider: string): void;
+  onSkipFirstRun?(): void;
+  onContinueFirstRun?(): void;
   /** A person reviews one citation. The only thing that settles it. */
   onReviewSupport?(supportId: string, status: "supported" | "contradicted" | "ambiguous"): void;
   /** A drag or its keyboard twin only asks the host for proposals. */

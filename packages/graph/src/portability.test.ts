@@ -637,3 +637,25 @@ describe("a recipient can read the delivery without installing anything", () => 
     expect(new Set(validators).size).toBe(validators.length);
   });
 });
+
+describe("no credential leaves the machine in anything XENIUR writes", () => {
+  const KEY = "sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789";
+
+  it("refuses to write a package that carries a key, and names where it hid", async () => {
+    buildRocket();
+    // A key pasted into a release note — the most ordinary way one would get in.
+    new ReadinessEvaluator(source, loadProfiles(process.cwd()))
+      .approve({ objectId, profileId: "client", note: `remember: ${KEY}`, force: true });
+
+    await expect(exportPackage(source, objectId, join(dir, "leak.xeniur")))
+      .rejects.toThrow(/shaped like an API key.*releases\[0\]\.note/);
+    const { existsSync } = await import("node:fs");
+    expect(existsSync(join(dir, "leak.xeniur"))).toBe(false);
+  });
+
+  it("refuses to render a delivery report that would carry a key", () => {
+    buildRocket();
+    source.setProperties(objectId, { title: `Rocket ${KEY}` });
+    expect(() => deliveryReport(source, objectId)).toThrow(/shaped like an API key/);
+  });
+});

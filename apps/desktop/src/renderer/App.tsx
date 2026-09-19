@@ -5,6 +5,7 @@ import { World } from "./World.js";
 import { ObjectView } from "./ObjectView.js";
 import { CommandPalette, usePaletteShortcut, type Command } from "./CommandPalette.js";
 import { FocusMode } from "./FocusMode.js";
+import { FirstRun } from "./FirstRun.js";
 import { BrandMark } from "./BrandMark.js";
 import { ComputeReview } from "./ComputeReview.js";
 import { WebLayer } from "./WebLayer.js";
@@ -23,7 +24,8 @@ type View =
   | { kind: "object"; detail: ObjectDetail; worldSnapshot: WorldSnapshot }
   | { kind: "focus"; objectId: string; minutes: number }
   | { kind: "web" }
-  | { kind: "workflows" };
+  | { kind: "workflows" }
+  | { kind: "firstrun" };
 
 export function App() {
   const [worlds, setWorlds] = useState<WorldRow[]>([]);
@@ -151,13 +153,27 @@ export function App() {
         { id: "22222222-2222-4222-8222-222222222222", title: "Tokyo / April", emoji: "⌁", summary: "People · places · priorities · cost", createdAt: now, lastOpenedAt: now },
         { id: "33333333-3333-4333-8333-333333333333", title: "XR Identity", emoji: "XR", summary: "Logo · typography · voice · process", createdAt: now, lastOpenedAt: now },
       ];
-      return <Home worlds={sampleWorlds} active={[]} info={{ version: "0.1", brainIsMock: true, brainModel: null, capabilities: [] }}
+      return <Home worlds={sampleWorlds} active={[]} info={{ version: "0.1", brainIsMock: true, brainModel: null, capabilities: [], firstRun: false }}
         economy={{ local: { metered: false, label: "Unlimited Local" }, intelligence: { configured: true, rollingRemaining: 938, rollingLimit: 1000, reserveRemaining: 4800, reserveLimit: 5000, resetsAt: now }, compute: { configured: true, balance: 524, usdPerCompute: .02, held: 0 } }}
         onOpen={() => undefined} onCreate={() => undefined} onApprove={() => undefined} onReject={() => undefined} onExplore={() => undefined} onWorkflows={() => undefined} />;
     }
     return <main className="xr-home"><BrandMark />
       <p className="xr-empty">The bridge is unavailable. This window is not XENIUR's own renderer.</p>
     </main>;
+  }
+
+  if (view.kind === "firstrun") {
+    return (
+      <FirstRun
+        onDone={() => { setView({ kind: "home" }); void bridge.system.info().then(setInfo); }}
+        onImport={() => setView({ kind: "home" })}
+        onOpenExample={async () => {
+          const created = await bridge.worlds.create({ title: "Rainwear 2027 (example)", emoji: "◒" });
+          await refreshWorlds();
+          await openWorld(created.id);
+        }}
+      />
+    );
   }
 
   // Focus Mode replaces everything, deliberately: chrome that is merely hidden is chrome

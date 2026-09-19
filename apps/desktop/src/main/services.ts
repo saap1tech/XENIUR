@@ -7,7 +7,7 @@ import {
   MetricsStore,
   ComputeLedger, WorkflowLibrary,
 } from "@xeniur/graph";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { WebRiskChecker } from "./web/risk.js";
@@ -25,12 +25,26 @@ import {
   ALL_PROVIDERS, loadProvidersConfig, type ProviderEnv, type ProvidersConfig,
 } from "@xeniur/providers";
 import type { ImpactReport, ResolvedPassage } from "@xeniur/core";
+import { ModelRegistry, verifyKey, type KeyStore, type ModelProvider } from "@xeniur/models";
+import type { ModelProviderView } from "@xeniur/core";
 import { appPaths, BINARIES } from "./paths.js";
+import { SafeStorageKeyStore } from "./keys.js";
 import { BrowserShell } from "./browser.js";
 import { PreviewRuntime } from "./preview.js";
 
 export interface Services {
   graph: ObjectGraph;
+  /** Your models: the registry, the keychain-backed key store, and the first-run flag. */
+  models: {
+    registry: ModelRegistry;
+    keys: KeyStore;
+    list(): ModelProviderView[];
+    add(provider: ModelProvider, key: string): ModelProviderView[];
+    remove(provider: ModelProvider): ModelProviderView[];
+    verify(provider: ModelProvider): Promise<{ ok: boolean; models: string[]; reason: string | null }>;
+    firstRun(): boolean;
+    finishFirstRun(): void;
+  };
   rebuild: RebuildRunner;
   validation: ValidationRunner;
   readiness: ReadinessEvaluator;
@@ -131,6 +145,48 @@ export function createServices(window: BrowserWindow): Services {
   const paths = appPaths();
   const config = loadProvidersConfig(paths.projectRoot);
   const graph = ObjectGraph.open({ dbPath: paths.dbPath, blobDir: paths.blobDir });
+
+  /* ------------------------------------------------------------ your models
+   *
+   * Keys live in the OS keychain through safeStorage and never touch the graph. The renderer
+   * learns only whether a key is present; the bytes are read here, for verification and for a
+   * model call, and nowhere else. First-run is a marker file rather than a database row, so
+   * a person who wipes their data sees the scenes again — which is the right behaviour.
+   */
+  const modelRegistry = ModelRegistry.load(paths.projectRoot);
+  const keyStore: KeyStore = new SafeStorageKeyStore(paths.root);
+  const firstRunMarker = join(paths.root, ".first-run-done");
+
+  const providerView = (): ModelProviderView[] => modelRegistry.providers().map((p) => {
+    const keyPresent = p.local || keyStore.has(p.id);
+    return {
+      id: p.id, label: p.label, local: p.local, keyPresent,
+      canStore: p.local || SafeStorageKeyStore.available(),
+      unlocks: modelRegistry.unlocks(p.id),
+      models: modelRegistry.models().filter((m) => m.provider === p.id).map((m) => ({
+        id: m.id, label: m.label, priceVerifiedOn: m.price.verifiedOn,
+        callable: keyPresent && modelRegistry.callable((q) => q === p.id ? keyPresent : keyStore.has(q))
+          .some((c) => c.id === m.id),
+      })),
+    };
+  });
+
+  const models: Services["models"] = {
+    registry: modelRegistry, keys: keyStore,
+    list: providerView,
+    add: (provider, key) => { keyStore.write(provider, key); return providerView(); },
+    remove: (provider) => { keyStore.remove(provider); return providerView(); },
+    verify: async (provider) => {
+      // A free call, and only that: the models-list endpoint, never a completion.
+      const r = await verifyKey(provider, modelRegistry, keyStore, async (url, init) => {
+        const res = await fetch(url, { headers: init.headers, method: "GET" });
+        return { ok: res.ok, status: res.status, json: () => res.json() as Promise<unknown> };
+      });
+      return { ok: r.ok, models: r.models, reason: r.reason };
+    },
+    firstRun: () => !existsSync(firstRunMarker),
+    finishFirstRun: () => { writeFileSync(firstRunMarker, String(Date.now())); },
+  };
   const broker = new PermissionBroker(graph.db);
   const sessions = new SessionBroker(graph.db);
   const metrics = new MetricsStore(graph.db);
@@ -220,7 +276,10 @@ export function createServices(window: BrowserWindow): Services {
         ...(state.ok ? {} : { reason: state.reason }),
       };
     }));
-    return { version: "0.1.0", brainIsMock: brain.isMock, brainModel: brain.model, capabilities };
+    return {
+      version: "0.1.0", brainIsMock: brain.isMock, brainModel: brain.model, capabilities,
+      firstRun: models.firstRun(),
+    };
   };
 
   const lineage = (representationId: string): LineagePayload => {
@@ -305,7 +364,7 @@ export function createServices(window: BrowserWindow): Services {
     graph.getWorld(worldId) ? buildThinkingMap(graph, sense, worldId) : null;
 
   return {
-    graph, queue, broker, sessions, metrics, compute, workflows, webRisk, router, brain, gatedBrain, spend, config, env, browser, preview,
+    graph, models, queue, broker, sessions, metrics, compute, workflows, webRisk, router, brain, gatedBrain, spend, config, env, browser, preview,
     rebuild, validation, readiness, sense,
     detailOf, historyOf, thinkingMap,
     impactOf: impactOfObject, passageOf,

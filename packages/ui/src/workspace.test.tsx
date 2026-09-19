@@ -402,3 +402,56 @@ describe("the Trust Strip is facts, and lime only when settled", () => {
     expect(strip(facts({ actions: { receipted: 3, unknown: 1 } }))).toContain("1 unknown");
   });
 });
+
+describe("your models: what a key unlocks, never the key", () => {
+  const providers = [
+    { id: "anthropic", label: "Anthropic", local: false, keyPresent: false, canStore: true,
+      unlocks: { intelligence: ["Claude Sonnet 5", "Claude Haiku 4.5"], generation: [] },
+      models: [{ id: "anthropic.sonnet", label: "Claude Sonnet 5", priceVerifiedOn: null, callable: false }] },
+    { id: "ollama", label: "Ollama (on this machine)", local: true, keyPresent: true, canStore: true,
+      unlocks: { intelligence: ["Llama 3.1 (local)"], generation: [] },
+      models: [{ id: "ollama.local", label: "Llama 3.1 (local)", priceVerifiedOn: null, callable: true }] },
+    { id: "openai", label: "OpenAI", local: false, keyPresent: true, canStore: true,
+      unlocks: { intelligence: ["GPT-5.6 Luna"], generation: [] },
+      models: [{ id: "openai.luna", label: "GPT-5.6 Luna", priceVerifiedOn: "2026-09-16", callable: true }] },
+  ];
+  const setup = (firstRun: boolean) =>
+    render({ id: "m", component: "ModelSetup", firstRun }, bindings({ modelProviders: providers }));
+
+  it("lights Unlimited Local on every card whether or not a key exists", () => {
+    const out = setup(true);
+    const cards = (out.match(/<li class="xr-model[" ]/g) ?? []).length;
+    const litLocal = out.split('is-lit"><span>Unlimited Local').length - 1;
+    expect(cards).toBe(3);
+    expect(litLocal).toBe(3);
+  });
+
+  it("offers Skip for now in the same weight as Continue on first run", () => {
+    const out = setup(true);
+    expect(out).toContain("Skip for now");
+    expect(out).toContain("Continue");
+    // Both are ordinary buttons; neither is the lime in-flight style.
+    expect(out).not.toContain("xr-button--running");
+  });
+
+  it("says an unverified price will not be called, in words — and never says it of a local model", () => {
+    const out = setup(false);
+    expect(out).toContain("price not verified — XENIUR will not call this");
+    expect(out).toContain("local · no cost");
+    expect(out).toContain("price checked 2026-09-16");
+    // The local card carries no "will not call" tag: it is callable by construction.
+    const ollamaCard = out.slice(out.indexOf("Ollama (on this machine)"), out.indexOf("OpenAI"));
+    expect(ollamaCard).not.toContain("will not call");
+  });
+
+  it("never renders a key, and the field is a password field sent once", () => {
+    const out = setup(true);
+    expect(out).toContain('type="password"');
+    expect(out).toContain("it is not shown again");
+    expect(out).not.toMatch(/sk-[a-z-]*[A-Za-z0-9]{20,}/);
+  });
+
+  it("says verification is free, and what it does instead of a completion", () => {
+    expect(setup(false)).toContain("lists models, never a completion");
+  });
+});

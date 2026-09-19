@@ -96,6 +96,14 @@ contextBridge.exposeInMainWorld("xeniur", {
     impact: (objectId: string) => call("living:impact", { id: objectId }),
   },
 
+  models: {
+    list: () => call("models:list"),
+    add: (provider: string, key: string) => call("models:add", { provider, key }),
+    remove: (provider: string) => call("models:remove", { provider }),
+    verify: (provider: string) => call("models:verify", { provider }),
+    finishFirstRun: () => call("models:finishFirstRun"),
+  },
+
   decisions: {
     list: (worldId: string) => call("decisions:list", { id: worldId }),
     get: (objectId: string) => call("decisions:get", { id: objectId }),

@@ -61,6 +61,20 @@ export interface SystemInfo {
   brainIsMock: boolean;
   brainModel: string | null;
   capabilities: Array<{ id: string; kind: string; available: boolean; reason?: string }>;
+  /** True until the person has seen the first-run scenes once (or skipped them). */
+  firstRun: boolean;
+}
+
+/** One provider as the first-run scene shows it: what a key would unlock, never the key. */
+export interface ModelProviderView {
+  id: string;
+  label: string;
+  local: boolean;
+  keyPresent: boolean;
+  /** Whether the keychain can protect a key on this machine at all. */
+  canStore: boolean;
+  unlocks: { intelligence: string[]; generation: string[] };
+  models: Array<{ id: string; label: string; priceVerifiedOn: string | null; callable: boolean }>;
 }
 
 export interface IntentResult {
@@ -150,6 +164,17 @@ export interface XeniurBridge {
     exportPackage(objectId: string): Promise<{ path: string; bytes: number } | null>;
     /** What changed since the last delivery, split into rebuild and review. */
     impact(objectId: string): Promise<ImpactReport | null>;
+  };
+
+  /* Your models — keys stay in the keychain; the renderer only ever learns yes or no */
+  models: {
+    list(): Promise<ModelProviderView[]>;
+    add(provider: string, key: string): Promise<ModelProviderView[]>;
+    remove(provider: string): Promise<ModelProviderView[]>;
+    /** A free call to the provider's models list. Never a completion. */
+    verify(provider: string): Promise<{ ok: boolean; models: string[]; reason: string | null }>;
+    /** The person has seen (or skipped) the first-run scenes. */
+    finishFirstRun(): Promise<void>;
   };
 
   /* Decisions — the bridge between what was read and what was made */

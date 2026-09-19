@@ -36,6 +36,7 @@
       "@xeniur/ui": [
         "packages/ui/src/index.ts"
       ],
+      "@xeniur/models": ["packages/models/src/index.ts"],
       "@xeniur/grammar": [
         "packages/grammar/src/index.ts"
       ],

@@ -24,6 +24,8 @@ export const SCENE_COMPONENTS = [
   "EvidenceMeter", "EmptySlot", "ReviewSheet",
   // Inspectable work
   "ClaimPair", "TrustStrip",
+  // Your models
+  "ModelSetup",
 ] as const;
 export const SceneComponentSchema = z.enum(SCENE_COMPONENTS);
 export type SceneComponentName = z.infer<typeof SceneComponentSchema>;
@@ -335,6 +337,17 @@ const TrustStripNode = z.object({
   compact: z.boolean().default(false),
 }).strict();
 
+/**
+ * Your models: the providers as cards, what a key unlocks in the three economy tiers, and
+ * Skip as a first-class exit. The key itself is typed into a field the renderer sends once
+ * and never sees again.
+ */
+const ModelSetupNode = z.object({
+  ...base, component: z.literal("ModelSetup"),
+  /** Whether this is the first-run scene (Skip for now) or Settings (no skip needed). */
+  firstRun: z.boolean().default(false),
+}).strict();
+
 const LeafNodeSchema = z.discriminatedUnion("component", [
   ObjectCardNode, InspectorNode, DocumentNode, TimelineNode, TaskProgressNode,
   ComparisonNode, BrowserNode, CodePreviewNode, Viewport3DNode, ApprovalDialogNode,
@@ -347,7 +360,7 @@ const LeafNodeSchema = z.discriminatedUnion("component", [
   ObjectOrbitNode, AffordanceRingNode, SpatialCanvasNode, ConstraintStripNode,
   RangeMeterNode, PriorityBalanceNode, PeopleChipsNode, CalendarNode, SchematicMapNode,
   ChoiceCardsNode, StepperNode, EvidenceMeterNode, EmptySlotNode, ReviewSheetNode,
-  ClaimPairNode, TrustStripNode,
+  ClaimPairNode, TrustStripNode, ModelSetupNode,
 ]);
 export type LeafSceneNode = z.infer<typeof LeafNodeSchema>;
 

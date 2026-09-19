@@ -16,6 +16,7 @@
     "@xeniur/router": "*",
     "@xeniur/sessions": "*",
     "@xeniur/tasks": "*",
-    "@xeniur/ui": "*"
+    "@xeniur/ui": "*",
+    "@xeniur/models": "*"
   }
 }

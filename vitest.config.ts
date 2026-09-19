@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 const pkgs = [
   "core", "graph", "tasks", "permissions", "sessions", "validators", "sensemaking",
-  "providers", "router", "brain", "hands", "ui",
+  "providers", "router", "brain", "hands", "ui", "models", "grammar", "capabilities",
 ] as const;
 
 const alias = Object.fromEntries(

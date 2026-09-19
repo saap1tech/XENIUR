@@ -1,7 +1,7 @@
 import type {
   MetricsDisclosure, RevisionMetrics, SessionEvent, SessionEventKind, SessionRecord,
 } from "@xeniur/core";
-import { EVENT_MEANINGS, SESSION_EVENT_KINDS, newId, now } from "@xeniur/core";
+import { EVENT_MEANINGS, KeyWouldLeak, SESSION_EVENT_KINDS, findKeyShaped, newId, now } from "@xeniur/core";
 import type { Db } from "./db.js";
 
 /**
@@ -167,6 +167,10 @@ export class MetricsStore {
   /** A sanitised summary a person can choose to send. Nothing sends it for them. */
   exportSummary(): string {
     const d = this.disclose();
+    // The guard on the way in strips free text, so nothing here should ever be key-shaped —
+    // and the export checks anyway, because "should" is not a boundary.
+    const leaks = findKeyShaped(d);
+    if (leaks.length > 0) throw new KeyWouldLeak("a metrics export", leaks);
     const seconds = (ms: number | null) => ms === null ? "—" : `${(ms / 1000).toFixed(1)}s`;
     return [
       "XENIUR — what this machine recorded about your own use",

@@ -38,11 +38,14 @@ export function Empty({ children }: { children: ReactNode }) {
   return <p className="xr-empty">{children}</p>;
 }
 
-export function Button({ onClick, variant = "default", children }: {
+export function Button({ onClick, variant = "default", children, disabled = false, type = "button" }: {
   onClick?: () => void; variant?: "default" | "primary" | "danger"; children: ReactNode;
+  disabled?: boolean;
+  /** "submit" for the one button in a form that should submit it. */
+  type?: "button" | "submit";
 }) {
   return (
-    <button type="button" className={`xr-button xr-button--${variant}`} onClick={onClick}>
+    <button type={type} className={`xr-button xr-button--${variant}`} onClick={onClick} disabled={disabled}>
       {children}
     </button>
   );

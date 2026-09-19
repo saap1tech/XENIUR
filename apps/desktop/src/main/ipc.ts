@@ -108,6 +108,16 @@ const SCHEMAS = {
     note: z.string().max(500).optional(),
   }),
 
+  /* Your models — the key is written once, read only in the main process, never echoed */
+  "models:list": z.undefined(),
+  "models:add": z.object({
+    provider: z.enum(["anthropic", "openai", "google", "ollama"]),
+    key: z.string().min(8).max(512),
+  }),
+  "models:remove": z.object({ provider: z.enum(["anthropic", "openai", "google", "ollama"]) }),
+  "models:verify": z.object({ provider: z.enum(["anthropic", "openai", "google", "ollama"]) }),
+  "models:finishFirstRun": z.undefined(),
+
   /* Decisions */
   "decisions:list": Uuid,
   "decisions:get": Uuid,
@@ -342,6 +352,14 @@ export function registerIpc(services: Services): void {
       return { path, rootHash: result.manifest.rootHash };
     },
     "metrics:record": ({ kind, concept }) => { services.metrics.record(kind, { detail: { concept } }); },
+
+    /* --------------------------------------------------------- Your models */
+
+    "models:list": () => services.models.list(),
+    "models:add": ({ provider, key }) => services.models.add(provider, key),
+    "models:remove": ({ provider }) => services.models.remove(provider),
+    "models:verify": ({ provider }) => services.models.verify(provider),
+    "models:finishFirstRun": () => { services.models.finishFirstRun(); },
 
     /* ----------------------------------------------------------- Decisions */
 
