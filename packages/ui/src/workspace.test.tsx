@@ -455,3 +455,47 @@ describe("your models: what a key unlocks, never the key", () => {
     expect(setup(false)).toContain("lists models, never a completion");
   });
 });
+
+describe("what the model will see is shown, and what was left out is named", () => {
+  const digest = "abc123";
+  const ctx = {
+    included: [
+      { kind: "focus", id: OBJ, label: "Rocket", tokens: 12 },
+      { kind: "decision", id: DEC, label: "Which finish?", tokens: 80 },
+      { kind: "passage", id: "p1", label: "Client brief", tokens: 120 },
+    ],
+    excluded: [
+      { kind: "passage", id: "p2", label: "Internal returns data", why: "restricted_rights" },
+      { kind: "constraint", id: "c1", label: "Other project's budget", why: "outside_focus" },
+    ],
+    tokens: 212, includesRestricted: false, destination: "remote" as const,
+    modelLabel: "Claude Sonnet 5", estimatedUsd: 0.004,
+  };
+  const out = () => render({ id: "c", component: "ContextReview", contextDigest: digest },
+                           bindings({ contexts: { [digest]: ctx } }));
+
+  it("lists every included item as a chip, grouped by kind", () => {
+    const html = out();
+    for (const label of ["Rocket", "Which finish?", "Client brief"]) expect(html).toContain(label);
+    expect(html).toContain("what you are working on");
+  });
+
+  it("names what was left out and why, in words", () => {
+    const html = out();
+    expect(html).toContain("Internal returns data");
+    expect(html).toContain("marked restricted — stays on this machine");
+    expect(html).toContain("not connected to what you are working on");
+  });
+
+  it("says where it goes and what it may cost, and offers exactly-this confirmation", () => {
+    const html = out();
+    expect(html).toContain("to Claude Sonnet 5");
+    expect(html).toContain("≤ $0.004");
+    expect(html).toContain("Send exactly this");
+  });
+
+  it("renders nothing for a digest it does not know — a stale card is not a card", () => {
+    expect(render({ id: "c", component: "ContextReview", contextDigest: "other" }, bindings({ contexts: { [digest]: ctx } })))
+      .not.toContain("xr-context");
+  });
+});

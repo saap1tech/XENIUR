@@ -53,10 +53,10 @@ describe("the registry is closed", () => {
     expect(implemented.size).toBe(SCENE_COMPONENTS.length - 1);
   });
 
-  it("contains exactly the 49 reviewed primitives", () => {
-    // M5 Stage 1 added ClaimPair and TrustStrip; Stage 3 added ModelSetup. Growing this
-    // number is a deliberate act: what should grow is the grammar's combination table.
-    expect(SCENE_COMPONENTS).toHaveLength(49);
+  it("contains exactly the 50 reviewed primitives", () => {
+    // M5: Stage 1 added ClaimPair and TrustStrip; Stage 3 ModelSetup; Stage 5 ContextReview.
+    // Growing this number is a deliberate act: what should grow is the combination table.
+    expect(SCENE_COMPONENTS).toHaveLength(50);
   });
 
   it("refuses a node naming a component that does not exist", () => {

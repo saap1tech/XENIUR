@@ -57,6 +57,20 @@ export interface SceneBindings {
   support?: Readonly<Record<string, ClaimSupport[]>>;
   /** Five cells of facts per Object, for the Trust Strip. */
   trust?: Readonly<Record<string, TrustFacts>>;
+  /**
+   * Compiled contexts awaiting confirmation, keyed by digest — the same key the plan carries,
+   * so the review a person reads and the content the model receives cannot drift apart.
+   */
+  contexts?: Readonly<Record<string, {
+    included: Array<{ kind: string; id: string; label: string; tokens: number }>;
+    excluded: Array<{ kind: string; id: string; label: string; why: string }>;
+    tokens: number;
+    includesRestricted: boolean;
+    /** Where it would go, and what one attempt would cost. */
+    destination: "local" | "remote";
+    modelLabel: string | null;
+    estimatedUsd: number;
+  }>>;
   /** The providers as the first-run scene shows them. Never a key. */
   modelProviders?: readonly ModelProviderView[];
   /** The last verification result per provider, for the tag beside the card. */
@@ -122,6 +136,8 @@ export interface SceneBindings {
   onRemoveModelKey?(provider: string): void;
   onVerifyModel?(provider: string): void;
   onSkipFirstRun?(): void;
+  onConfirmContext?(contextDigest: string): void;
+  onDeclineContext?(contextDigest: string): void;
   onContinueFirstRun?(): void;
   /** A person reviews one citation. The only thing that settles it. */
   onReviewSupport?(supportId: string, status: "supported" | "contradicted" | "ambiguous"): void;

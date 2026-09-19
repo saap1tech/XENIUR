@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Tool } from "@xeniur/core";
-import { TOOLS, untrusted } from "@xeniur/core";
+import { TOOLS, authorizeFor, untrusted } from "@xeniur/core";
 import { ObjectGraph, SpendLedger } from "@xeniur/graph";
 import { GatedBrain, bindOutcome, normalisePlan, type RuntimeRegistry } from "./index.js";
 import { BRAIN_INTENTS, BrainOutcomeSchema } from "./outcome.js";
@@ -718,5 +718,60 @@ describe("a resolver routes every attempt, and escalation is visible in the resu
     }, registry());
     expect(result.status).toBe("gated");
     expect(ledger.summary().committedUsd).toBe(0);
+  });
+});
+
+/* ============================================================ context === */
+
+describe("an approval covers exactly this context", () => {
+  const compiled = (digest: string) => ({ rendered: "FOCUS: Rocket", contextDigest: digest, includesRestricted: false });
+  const situation = { world: { id: WORLD, title: "W", emoji: "W" }, selected: [], activeTasks: [] };
+
+  it("accepts a call whose intent, context and price match the approval", async () => {
+    const b = brain(new Scripted([executable()]));
+    const plan = b.planFor("choose_transform", "digest-A", b.estimateUsd());
+    const auth = authorizeFor(plan, { scope: "model", spendLimitUsd: 1 });
+    const result = await b.ask("choose_transform", "x", situation, registry(), {
+      compiled: compiled("digest-A"), authorization: auth,
+    });
+    expect(result.status).toBe("ok");
+  });
+
+  it("refuses when the context changed after approval", async () => {
+    const b = brain(new Scripted([executable()]));
+    const auth = authorizeFor(b.planFor("choose_transform", "digest-A", b.estimateUsd()), { scope: "model", spendLimitUsd: 1 });
+    // Something else was added to what the model would see. Different content, different call.
+    const result = await b.ask("choose_transform", "x", situation, registry(), {
+      compiled: compiled("digest-B"), authorization: auth,
+    });
+    expect(result.status).toBe("refused");
+    if (result.status === "refused") expect(result.reason).toContain("what was approved is not what is about to run");
+    expect(ledger.summary().calls).toBe(0);
+  });
+
+  it("refuses when the intent changed even though the context did not", async () => {
+    const b = brain(new Scripted([executable()]));
+    const auth = authorizeFor(b.planFor("explain_check", "digest-A", b.estimateUsd()), { scope: "model", spendLimitUsd: 1 });
+    const result = await b.ask("draft_decision", "x", situation, registry(), {
+      compiled: compiled("digest-A"), authorization: auth,
+    });
+    expect(result.status).toBe("refused");
+  });
+
+  it("sends the compiled block ahead of the request", async () => {
+    const client = new Scripted([executable()]);
+    await brain(client).ask("choose_transform", "make it printable", situation, registry(), {
+      compiled: { rendered: "FOCUS: Rocket\n\nDECISION: matte", contextDigest: "d", includesRestricted: false },
+    });
+    expect(client.calls[0]!.user.indexOf("DECISION: matte")).toBeLessThan(client.calls[0]!.user.indexOf("make it printable"));
+  });
+
+  it("treats included restricted material as a restricted call for routing", async () => {
+    const resolver = { resolve: (_i: string, ctx: { hasRestrictedSources: boolean }) => ctx.hasRestrictedSources ? null : null };
+    const result = await brain(new Forbidden(), { resolver }).ask("draft_decision", "x", situation, registry(), {
+      compiled: { rendered: "…", contextDigest: "d", includesRestricted: true },
+    });
+    expect(result.status).toBe("gated");
+    if (result.status === "gated") expect(result.reason).toContain("restricted source");
   });
 });

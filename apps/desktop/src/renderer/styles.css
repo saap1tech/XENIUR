@@ -1277,3 +1277,22 @@ input[type="range"] { accent-color: var(--text); }
 .xr-model__verify { margin: 0; font-size: 12px; }
 .xr-model__verify.is-ok  { color: var(--ok); }
 .xr-model__verify.is-bad { color: var(--review); }
+
+/* ---------------------------------------------------- what the model will see */
+
+.xr-context {
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px;
+  padding: 18px 20px; display: grid; gap: 14px; max-width: 64ch;
+}
+.xr-context__head h3 { margin: 0 0 4px; font-family: var(--font-display); font-size: 19px; }
+.xr-context__meta { margin: 0; display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--dim); }
+.xr-context__groups { display: grid; gap: 10px; }
+.xr-context__group { display: grid; gap: 5px; }
+.xr-context__kind { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+.xr-context__excluded { border-top: 1px solid var(--line-soft); padding-top: 10px; display: grid; gap: 5px; }
+.xr-context__excluded ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.xr-context__excluded li { display: flex; gap: 10px; font-size: 13px; }
+.xr-context__left { color: var(--dim); text-decoration: line-through; text-decoration-color: var(--faint); }
+.xr-context__why { color: var(--faint); font-size: 12px; }
+.xr-context__restricted { margin: 0; font-size: 12px; color: var(--review); }
+.xr-context__actions { display: flex; gap: 8px; justify-content: flex-end; }

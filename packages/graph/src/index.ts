@@ -14,6 +14,7 @@ export { RecipeStore } from "./recipe-store.js";
 export { DecisionStore, renderBrief } from "./decisions.js";
 export { SupportStore } from "./support.js";
 export { impactOf } from "./impact.js";
+export { contextMaterialFor } from "./context-material.js";
 export { MetricsStore } from "./metrics.js";
 export { ConstraintStore } from "./constraints.js";
 export { ProcessStore } from "./process.js";

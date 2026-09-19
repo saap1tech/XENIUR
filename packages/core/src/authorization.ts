@@ -11,7 +11,9 @@ export interface PlanShape {
   estimatedUsd?: number;
 }
 
-/** Stable JSON so key order cannot change a digest. */
+/** Stable JSON so key order cannot change a digest. Exported: every digest in XENIUR uses it. */
+export function canonicalJson(value: unknown): string { return canonical(value); }
+
 function canonical(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;

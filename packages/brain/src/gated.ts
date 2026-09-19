@@ -1,4 +1,5 @@
-import type { Tool } from "@xeniur/core";
+import type { Authorization, PlanShape, Tool } from "@xeniur/core";
+import { assertAuthorizes } from "@xeniur/core";
 import type { RuntimeRegistry } from "./binding.js";
 import { bindOutcome, normalisePlan, type BindingProblem } from "./binding.js";
 import type { BrainContext } from "./context.js";
@@ -129,10 +130,33 @@ export class GatedBrain {
     return inputMTok * pricing.inputPerMTok + outputMTok * pricing.outputPerMTok;
   }
 
+  /**
+   * The plan a Brain call *is*, so an approval can be bound to it.
+   *
+   * The context digest sits in the arguments: change what the model would see and the digest
+   * changes, and an authorisation granted for the previous content no longer applies. Same
+   * mechanism as a changed price or destination on any other plan.
+   */
+  planFor(intent: BrainIntent, contextDigest: string | null, estimateUsd: number): PlanShape {
+    return {
+      tool: "brain.ask",
+      args: { intent, contextDigest: contextDigest ?? "none" },
+      destination: "model",
+      estimatedUsd: Number(estimateUsd.toFixed(6)),
+    };
+  }
+
   async ask(
     intent: BrainIntent, utterance: string, context: BrainContext, registry: RuntimeRegistry,
-    opts: { taskId?: string | null; allowGeneration?: boolean; hasRestrictedSources?: boolean } = {},
+    opts: {
+      taskId?: string | null; allowGeneration?: boolean; hasRestrictedSources?: boolean;
+      /** A compiled context: its rendered block is sent, its digest binds the approval. */
+      compiled?: { rendered: string; contextDigest: string; includesRestricted: boolean };
+      /** Consent for exactly this call — this intent, this context, this price. */
+      authorization?: Authorization;
+    } = {},
   ): Promise<GatedResult> {
+    if (opts.compiled?.includesRestricted) opts = { ...opts, hasRestrictedSources: true };
     /* 1 — the switch. */
     if (!this.opts.liveCallsEnabled) {
       return {
@@ -152,7 +176,9 @@ export class GatedBrain {
       };
     }
 
-    const user = renderRequest(context, utterance);
+    const user = opts.compiled
+      ? `${opts.compiled.rendered}\n\n${renderRequest(context, utterance)}`
+      : renderRequest(context, utterance);
 
     let attempts = 0;
     let spent = 0;
@@ -187,6 +213,16 @@ export class GatedBrain {
         routed.push({ model: r.id, escalation: r.escalation, because });
       }
       const estimate = this.estimateUsd(pricing);
+
+      // Consent, when offered, covers exactly this intent, this context and this price. A
+      // different context is a different call, and the approval does not carry over.
+      if (opts.authorization) {
+        try {
+          assertAuthorizes(opts.authorization, this.planFor(intent, opts.compiled?.contextDigest ?? null, estimate), "model");
+        } catch (err) {
+          return { status: "refused", reason: err instanceof Error ? err.message : String(err), problems: [] };
+        }
+      }
 
       /* 3 — reserve before dispatch, every attempt including repairs. */
       let hold: { id: string };

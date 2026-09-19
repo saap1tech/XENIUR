@@ -557,3 +557,44 @@ describe("one reason this could be wrong, asked before acceptance", () => {
     expect(() => g.decisions.accept(d.objectId, "Ada")).not.toThrow();
   });
 });
+
+describe("the graph offers the context compiler everything, generously", () => {
+  it("gathers linked decisions with their reasons, cited passages with rights, constraints and changes", async () => {
+    const { contextMaterialFor } = await import("./context-material.js");
+    const { objectId } = asset();
+
+    const copy = "22222222-2222-4222-8222-222222222222";
+    g.db.prepare(
+      `INSERT INTO sources (id, world_id, kind, title, retrieved_at, metadata)
+       VALUES ('11111111-1111-4111-8111-111111111111', ?, 'note', 'Client brief', ?, '{}')`,
+    ).run(worldId, Date.now());
+    g.db.prepare(
+      `INSERT INTO source_versions (id, source_id, retrieved_at, content_hash, text_blob_hash,
+                                    extractor, partial, rights)
+       VALUES (?, '11111111-1111-4111-8111-111111111111', ?, 'h', ?, 'verbatim/1', 0, 'restricted')`,
+    ).run(copy, Date.now(), g.putBlob(Buffer.from("Finish is matte throughout."), "text/plain", "txt"));
+
+    const d = g.decisions.create({
+      worldId, question: "Which finish?",
+      options: [{ key: "matte", label: "Matte", note: "" }, { key: "satin", label: "Satin", note: "" }],
+      chosenOption: "matte", rationale: "The brief says so.",
+    });
+    g.decisions.cite(d.objectId, { sourceVersionId: copy, atomObjectId: null, atomVersionId: null, relation: "supports", note: "" });
+    g.decisions.accept(d.objectId, "Ada", { steelman: "Matte can look flat outdoors." });
+    g.decisions.link({ fromObjectId: objectId, toObjectId: d.objectId, relation: "satisfies" });
+
+    const m = contextMaterialFor(g, objectId)! as {
+      focus: { title: string }; decisions: Array<Record<string, unknown>>; passages: Array<Record<string, unknown>>;
+    };
+    expect(m.focus.title).toBe("Rocket");
+    const dec = m.decisions.find((x) => x["objectId"] === d.objectId)!;
+    expect(dec["relatedToFocus"]).toBe(true);
+    expect(dec["chosenOption"]).toBe("Matte");
+    expect(dec["rejectedOptions"]).toEqual(["Satin"]);
+    expect((dec["assumptions"] as Array<{ kind: string }>).some((a) => a.kind === "steelman")).toBe(true);
+    // The passage is offered with its rights — the compiler decides whether it may travel.
+    expect(m.passages[0]!["rights"]).toBe("restricted");
+    expect(m.passages[0]!["text"]).toBe("Finish is matte throughout.");
+    expect(m.passages[0]!["supportReviewed"]).toBe(false);
+  });
+});

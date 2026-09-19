@@ -4,3 +4,4 @@ export * from "./compile.js";
 export * from "./layout.js";
 export * from "./gestures.js";
 export * from "./density.js";
+export * from "./context.js";

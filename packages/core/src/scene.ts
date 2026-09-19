@@ -26,6 +26,8 @@ export const SCENE_COMPONENTS = [
   "ClaimPair", "TrustStrip",
   // Your models
   "ModelSetup",
+  // What the model will see
+  "ContextReview",
 ] as const;
 export const SceneComponentSchema = z.enum(SCENE_COMPONENTS);
 export type SceneComponentName = z.infer<typeof SceneComponentSchema>;
@@ -348,6 +350,16 @@ const ModelSetupNode = z.object({
   firstRun: z.boolean().default(false),
 }).strict();
 
+/**
+ * "What the model will see" — the included items as chips, and what was left out and why,
+ * beside the cost. One confirmation covers content and cost, because they are one plan.
+ */
+const ContextReviewNode = z.object({
+  ...base, component: z.literal("ContextReview"),
+  /** The compiled context's digest — the key the plan is filed under. */
+  contextDigest: z.string().min(1),
+}).strict();
+
 const LeafNodeSchema = z.discriminatedUnion("component", [
   ObjectCardNode, InspectorNode, DocumentNode, TimelineNode, TaskProgressNode,
   ComparisonNode, BrowserNode, CodePreviewNode, Viewport3DNode, ApprovalDialogNode,
@@ -360,7 +372,7 @@ const LeafNodeSchema = z.discriminatedUnion("component", [
   ObjectOrbitNode, AffordanceRingNode, SpatialCanvasNode, ConstraintStripNode,
   RangeMeterNode, PriorityBalanceNode, PeopleChipsNode, CalendarNode, SchematicMapNode,
   ChoiceCardsNode, StepperNode, EvidenceMeterNode, EmptySlotNode, ReviewSheetNode,
-  ClaimPairNode, TrustStripNode, ModelSetupNode,
+  ClaimPairNode, TrustStripNode, ModelSetupNode, ContextReviewNode,
 ]);
 export type LeafSceneNode = z.infer<typeof LeafNodeSchema>;
 
