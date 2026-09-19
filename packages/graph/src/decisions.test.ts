@@ -468,3 +468,38 @@ describe("review travels in the direction the assertion was made", () => {
     expect(item!.because).toContain("was built to satisfy it");
   });
 });
+
+describe("a decision's cited passage starts unsettled", () => {
+  it("records an unresolved support row when a passage is cited, and shows nothing as sourced", () => {
+    const copy = "22222222-2222-4222-8222-222222222222";
+    g.db.prepare(
+      `INSERT INTO sources (id, world_id, kind, title, retrieved_at, metadata)
+       VALUES ('11111111-1111-4111-8111-111111111111', ?, 'paper', 'Seam study', ?, '{}')`,
+    ).run(worldId, Date.now());
+    g.db.prepare(
+      `INSERT INTO source_versions (id, source_id, retrieved_at, content_hash, text_blob_hash,
+                                    extractor, partial, rights)
+       VALUES (?, '11111111-1111-4111-8111-111111111111', ?, 'h', 'b', 'verbatim/1', 0, 'unknown')`,
+    ).run(copy, Date.now());
+
+    const d = g.decisions.create({
+      worldId, question: "Which seam method?",
+      options: [{ key: "taped", label: "Taped seams", note: "" }], chosenOption: "taped",
+    });
+    g.decisions.cite(d.objectId, {
+      sourceVersionId: copy, atomObjectId: null, atomVersionId: null,
+      relation: "supports", note: "paragraph 3",
+    });
+
+    const rows = g.support.of(d.objectId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.status).toBe("unresolved");
+    expect(rows[0]!.checkedBy).toBe("unchecked");
+    // The person said "supports" as the *relation*; whether the passage bears on it is a
+    // different fact, and it has not been established.
+    expect(g.support.summary(d.objectId).reviewedSupported).toBe(false);
+
+    g.support.review(rows[0]!.id, "supported");
+    expect(g.support.summary(d.objectId).reviewedSupported).toBe(true);
+  });
+});

@@ -14,6 +14,7 @@ import {
   ImpactReview, CausalPath, DecisionCard, SourceViewer, PreviewCard, InspectorQuestions,
   CompareForms, ThinkingTable, IdeaDrawer,
 } from "./components/workspace.jsx";
+import { ClaimPair, TrustStrip } from "./components/trust.jsx";
 import {
   ObjectOrbit, AffordanceRing, SpatialCanvas, ConstraintStrip, RangeMeter, PriorityBalance,
   PeopleChips, Calendar, SchematicMap, ChoiceCards, Stepper, EvidenceMeter, EmptySlot, ReviewSheet,
@@ -37,6 +38,7 @@ export const COMPONENT_REGISTRY: Readonly<Record<Exclude<SceneComponentName, "Ca
   CompareForms, ThinkingTable, IdeaDrawer,
   ObjectOrbit, AffordanceRing, SpatialCanvas, ConstraintStrip, RangeMeter, PriorityBalance,
   PeopleChips, Calendar, SchematicMap, ChoiceCards, Stepper, EvidenceMeter, EmptySlot, ReviewSheet,
+  ClaimPair, TrustStrip,
 };
 
 export interface Refusal { id: string; component: string; reason: string; }

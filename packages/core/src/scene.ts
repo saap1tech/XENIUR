@@ -22,6 +22,8 @@ export const SCENE_COMPONENTS = [
   "ObjectOrbit", "AffordanceRing", "SpatialCanvas", "ConstraintStrip", "RangeMeter",
   "PriorityBalance", "PeopleChips", "Calendar", "SchematicMap", "ChoiceCards", "Stepper",
   "EvidenceMeter", "EmptySlot", "ReviewSheet",
+  // Inspectable work
+  "ClaimPair", "TrustStrip",
 ] as const;
 export const SceneComponentSchema = z.enum(SCENE_COMPONENTS);
 export type SceneComponentName = z.infer<typeof SceneComponentSchema>;
@@ -312,6 +314,27 @@ const ReviewSheetNode = z.object({
   title: z.string().min(1), sections: z.array(z.string().min(1)).default([]),
 }).strict();
 
+/**
+ * Two claims and the relation a person asserted between them, with the passage behind the
+ * second. The contradiction view — "your claim ↕ their claim" — and the shape a critique takes.
+ */
+const ClaimPairNode = z.object({
+  ...base, component: z.literal("ClaimPair"),
+  leftObjectId: UuidSchema,
+  rightObjectId: UuidSchema,
+  relation: z.enum(["supports", "contradicts", "informed_by", "same_as", "derived_from"]),
+}).strict();
+
+/**
+ * "Can I trust this work?" — five cells of facts, never a tick. Lime only when settled.
+ */
+const TrustStripNode = z.object({
+  ...base, component: z.literal("TrustStrip"),
+  objectId: UuidSchema,
+  /** Compact for a folder card; full for a focused Object or a delivery. */
+  compact: z.boolean().default(false),
+}).strict();
+
 const LeafNodeSchema = z.discriminatedUnion("component", [
   ObjectCardNode, InspectorNode, DocumentNode, TimelineNode, TaskProgressNode,
   ComparisonNode, BrowserNode, CodePreviewNode, Viewport3DNode, ApprovalDialogNode,
@@ -324,6 +347,7 @@ const LeafNodeSchema = z.discriminatedUnion("component", [
   ObjectOrbitNode, AffordanceRingNode, SpatialCanvasNode, ConstraintStripNode,
   RangeMeterNode, PriorityBalanceNode, PeopleChipsNode, CalendarNode, SchematicMapNode,
   ChoiceCardsNode, StepperNode, EvidenceMeterNode, EmptySlotNode, ReviewSheetNode,
+  ClaimPairNode, TrustStripNode,
 ]);
 export type LeafSceneNode = z.infer<typeof LeafNodeSchema>;
 

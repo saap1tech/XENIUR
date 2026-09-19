@@ -11,6 +11,7 @@ import {
 import { BlobStore } from "./blobs.js";
 import { RecipeStore } from "./recipe-store.js";
 import { DecisionStore } from "./decisions.js";
+import { SupportStore } from "./support.js";
 import { ConstraintStore } from "./constraints.js";
 import { ProcessStore } from "./process.js";
 import { ActionReceiptStore } from "./action-receipts.js";
@@ -52,6 +53,8 @@ export class ObjectGraph {
   readonly recipes: RecipeStore;
   /** Decisions, their evidence, and the review edges that hang off them. */
   readonly decisions: DecisionStore;
+  /** Whether a cited passage bears on the claim or decision citing it. */
+  readonly support: SupportStore;
   /** Typed problem constraints, with values committed through Object versions. */
   readonly constraints: ConstraintStore;
   /** Inspectable process history. It never estimates unrecorded human effort. */
@@ -65,6 +68,7 @@ export class ObjectGraph {
       blobHashOf: (representationId) => this.getRepresentation(representationId)?.blobHash ?? null,
     });
     this.decisions = new DecisionStore(this);
+    this.support = new SupportStore(db);
     this.constraints = new ConstraintStore(db, this);
     this.process = new ProcessStore(db);
     this.actionReceipts = new ActionReceiptStore(db, this);

@@ -2,11 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ObjectGraph, ingredientsOf } from "@xeniur/graph";
-import { positionSelectorOf, quoteSelectorOf, timecodeOf } from "@xeniur/core";
+import { ObjectGraph, ideaDna, ingredientsOf } from "@xeniur/graph";
+import { emptyLocator, positionSelectorOf, quoteSelectorOf, timecodeOf } from "@xeniur/core";
 import {
-  SensemakingStore, buildThinkingMap, extractCandidates, extractMoments, resolvePassage,
-  similarity,
+  SensemakingStore, UnreviewedCitations, buildThinkingMap, extractCandidates, extractMoments,
+  resolvePassage, similarity,
 } from "./index.js";
 
 let dir: string, g: ObjectGraph, store: SensemakingStore, worldId: string;
@@ -459,5 +459,136 @@ describe("the map claims only what it computed", () => {
     const moves = store.movesOn(atom.objectId);
     expect(moves.map((m) => m.kind)).toContain("observed");
     expect(moves.every((m) => m.versionId !== null)).toBe(true);
+  });
+});
+
+describe("a citation existing and a citation supporting the claim are two facts", () => {
+  const capture = () => {
+    const source = store.recordSource({ worldId, kind: "paper", title: "Seam study", text: ARTICLE });
+    const version = store.latestVersionOf(source.id)!;
+    return { source, version };
+  };
+
+  it("starts every citation unresolved, and shows it as such", () => {
+    const { version } = capture();
+    const claim = store.createAtom({
+      worldId, atomType: "claim", text: "Welded seams fail first in the cold.",
+    });
+    const row = store.recordSupport({ claimObjectId: claim.objectId, sourceVersionId: version.id });
+
+    expect(row.status).toBe("unresolved");
+    expect(row.checkedBy).toBe("unchecked");
+    const summary = store.supportSummary(claim.objectId);
+    expect(summary.reviewedSupported).toBe(false);
+    expect(summary.hasUnreviewed).toBe(true);
+  });
+
+  it("shows a passage that contradicts the claim as contradicted, never as sourced", () => {
+    const { version } = capture();
+    const claim = store.createAtom({
+      worldId, atomType: "claim", text: "Welded seams outperform taped seams in the cold.",
+    });
+    const row = store.recordSupport({ claimObjectId: claim.objectId, sourceVersionId: version.id });
+    // The article says the opposite. The locator resolves; the claim is traceable; it is
+    // not supported, and the summary must never say it is.
+    store.reviewSupport(row.id, "contradicted", "the study found taped seams outperform");
+
+    const summary = store.supportSummary(claim.objectId);
+    expect(summary.counts.contradicted).toBe(1);
+    expect(summary.counts.supported).toBe(0);
+    expect(summary.reviewedSupported).toBe(false);
+    expect(summary.hasContradiction).toBe(true);
+  });
+
+  it("does not let a model's 'supported' settle anything", () => {
+    const { version } = capture();
+    const claim = store.createAtom({ worldId, atomType: "claim", text: "Seam failure causes most returns." });
+    store.recordSupport({
+      claimObjectId: claim.objectId, sourceVersionId: version.id,
+      status: "supported", checkedBy: "model",
+    });
+    const summary = store.supportSummary(claim.objectId);
+    expect(summary.counts.supported).toBe(1);        // the proposal is recorded
+    expect(summary.reviewedSupported).toBe(false);   // and it settles nothing
+    expect(summary.hasUnreviewed).toBe(true);
+  });
+
+  it("a single human contradiction outweighs any number of agreeing citations", () => {
+    const { version } = capture();
+    const claim = store.createAtom({ worldId, atomType: "claim", text: "Seam failure causes most returns." });
+    const a = store.recordSupport({ claimObjectId: claim.objectId, sourceVersionId: version.id });
+    const b = store.recordSupport({ claimObjectId: claim.objectId, sourceVersionId: version.id });
+    const c = store.recordSupport({ claimObjectId: claim.objectId, sourceVersionId: version.id });
+    store.reviewSupport(a.id, "supported");
+    store.reviewSupport(b.id, "supported");
+    store.reviewSupport(c.id, "contradicted");
+    expect(store.supportSummary(claim.objectId).reviewedSupported).toBe(false);
+  });
+
+  it("keeps an assertion with unreviewed citations a candidate", () => {
+    const { version } = capture();
+    const [proposed] = store.propose(worldId, version.id, [{
+      atomType: "claim", text: "Seam failure causes most warranty returns.",
+      locator: emptyLocator(), because: "proposed by a model",
+      stance: "assertion",
+      citations: [{ sourceVersionId: version.id, locator: emptyLocator(), proposedStatus: "supported" }],
+    }], "model/test");
+
+    expect(() => store.accept(proposed!.id)).toThrow(UnreviewedCitations);
+    expect(store.listAtoms(worldId)).toHaveLength(0);
+    expect(store.getCandidate(proposed!.id)!.state).toBe("proposed");
+  });
+
+  it("lets a person accept deliberately, and the citation stays visibly unsettled", () => {
+    const { version } = capture();
+    const [proposed] = store.propose(worldId, version.id, [{
+      atomType: "claim", text: "Seam failure causes most warranty returns.",
+      locator: emptyLocator(), because: "proposed by a model",
+      citations: [{ sourceVersionId: version.id, locator: emptyLocator(), proposedStatus: "supported" }],
+    }], "model/test");
+
+    const atom = store.accept(proposed!.id, { acceptUnreviewed: true })!;
+    const rows = store.supportOf(atom.objectId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.checkedBy).toBe("model");
+    expect(store.supportSummary(atom.objectId).reviewedSupported).toBe(false);
+  });
+
+  it("never calls a hypothesis unsupported", () => {
+    const { version } = capture();
+    const [proposed] = store.propose(worldId, version.id, [{
+      atomType: "claim", text: "I suspect the fins read better wider.",
+      locator: emptyLocator(), because: "the person said so",
+      stance: "hypothesis",
+      citations: [{ sourceVersionId: version.id, locator: emptyLocator(), proposedStatus: "unresolved" }],
+    }], "human");
+
+    // A hypothesis needs no source to stand on; acceptance is not gated on review.
+    const atom = store.accept(proposed!.id)!;
+    expect(atom.stance).toBe("hypothesis");
+    expect(SensemakingStore.isOwnStance(atom.stance)).toBe(true);
+  });
+
+  it("counts the person's own stances as their own in Idea DNA, and names unchecked assertions", () => {
+    const { version } = capture();
+    const opinion = store.createAtom({
+      worldId, atomType: "claim", text: "Orange reads better on camera.", stance: "opinion",
+      provenance: "human",
+    });
+    const assertion = store.createAtom({
+      worldId, atomType: "claim", text: "Seam failure causes most returns.",
+      sourceId: null, sourceVersionId: version.id, provenance: "imported",
+    });
+    store.recordSupport({ claimObjectId: assertion.objectId, sourceVersionId: version.id });
+
+    const dna = ideaDna(g, {
+      representationIds: [opinion, assertion].map((a) =>
+        g.currentState(a.objectId)!.forms[0]!.representationId),
+    });
+    const kinds = dna.statements.map((s) => s.kind);
+    expect(kinds).toContain("own_stances");
+    expect(kinds).toContain("assertions_unchecked");
+    expect(dna.statements.find((s) => s.kind === "assertions_unchecked")!.text)
+      .toContain("1 assertion cites sources that have not been checked");
   });
 });

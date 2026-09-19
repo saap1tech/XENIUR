@@ -89,6 +89,16 @@ export class DecisionStore {
     ).run(newId(), objectId, evidence.sourceVersionId, evidence.atomObjectId,
           atomVersionId, evidence.relation, evidence.note);
 
+    // Citing a passage says it was in view. Whether it *bears on* the decision is a separate
+    // fact nobody has established yet, so the support row starts unresolved — and the card
+    // shows an empty chip until a person reviews it.
+    if (evidence.sourceVersionId) {
+      this.graph.support.record({
+        claimObjectId: objectId, sourceVersionId: evidence.sourceVersionId,
+        status: "unresolved", checkedBy: "unchecked", note: evidence.note,
+      });
+    }
+
     // Citing an atom is an assertion about a relationship, so it becomes a review edge.
     // A later edit to that claim should make somebody look at this decision again — and
     // should never, on its own, rebuild anything.

@@ -1,9 +1,10 @@
 import type { LineageStep } from "@xeniur/graph";
 import type {
-  ActionRecord, Atom, Check, DecisionDetail, DnaReport, FrictionState, ImpactReport, Lane,
+  ActionRecord, Atom, Check, ClaimSupport, DecisionDetail, DnaReport, FrictionState, ImpactReport, Lane,
   ObjectState, PlanShape, ProcessProof, ReadinessReport, RebuildPlan, Representation, ResolvedPassage,
   SourceVersion, StepStatus, Task, ThinkingMap, ConstraintRecord, ConstraintValue,
 } from "@xeniur/core";
+import type { TrustFacts } from "@xeniur/core";
 import { formOf } from "@xeniur/core";
 
 export interface LineageView {
@@ -52,6 +53,10 @@ export interface SceneBindings {
   atoms?: Readonly<Record<string, Atom>>;
   /** A stored passage with its surrounding words, keyed by atom object id. */
   passages?: Readonly<Record<string, ResolvedPassage & { sourceTitle: string }>>;
+  /** Support rows per citing Object (claim or decision), keyed by the citing Object's id. */
+  support?: Readonly<Record<string, ClaimSupport[]>>;
+  /** Five cells of facts per Object, for the Trust Strip. */
+  trust?: Readonly<Record<string, TrustFacts>>;
   sourceVersions?: Readonly<Record<string, SourceVersion>>;
 
   /* The calm workspace */
@@ -109,6 +114,8 @@ export interface SceneBindings {
   onCompare?(objectId: string, formRole: string): void;
   onConvertToDecision?(atomObjectId: string): void;
   onLink?(fromObjectId: string, toObjectId: string): void;
+  /** A person reviews one citation. The only thing that settles it. */
+  onReviewSupport?(supportId: string, status: "supported" | "contradicted" | "ambiguous"): void;
   /** A drag or its keyboard twin only asks the host for proposals. */
   onGestureTarget?(sourceId: string, targetId: string): void;
   onChooseGesture?(proposalId: string): void;

@@ -324,3 +324,81 @@ describe("the interface speaks, rather than printing rows", () => {
     expect(out).toContain("stl");
   });
 });
+
+describe("support is shown as a glyph and a word, never colour alone", () => {
+  const support = (status: "supported" | "contradicted" | "ambiguous" | "unresolved",
+                   checkedBy: "human" | "model" | "unchecked") => ({
+    id: "99999999-9999-4999-8999-999999999999", claimObjectId: ATOM,
+    sourceVersionId: "55555555-5555-4555-8555-555555555555",
+    locator: { selectors: [] }, status, checkedBy, checkedAt: null, note: "", createdAt: 0,
+  });
+
+  it.each([
+    ["supported", "●"], ["contradicted", "◌"], ["ambiguous", "◐"], ["unresolved", "○"],
+  ] as const)("renders %s with its glyph and its word", (status, glyph) => {
+    const out = render({ id: "p", component: "ClaimPair", leftObjectId: OBJ, rightObjectId: ATOM, relation: "contradicts" },
+      bindings({ support: { [ATOM]: [support(status, "human")] } }));
+    expect(out).toContain(glyph);
+    expect(out).toContain(`>${status}<`);
+  });
+
+  it("marks a model's verdict as proposed, not settled", () => {
+    const out = render({ id: "p", component: "ClaimPair", leftObjectId: OBJ, rightObjectId: ATOM, relation: "supports" },
+      bindings({ support: { [ATOM]: [support("supported", "model")] } }));
+    expect(out).toContain("supported · proposed");
+    // A proposal still offers the person the review controls.
+    expect(out).toContain("Review this citation");
+  });
+
+  it("puts both claims and the relation on the page", () => {
+    const out = render({ id: "p", component: "ClaimPair", leftObjectId: OBJ, rightObjectId: ATOM, relation: "contradicts" });
+    expect(out).toContain("Rocket");
+    expect(out).toContain("Client brief, paragraph 3");
+    expect(out).toContain("contradicts");
+    expect(out).toContain("Your claim");
+    expect(out).toContain("Their claim");
+  });
+});
+
+describe("the Trust Strip is facts, and lime only when settled", () => {
+  const facts = (over: Partial<import("@xeniur/core").TrustFacts> = {}) => ({
+    objectId: OBJ,
+    support: { supported: 12, ambiguous: 2, unresolved: 3, contradicted: 1 },
+    evidence: { current: 6, total: 6 },
+    provenance: { human: 4, tool: 6, model: 2 },
+    actions: { receipted: 3, unknown: 0 },
+    cost: { usd: 0.04, escalations: 2 },
+    decisionsNeedingReview: 0,
+    settled: false,
+    ...over,
+  });
+  const strip = (t: ReturnType<typeof facts>) =>
+    render({ id: "t", component: "TrustStrip", objectId: OBJ, compact: false }, bindings({ trust: { [OBJ]: t } }));
+
+  it("shows five cells of counts and no tick", () => {
+    const out = strip(facts());
+    for (const label of ["Support", "Evidence", "Provenance", "Actions", "Cost"]) expect(out).toContain(label);
+    expect(out).toContain("6/6");
+    expect(out).toContain("$0.04");
+    expect(out).not.toContain("✓");
+    expect(out).not.toContain(">Ready<");
+  });
+
+  it("is graphite unless settled, and settled only on the strict condition", () => {
+    expect(strip(facts())).not.toContain("is-settled");
+    expect(strip(facts({
+      support: { supported: 12, ambiguous: 0, unresolved: 0, contradicted: 0 }, settled: true,
+    }))).toContain("is-settled");
+  });
+
+  it("reads as one sentence of facts to a screen reader", () => {
+    const out = strip(facts());
+    expect(out).toContain("12 supported, 3 unresolved, 1 contradicted, 2 ambiguous.");
+    expect(out).toContain("6 of 6 measurements current.");
+    expect(out).toContain("4 human, 6 tool, 2 model steps.");
+  });
+
+  it("shows unknown outcomes rather than folding them into receipted", () => {
+    expect(strip(facts({ actions: { receipted: 3, unknown: 1 } }))).toContain("1 unknown");
+  });
+});

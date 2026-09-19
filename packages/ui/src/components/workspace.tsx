@@ -4,6 +4,7 @@ import type {
 import { formRoleName, semanticTypeName, withArticle } from "@xeniur/core";
 import type { SceneBindings } from "../bindings.js";
 import { Button, Empty, Panel } from "./primitives.jsx";
+import { SupportChip } from "./trust.jsx";
 
 type Node<T extends LeafSceneNode["component"]> = Extract<LeafSceneNode, { component: T }>;
 
@@ -216,13 +217,25 @@ export function DecisionCard({ node, bindings }: { node: Node<"DecisionCard">; b
             {decision.evidence.map((e, i) => {
               const atom = e.atomObjectId ? bindings.states[e.atomObjectId] : undefined;
               const passage = e.atomObjectId ? bindings.passages?.[e.atomObjectId] : undefined;
+              const label = passage?.sourceTitle ?? atom?.properties.title ?? "a source";
+              // The support row for this citation, if a passage was cited. A chip with no
+              // support row is a relation somebody asserted, not a passage anybody checked.
+              const support = e.sourceVersionId
+                ? (bindings.support?.[decision.objectId] ?? []).find((s) => s.sourceVersionId === e.sourceVersionId)
+                : undefined;
               return (
                 <li key={i}>
-                  <button type="button" className={`xr-chip xr-chip--${e.relation}`}
-                    disabled={!e.atomObjectId}
-                    onClick={() => e.atomObjectId && bindings.onOpenSource?.(e.atomObjectId)}>
-                    {passage?.sourceTitle ?? atom?.properties.title ?? "a source"}
-                  </button>
+                  {support ? (
+                    <SupportChip support={support} label={label}
+                      onOpen={() => e.atomObjectId && bindings.onOpenSource?.(e.atomObjectId)}
+                      onReview={(status) => bindings.onReviewSupport?.(support.id, status)} />
+                  ) : (
+                    <button type="button" className={`xr-chip xr-chip--${e.relation}`}
+                      disabled={!e.atomObjectId}
+                      onClick={() => e.atomObjectId && bindings.onOpenSource?.(e.atomObjectId)}>
+                      {label}
+                    </button>
+                  )}
                 </li>
               );
             })}

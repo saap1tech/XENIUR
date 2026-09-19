@@ -123,3 +123,41 @@ export const withArticle = (noun: string): string => {
   const vowelSound = /^[aeiou]/i.test(noun) || /^(?:8|11|18)(?!\d)/.test(noun);
   return `${vowelSound ? "an" : "a"} ${noun}`;
 };
+
+/* ------------------------------------------------------------ trust facts */
+
+/**
+ * "Can I trust this work?" — answered by five cells of facts, never by a tick.
+ *
+ * Every number here is read from a table that already exists: claim_support, checks,
+ * the process ledger, action_receipts, spend. The strip is *settled* — and lime — in exactly
+ * one condition: every citation reviewed, every measurement current, no receipt unknown, no
+ * decision awaiting review. Anything less is graphite with semantic cells.
+ */
+export interface TrustFacts {
+  objectId: string;
+  support: { supported: number; ambiguous: number; unresolved: number; contradicted: number };
+  evidence: { current: number; total: number };
+  provenance: { human: number; tool: number; model: number };
+  actions: { receipted: number; unknown: number };
+  cost: { usd: number; escalations: number };
+  decisionsNeedingReview: number;
+  settled: boolean;
+}
+
+/** The sentence a screen reader hears for a Trust Strip. Facts, in order, no adjectives. */
+export function describeTrust(t: TrustFacts): string {
+  const s = t.support;
+  const parts = [
+    `${s.supported} supported, ${s.unresolved} unresolved, ${s.contradicted} contradicted` +
+      (s.ambiguous ? `, ${s.ambiguous} ambiguous` : "") + ".",
+    `${t.evidence.current} of ${t.evidence.total} measurements current.`,
+    `${t.provenance.human} human, ${t.provenance.tool} tool, ${t.provenance.model} model steps.`,
+    `${t.actions.receipted} actions receipted` + (t.actions.unknown ? `, ${t.actions.unknown} unknown.` : "."),
+    t.cost.usd > 0
+      ? `${(t.cost.usd * 100).toFixed(0)} cents` + (t.cost.escalations ? `, ${t.cost.escalations} escalations.` : ".")
+      : "No spend.",
+  ];
+  if (t.settled) parts.push("Settled.");
+  return parts.join(" ");
+}

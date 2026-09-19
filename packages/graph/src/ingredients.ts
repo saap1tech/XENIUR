@@ -203,6 +203,46 @@ export function ideaDna(
       count: external.length, representationIds: external,
     });
   }
+  // Stance and support are facts about atoms, so they only apply where the roots are atoms.
+  // Both statements are counted, never scored: an unchecked citation is not a failing grade,
+  // it is a thing nobody has looked at yet.
+  const atomRoots = summary.rootIds
+    .map((id) => graph.getRepresentation(id)?.objectId)
+    .filter((id): id is string => id !== undefined)
+    .filter((id) => graph.db.prepare(`SELECT 1 FROM atoms WHERE object_id = ?`).get(id) !== undefined);
+  if (atomRoots.length > 0) {
+    const unchecked = atomRoots.filter((id) => {
+      const stance = (graph.db.prepare(`SELECT stance FROM atoms WHERE object_id = ?`).get(id) as
+        { stance: string }).stance;
+      if (stance !== "assertion") return false;
+      const s = graph.support.summary(id);
+      return s.hasUnreviewed && !s.reviewedSupported;
+    });
+    if (unchecked.length > 0) {
+      statements.push({
+        kind: "assertions_unchecked",
+        text: `${unchecked.length} assertion${unchecked.length === 1 ? " cites" : "s cite"} sources that have not been checked`,
+        count: unchecked.length,
+        representationIds: summary.rootIds.filter((rid) =>
+          unchecked.includes(graph.getRepresentation(rid)?.objectId ?? "")),
+      });
+    }
+    const own = atomRoots.filter((id) => {
+      const stance = (graph.db.prepare(`SELECT stance FROM atoms WHERE object_id = ?`).get(id) as
+        { stance: string }).stance;
+      return stance !== "assertion";
+    });
+    if (own.length > 0) {
+      statements.push({
+        kind: "own_stances",
+        text: `${own.length} of your own ${own.length === 1 ? "opinion, hypothesis or direction is" : "opinions, hypotheses or directions are"} included`,
+        count: own.length,
+        representationIds: summary.rootIds.filter((rid) =>
+          own.includes(graph.getRepresentation(rid)?.objectId ?? "")),
+      });
+    }
+  }
+
   if (summary.modelTouchedSteps > 0) {
     statements.push({
       kind: "model_applied",

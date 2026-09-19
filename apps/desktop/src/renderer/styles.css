@@ -1098,3 +1098,107 @@ input[type="range"] { accent-color: var(--text); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; transition-duration: .001ms !important; }
 }
+
+/* ====================================================== inspectable work
+ *
+ * Support chips, the claim pair, and the Trust Strip. Every state carries a glyph
+ * and a word; colour is never the only signal. The Trust Strip is the one place in
+ * the product where trust is lime, and only when it is *settled*.
+ */
+
+/* ------------------------------------------------------------- support chip */
+
+.xr-support { display: inline-flex; align-items: center; gap: 6px; }
+.xr-support__open {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+  padding: 3px 10px 3px 8px; font-size: 12px; color: var(--text); cursor: pointer;
+  font-family: var(--font-sans);
+}
+.xr-support__open:hover { border-color: var(--dim); }
+.xr-support__glyph { font-size: 11px; line-height: 1; }
+.xr-support__word { color: var(--dim); font-size: 11px; }
+/* The semantic ramp, never the lime. Unresolved is an outline: deliberately empty. */
+.xr-support--supported    .xr-support__glyph { color: var(--ok); }
+.xr-support--contradicted .xr-support__glyph { color: var(--review); }
+.xr-support--contradicted .xr-support__open  { border-color: var(--review); }
+.xr-support--ambiguous    .xr-support__glyph { color: var(--blocked); }
+.xr-support--unresolved   .xr-support__glyph { color: var(--faint); }
+.xr-support--unresolved   .xr-support__open  { border-style: dashed; }
+.xr-support.is-proposed   .xr-support__word  { font-style: italic; }
+
+.xr-support__review { display: inline-flex; gap: 2px; }
+.xr-support__review button {
+  background: none; border: 1px solid var(--line-soft); border-radius: 3px;
+  padding: 1px 7px; font-size: 11px; color: var(--dim); cursor: pointer;
+}
+.xr-support__review button:hover { color: var(--text); border-color: var(--dim); }
+
+/* -------------------------------------------------------------- claim pair */
+
+.xr-pair {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 18px; align-items: start; padding: 18px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 4px;
+}
+.xr-pair__claim { display: grid; gap: 8px; }
+.xr-pair__claim p { margin: 0; font-family: var(--font-display); font-size: 18px; line-height: 1.3; }
+.xr-pair__who {
+  font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint);
+  font-family: var(--font-sans);
+}
+.xr-pair__relation {
+  display: grid; justify-items: center; align-self: center; gap: 2px; color: var(--dim);
+}
+.xr-pair__arrow { font-size: 22px; line-height: 1; }
+.xr-pair__word { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+.xr-pair--contradicts .xr-pair__relation { color: var(--review); }
+.xr-pair--supports    .xr-pair__relation { color: var(--ok); }
+.xr-pair__passage {
+  margin: 4px 0 0; padding: 10px 12px; border-left: 2px solid var(--line);
+  background: var(--surface-2); display: grid; gap: 4px;
+}
+.xr-pair__source { font-size: 11px; color: var(--faint); }
+.xr-pair__exact { font-size: 14px; line-height: 1.55; }
+.xr-pair__support { display: flex; flex-wrap: wrap; gap: 6px; }
+@media (max-width: 760px) {
+  .xr-pair { grid-template-columns: minmax(0, 1fr); }
+  .xr-pair__relation { justify-items: start; }
+  .xr-pair__arrow { transform: rotate(90deg); }
+}
+
+/* -------------------------------------------------------------- trust strip */
+
+.xr-trust {
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  border: 1px solid var(--line); border-radius: 4px; background: var(--surface);
+  overflow: hidden; font-family: var(--font-sans);
+}
+.xr-trust__cell {
+  padding: 9px 12px; border-right: 1px solid var(--line-soft); display: grid; gap: 3px; min-width: 0;
+}
+.xr-trust__cell:last-of-type { border-right: 0; }
+.xr-trust__label {
+  font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint);
+}
+.xr-trust__value { font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.xr-trust__glyphs { display: inline-flex; gap: 10px; font-family: var(--font-mono); font-size: 12px; }
+.xr-trust__glyphs .is-supported    { color: var(--ok); }
+.xr-trust__glyphs .is-contradicted { color: var(--review); }
+.xr-trust__glyphs .is-ambiguous    { color: var(--blocked); }
+.xr-trust__glyphs .is-unresolved   { color: var(--faint); }
+.xr-trust__value .is-unknown { color: var(--review); }
+.xr-trust__note {
+  grid-column: 1 / -1; padding: 6px 12px; border-top: 1px solid var(--line-soft);
+  font-size: 12px; color: var(--review);
+}
+.xr-trust--compact .xr-trust__cell { padding: 5px 9px; }
+.xr-trust--compact .xr-trust__label { display: none; }
+/* Settled: everything reviewed, current, receipted, nothing awaiting review. The second of
+   the three lime uses, and the only place trust is lime. It does not animate; it settles. */
+.xr-trust.is-settled { border-color: var(--signal); }
+.xr-trust.is-settled .xr-trust__label { color: var(--signal); }
+@media (max-width: 760px) {
+  .xr-trust { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .xr-trust__cell { border-bottom: 1px solid var(--line-soft); }
+}

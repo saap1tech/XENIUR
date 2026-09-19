@@ -815,6 +815,43 @@ CREATE TABLE action_receipts (
 CREATE INDEX idx_action_receipts_destination ON action_receipts(destination, at);
 `;
 
+
+/**
+ * Migration 15 — a citation existing and a citation supporting the claim are two facts.
+ *
+ * M3 made a claim traceable: it resolves to stored words at a locator. That was then read as
+ * "sourced", and it is not. The passage may contradict the claim, bear on it obliquely, or
+ * say nothing relevant. claim_support records the second fact, per citation, with who
+ * checked it — and a model's check never settles anything on its own.
+ *
+ * stance records what kind of statement an atom is. An opinion or a hypothesis does not need
+ * a source and is not "unsupported"; it is labelled for what it is. Only an assertion is ever
+ * shown as lacking support.
+ */
+const CLAIM_SUPPORT = `
+CREATE TABLE claim_support (
+  id                TEXT PRIMARY KEY,
+  claim_object_id   TEXT NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+  source_version_id TEXT NOT NULL REFERENCES source_versions(id) ON DELETE CASCADE,
+  locator           TEXT NOT NULL DEFAULT '{}',
+  status            TEXT NOT NULL DEFAULT 'unresolved',  -- supported | contradicted | ambiguous | unresolved
+  checked_by        TEXT NOT NULL DEFAULT 'unchecked',   -- human | model | unchecked
+  checked_at        INTEGER,
+  note              TEXT NOT NULL DEFAULT '',
+  created_at        INTEGER NOT NULL
+);
+CREATE INDEX idx_claim_support_claim  ON claim_support(claim_object_id);
+CREATE INDEX idx_claim_support_source ON claim_support(source_version_id);
+
+-- Existing atoms were all captured as claims about the world; that is what they are.
+ALTER TABLE atoms ADD COLUMN stance TEXT NOT NULL DEFAULT 'assertion';
+
+-- A proposal may offer citations for a claim before anyone has checked them. Kept on the
+-- candidate so that accepting the claim can insist on a review first.
+ALTER TABLE capture_candidates ADD COLUMN stance    TEXT NOT NULL DEFAULT 'assertion';
+ALTER TABLE capture_candidates ADD COLUMN citations TEXT NOT NULL DEFAULT '[]';
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: INIT },
   { version: 2, name: "object_model", sql: OBJECT_MODEL },
@@ -830,4 +867,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 12, name: "process_provenance", sql: PROCESS_PROVENANCE },
   { version: 13, name: "creator_layer", sql: CREATOR_LAYER },
   { version: 14, name: "action_receipts", sql: ACTION_RECEIPTS },
+  { version: 15, name: "claim_support", sql: CLAIM_SUPPORT },
 ];

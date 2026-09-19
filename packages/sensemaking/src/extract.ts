@@ -1,4 +1,4 @@
-import type { AtomType, Locator, SourceKind } from "@xeniur/core";
+import type { AtomType, Locator, ProposedCitation, SourceKind, Stance } from "@xeniur/core";
 import { textLocator, timeLocator } from "@xeniur/core";
 import { contextAround } from "./locator.js";
 
@@ -8,6 +8,10 @@ export interface Candidate {
   locator: Locator;
   /** Which rule matched, shown to the person so they can judge the suggestion. */
   because: string;
+  /** What kind of statement the proposer says this is. Defaults to an assertion. */
+  stance?: Stance;
+  /** Citations offered in support, none settled until a person reviews them. */
+  citations?: ProposedCitation[];
 }
 
 /**

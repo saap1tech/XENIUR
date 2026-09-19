@@ -113,6 +113,10 @@ export function rootOverlap(a: readonly string[], b: readonly string[]): number 
 export const ORIGIN_STATEMENTS = [
   "all_roots_generated", "origin_unknown", "personal_observations",
   "external_sources", "model_applied",
+  /** N assertions cite passages nobody has reviewed. Traceable, not yet supported. */
+  "assertions_unchecked",
+  /** N of the person's own opinions, hypotheses or directions — counted, never "unsupported". */
+  "own_stances",
 ] as const;
 export type OriginStatementKind = (typeof ORIGIN_STATEMENTS)[number];
 

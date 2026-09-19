@@ -1,9 +1,12 @@
 import { createHash } from "node:crypto";
 import type {
-  Atom, AtomLink, AtomType, CandidateRecord, CandidateState, FrictionState, Lane, Locator,
-  MoveKind, Relation, ResolvedPassage, Rights, Source, SourceKind, SourceVersion,
+  Atom, AtomLink, AtomType, CandidateRecord, CandidateState, ClaimSupport, FrictionState, Lane,
+  Locator, MoveKind, ProposedCitation, Relation, ResolvedPassage, Rights, Source, SourceKind,
+  SourceVersion, Stance, SupportChecker, SupportStatus, SupportSummary,
 } from "@xeniur/core";
-import { FRICTION_PROMPTS, LocatorSchema, emptyLocator, newId, now } from "@xeniur/core";
+import {
+  FRICTION_PROMPTS, LocatorSchema, OWN_STANCES, emptyLocator, newId, now,
+} from "@xeniur/core";
 import type { ObjectGraph } from "@xeniur/graph";
 import type { Candidate } from "./extract.js";
 import { normaliseText, resolvePassage } from "./locator.js";
@@ -16,7 +19,8 @@ export interface SensemakingOptions {
 interface AtomRow {
   object_id: string; atom_type: string; source_id: string | null;
   source_version_id: string | null; locator: string;
-  confidence: number | null; lane: string | null; extraction: string; stated_at: number;
+  confidence: number | null; lane: string | null; extraction: string; stance: string;
+  stated_at: number;
 }
 
 const parseLocator = (raw: string): Locator =>
@@ -211,6 +215,8 @@ export class SensemakingStore {
     sourceId?: string | null; sourceVersionId?: string | null;
     locator?: Locator; confidence?: number | null;
     lane?: Lane | null; extraction?: Atom["extraction"];
+    /** What kind of statement this is. Defaults to an assertion about the world. */
+    stance?: Stance;
     /** Whose thinking this is. A person's own observation is not an import. */
     provenance?: "human" | "imported";
   }): Atom {
@@ -243,15 +249,16 @@ export class SensemakingStore {
         sourceVersionId: input.sourceVersionId ?? null,
         locator: input.locator ?? emptyLocator(), confidence: input.confidence ?? null,
         lane: input.lane ?? null, extraction: input.extraction ?? "manual",
+        stance: input.stance ?? "assertion",
         statedAt: now(), text: input.text,
       };
       this.graph.db.prepare(
         `INSERT INTO atoms (object_id, atom_type, source_id, source_version_id, locator,
-                            confidence, lane, extraction, stated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                            confidence, lane, extraction, stance, stated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(objectId, atom.atomType, atom.sourceId, atom.sourceVersionId,
             JSON.stringify(atom.locator), atom.confidence, atom.lane, atom.extraction,
-            atom.statedAt);
+            atom.stance, atom.statedAt);
       const sourceVersion = atom.sourceVersionId ? this.getSourceVersion(atom.sourceVersionId) : null;
       this.graph.process.record({
         objectId, versionId: this.graph.currentState(objectId)?.versionId ?? null,
@@ -280,17 +287,20 @@ export class SensemakingStore {
   ): CandidateRecord[] {
     const insert = this.graph.db.prepare(
       `INSERT INTO capture_candidates (id, world_id, source_version_id, atom_type, text, locator,
-                               because, extractor, state, accepted_object_id, decided_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'proposed', NULL, NULL, ?)`,
+                               because, extractor, state, accepted_object_id, decided_at, created_at,
+                               stance, citations)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'proposed', NULL, NULL, ?, ?, ?)`,
     );
     return this.graph.db.transaction(() => candidates.map((c) => {
       const record: CandidateRecord = {
         id: newId(), worldId, sourceVersionId, atomType: c.atomType, text: c.text,
         locator: c.locator, because: c.because, extractor, state: "proposed",
+        stance: c.stance ?? "assertion", citations: c.citations ?? [],
         acceptedObjectId: null, decidedAt: null, createdAt: now(),
       };
       insert.run(record.id, worldId, sourceVersionId, record.atomType, record.text,
-                 JSON.stringify(record.locator), record.because, extractor, record.createdAt);
+                 JSON.stringify(record.locator), record.because, extractor, record.createdAt,
+                 record.stance, JSON.stringify(record.citations));
       return record;
     }))();
   }
@@ -313,9 +323,28 @@ export class SensemakingStore {
    * Editing the text before accepting is recorded as `edited` rather than `accepted`, so
    * the atom's own wording is never mistaken for the source's.
    */
-  accept(candidateId: string, edit?: { text?: string; atomType?: AtomType }): Atom | null {
+  /**
+   * Turns one suggestion into an atom, on a person's say-so.
+   *
+   * An assertion that arrives with citations none of which a person has reviewed stays a
+   * candidate: a model's opinion that a passage supports a claim is a proposal, and turning it
+   * into a sourced atom would be exactly the quiet upgrade this table exists to prevent. The
+   * person may accept anyway with `acceptUnreviewed`, and the citations are then recorded as
+   * unresolved rather than dropped — the chips stay visibly empty.
+   */
+  accept(
+    candidateId: string,
+    edit?: { text?: string; atomType?: AtomType; stance?: Stance; acceptUnreviewed?: boolean },
+  ): Atom | null {
     const c = this.getCandidate(candidateId);
     if (!c || c.state !== "proposed") return null;
+
+    // A candidate's citations are unreviewed by definition — a proposed status is the
+    // proposer's opinion, not a review. So the question is only whether there are any.
+    const stance = edit?.stance ?? c.stance;
+    if (stance === "assertion" && c.citations.length > 0 && !edit?.acceptUnreviewed) {
+      throw new UnreviewedCitations(candidateId, c.citations.length);
+    }
 
     return this.graph.db.transaction(() => {
       const changed = edit?.text !== undefined && edit.text !== c.text;
@@ -327,14 +356,49 @@ export class SensemakingStore {
         // An edited quote is the person's wording, so it stops claiming to be a quotation.
         locator: changed ? emptyLocator() : c.locator,
         extraction: changed ? "manual" : "heuristic",
+        stance,
         provenance: changed ? "human" : "imported",
       });
+      // Proposed citations become support rows. A model's proposed status is kept as the
+      // model's, and the row stays unsettled until a person looks.
+      for (const cite of c.citations) {
+        this.recordSupport({
+          claimObjectId: atom.objectId, sourceVersionId: cite.sourceVersionId,
+          locator: cite.locator, status: cite.proposedStatus, checkedBy: "model",
+        });
+      }
       this.graph.db.prepare(
         `UPDATE capture_candidates SET state = ?, accepted_object_id = ?, decided_at = ? WHERE id = ?`,
       ).run(changed ? "edited" : "accepted", atom.objectId, now(), candidateId);
       return atom;
     })();
   }
+
+  /* ----------------------------------------------------------- claim support */
+
+  /** Records whether a cited passage bears on a claim. Delegates to the graph's SupportStore. */
+  recordSupport(input: {
+    claimObjectId: string; sourceVersionId: string; locator?: Locator;
+    status?: SupportStatus; checkedBy?: SupportChecker; note?: string;
+  }): ClaimSupport {
+    return this.graph.support.record(input);
+  }
+
+  /** A person's review of one citation — the only thing that settles it. Recorded as a move. */
+  reviewSupport(supportId: string, status: SupportStatus, note = ""): ClaimSupport | null {
+    const row = this.graph.support.review(supportId, status, note);
+    if (row) {
+      this.#recordMove(row.claimObjectId, status === "contradicted" ? "challenged" : "rated",
+        `support reviewed: ${status}`);
+    }
+    return row;
+  }
+
+  supportOf(claimObjectId: string): ClaimSupport[] { return this.graph.support.of(claimObjectId); }
+  supportSummary(claimObjectId: string): SupportSummary { return this.graph.support.summary(claimObjectId); }
+
+  /** Whether an atom speaks for the person rather than about the world. */
+  static isOwnStance(stance: Stance): boolean { return OWN_STANCES.includes(stance); }
 
   /** Rejecting is kept, not deleted: what a person threw away says something about them. */
   reject(candidateId: string): void {
@@ -361,7 +425,8 @@ export class SensemakingStore {
       sourceId: r.source_id, sourceVersionId: r.source_version_id,
       locator: parseLocator(r.locator),
       confidence: r.confidence, lane: (r.lane as Lane | null) ?? null,
-      extraction: r.extraction as Atom["extraction"], statedAt: r.stated_at,
+      extraction: r.extraction as Atom["extraction"],
+      stance: (r.stance as Stance) ?? "assertion", statedAt: r.stated_at,
       text: this.#textOf(r.object_id),
     };
   }
@@ -534,8 +599,37 @@ function toCandidate(r: Record<string, unknown>): CandidateRecord {
     locator: parseLocator(r["locator"] as string),
     because: r["because"] as string, extractor: r["extractor"] as string,
     state: r["state"] as CandidateState,
+    stance: ((r["stance"] as string | undefined) ?? "assertion") as Stance,
+    citations: parseCitations(r["citations"] as string | undefined),
     acceptedObjectId: (r["accepted_object_id"] as string | null) ?? null,
     decidedAt: (r["decided_at"] as number | null) ?? null,
     createdAt: r["created_at"] as number,
   };
+}
+
+function parseCitations(raw: string | undefined): ProposedCitation[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as Array<Record<string, unknown>>;
+    return parsed.map((c) => ({
+      sourceVersionId: c["sourceVersionId"] as string,
+      locator: LocatorSchema.parse(c["locator"] ?? {}) as Locator,
+      proposedStatus: ((c["proposedStatus"] as string | undefined) ?? "unresolved") as SupportStatus,
+    }));
+  } catch { return []; }
+}
+
+/**
+ * Raised when an assertion would be accepted on citations nobody has reviewed.
+ *
+ * Not a failure: the claim is still there as a candidate. The person may review the citations
+ * or accept deliberately with `acceptUnreviewed`, in which case the chips stay visibly empty.
+ */
+export class UnreviewedCitations extends Error {
+  readonly code = "unreviewed_citations" as const;
+  constructor(readonly candidateId: string, readonly count: number) {
+    super(`this assertion cites ${count} passage${count === 1 ? "" : "s"} nobody has reviewed yet — ` +
+          `review them, or accept it knowing the citations stay unresolved`);
+    this.name = "UnreviewedCitations";
+  }
 }

@@ -90,6 +90,14 @@ export type CandidateState = z.infer<typeof CandidateStateSchema>;
  * it, rejects it or edits it — and the record of that decision is kept, because "XENIUR
  * proposed this and I rejected it" is information about the person's thinking.
  */
+/** A citation a proposal offers for a claim, before anyone has checked it. */
+export interface ProposedCitation {
+  sourceVersionId: string;
+  locator: Locator;
+  /** A model's opinion of whether the passage bears on the claim. Never final. */
+  proposedStatus: SupportStatus;
+}
+
 export interface CandidateRecord {
   id: string;
   worldId: string;
@@ -97,6 +105,10 @@ export interface CandidateRecord {
   atomType: AtomType;
   text: string;
   locator: Locator;
+  /** What kind of statement the proposal says this is. */
+  stance: Stance;
+  /** Citations offered in support, each still unresolved until a person reviews it. */
+  citations: ProposedCitation[];
   /** Which rule matched, in the words shown to the person. */
   because: string;
   extractor: string;
@@ -236,6 +248,78 @@ export const EXTRACTION_METHODS = ["manual", "heuristic", "model"] as const;
 export const ExtractionMethodSchema = z.enum(EXTRACTION_METHODS);
 export type ExtractionMethod = z.infer<typeof ExtractionMethodSchema>;
 
+/* ----------------------------------------------------------------- stance */
+
+/**
+ * What kind of statement an atom is.
+ *
+ * Not everything a person keeps is an assertion about the world. An opinion, a hypothesis, an
+ * observation of their own, a synthesis, a creative direction — each is legitimate and none
+ * needs a source to stand on. Demanding one would be the discipline misapplied: "I think the
+ * orange reads better on camera" is not unsupported, it is a preference, and it is labelled
+ * as one. Only an `assertion` is shown as unsupported when nothing bears on it.
+ */
+export const STANCES = [
+  "assertion", "opinion", "hypothesis", "observation", "synthesis", "direction",
+] as const;
+export const StanceSchema = z.enum(STANCES);
+export type Stance = z.infer<typeof StanceSchema>;
+
+/** The stances that speak for the person rather than about the world. */
+export const OWN_STANCES: readonly Stance[] = ["opinion", "hypothesis", "observation", "synthesis", "direction"];
+
+/* ---------------------------------------------------------- claim support */
+
+/**
+ * Whether a cited passage actually bears on the claim that cites it.
+ *
+ * Traceability — a claim resolves to stored words at a locator — was mistaken for support.
+ * They are two facts. The passage might contradict the claim, touch it only obliquely, or
+ * say nothing relevant. A citation *existing* and a citation *supporting the assertion* are
+ * recorded separately, and only the second one is ever shown as green.
+ */
+export const SUPPORT_STATUSES = ["supported", "contradicted", "ambiguous", "unresolved"] as const;
+export const SupportStatusSchema = z.enum(SUPPORT_STATUSES);
+export type SupportStatus = z.infer<typeof SupportStatusSchema>;
+
+/** Who checked. A model may propose; it does not settle. */
+export const SupportCheckerSchema = z.enum(["human", "model", "unchecked"]);
+export type SupportChecker = z.infer<typeof SupportCheckerSchema>;
+
+export const ClaimSupportSchema = z.object({
+  id: UuidSchema,
+  claimObjectId: UuidSchema,
+  /** The exact stored copy the citation points into. */
+  sourceVersionId: UuidSchema,
+  locator: LocatorSchema.default({ selectors: [] }),
+  status: SupportStatusSchema.default("unresolved"),
+  checkedBy: SupportCheckerSchema.default("unchecked"),
+  checkedAt: TimestampSchema.nullable().default(null),
+  note: z.string().default(""),
+  createdAt: TimestampSchema,
+});
+export type ClaimSupport = z.infer<typeof ClaimSupportSchema>;
+
+/** The counts a Trust Strip cell and a source chip are drawn from. */
+export interface SupportSummary {
+  claimObjectId: string;
+  counts: Record<SupportStatus, number>;
+  /** True only when at least one citation is human-reviewed as supported and none contradicts. */
+  reviewedSupported: boolean;
+  /** True when a citation exists that nobody has checked. */
+  hasUnreviewed: boolean;
+  /** True when any citation, human- or model-checked, contradicts the claim. */
+  hasContradiction: boolean;
+}
+
+/** The words shown beside each state. Colour is never the only signal. */
+export const SUPPORT_GLYPHS: Record<SupportStatus, { glyph: string; word: string }> = {
+  supported:    { glyph: "●", word: "supported" },
+  ambiguous:    { glyph: "◐", word: "ambiguous" },
+  unresolved:   { glyph: "○", word: "unresolved" },
+  contradicted: { glyph: "◌", word: "contradicted" },
+};
+
 export const AtomSchema = z.object({
   objectId: UuidSchema,
   atomType: AtomTypeSchema,
@@ -247,6 +331,8 @@ export const AtomSchema = z.object({
   confidence: z.number().min(0).max(1).nullable().default(null),
   lane: LaneSchema.nullable().default(null),
   extraction: ExtractionMethodSchema.default("manual"),
+  /** What kind of statement this is. Only an assertion is ever "unsupported". */
+  stance: StanceSchema.default("assertion"),
   statedAt: TimestampSchema,
   /** The text itself, carried alongside for convenience; it lives as a form. */
   text: z.string().default(""),

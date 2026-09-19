@@ -1,4 +1,4 @@
-export { SensemakingStore } from "./store.js";
+export { SensemakingStore, UnreviewedCitations } from "./store.js";
 export type { SensemakingOptions } from "./store.js";
 export { buildThinkingMap } from "./thinking-map.js";
 export {
