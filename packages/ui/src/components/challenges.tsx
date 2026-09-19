@@ -1,7 +1,7 @@
 import type { ChallengeRecord, Compliance, EntryRecord, LeafSceneNode } from "@xeniur/core";
 import { AI_POLICY_WORDS, COMPLIANCE_GLYPHS } from "@xeniur/core";
 import type { SceneBindings } from "../bindings.js";
-import { Button } from "./primitives.jsx";
+import { Button, Tag } from "./primitives.jsx";
 
 type Node<T extends LeafSceneNode["component"]> = Extract<LeafSceneNode, { component: T }>;
 
@@ -94,15 +94,15 @@ function Entry({ entry, bindings }: { entry: EntryRecord; bindings: SceneBinding
 
 /** The policy as a fully rounded tag: glyph, then the word. Colour is never alone. */
 export function PolicyTag({ policy }: { policy: ChallengeRecord["rules"]["aiPolicy"] }) {
-  return <span className={`xr-tag xr-tag--policy xr-tag--policy-${policy}`}>◷ {AI_POLICY_WORDS[policy].label}</span>;
+  return <Tag variant="blocked">◷ {AI_POLICY_WORDS[policy].label}</Tag>;
 }
 
 export function ComplianceTag({ compliance }: { compliance: Compliance }) {
   const g = COMPLIANCE_GLYPHS[compliance.verdict];
   return (
-    <span className={`xr-tag xr-tag--compliance is-${compliance.verdict}`} role="status">
+    <Tag role="status" variant={compliance.verdict === "complies" ? "ok" : compliance.verdict === "violates" ? "review" : "blocked"}>
       <span aria-hidden="true">{g.glyph}</span> {g.word}
-    </span>
+    </Tag>
   );
 }
 

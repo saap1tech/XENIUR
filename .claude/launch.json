@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "renderer-preview", "runtimeExecutable": "npx", "runtimeArgs": ["-y", "serve", "-l", "5177", "apps/desktop/out/renderer"], "port": 5177 }
+  ]
+}

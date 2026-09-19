@@ -588,8 +588,8 @@ describe("ChallengeBoard", () => {
   it("an empty record renders the record does not say — never ready green", () => {
     const html = board([entry("insufficient_record")]);
     expect(html).toContain("the record does not say");
-    expect(html).toContain("is-insufficient_record");
-    expect(html).not.toContain("is-complies");
+    expect(html).toContain("xr-tag--blocked");
+    expect(html).not.toContain("xr-tag--ok");
   });
 
   it("a violation names the violating event beside the tag", () => {
@@ -640,9 +640,9 @@ describe("SupportMap", () => {
 
   it("puts a hypothesis in the author's own lane, never in unresolved", () => {
     const html = map();
-    const own = html.slice(html.indexOf("xr-lane--own"));
+    const own = html.slice(html.indexOf("xr-smlane--own"));
     expect(own).toContain("The margin is probably worth paying.");
-    const unresolved = html.slice(html.indexOf("xr-lane--unresolved"), html.indexOf("xr-lane--contradicted"));
+    const unresolved = html.slice(html.indexOf("xr-smlane--unresolved"), html.indexOf("xr-smlane--contradicted"));
     expect(unresolved).not.toContain("The margin");
   });
 
@@ -652,8 +652,8 @@ describe("SupportMap", () => {
 
   it("a lens can show a subset of lanes", () => {
     const html = map(["unresolved", "ambiguous"]);
-    expect(html).not.toContain("xr-lane--supported");
-    expect(html).toContain("xr-lane--unresolved");
+    expect(html).not.toContain("xr-smlane--supported");
+    expect(html).toContain("xr-smlane--unresolved");
   });
 });
 

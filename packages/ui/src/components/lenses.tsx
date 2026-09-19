@@ -29,10 +29,10 @@ export function SupportMap({ node, bindings }: { node: Node<"SupportMap">; bindi
       </header>
       <div className="xr-supportmap__lanes" style={{ gridTemplateColumns: `repeat(${lanes.length}, minmax(0, 1fr))` }}>
         {lanes.map((lane) => (
-          <div key={lane} className={`xr-lane xr-lane--${lane}${hidden.has(lane) ? " is-hidden" : ""}`}>
-            <button type="button" className="xr-lane__head" aria-pressed={!hidden.has(lane)} onClick={() => toggle(lane)}>
+          <div key={lane} className={`xr-smlane xr-smlane--${lane}${hidden.has(lane) ? " is-hidden" : ""}`}>
+            <button type="button" className="xr-smlane__head" aria-pressed={!hidden.has(lane)} onClick={() => toggle(lane)}>
               <span aria-hidden="true">{lane === "own" ? "·" : g[lane].glyph}</span> {SUPPORT_LANE_WORDS[lane]}
-              <span className="xr-lane__n xr-mono">{map.lanes[lane]}</span>
+              <span className="xr-smlane__n xr-mono">{map.lanes[lane]}</span>
             </button>
             {!hidden.has(lane) && map.claims.filter((c) => c.lane === lane).map((c) => (
               <article key={c.objectId} className="xr-claimcard" draggable

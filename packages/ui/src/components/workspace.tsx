@@ -3,7 +3,7 @@ import type {
 } from "@xeniur/core";
 import { formRoleName, semanticTypeName, withArticle } from "@xeniur/core";
 import type { SceneBindings } from "../bindings.js";
-import { Button, Empty, Panel } from "./primitives.jsx";
+import { Tag, Button, Empty, Panel } from "./primitives.jsx";
 import { SupportChip } from "./trust.jsx";
 
 type Node<T extends LeafSceneNode["component"]> = Extract<LeafSceneNode, { component: T }>;
@@ -38,10 +38,10 @@ export function ImpactReview({ node, bindings }: { node: Node<"ImpactReview">; b
       <p className={`xr-impact__line${nothing ? " is-settled" : ""}`}>
         <span className="xr-impact__headline">{impact.headline}</span>
         {impact.rebuild.length > 0 && (
-          <span className="xr-tag xr-tag--rebuild">{impact.rebuild.length} to rebuild</span>
+          <Tag variant="rebuild">{impact.rebuild.length} to rebuild</Tag>
         )}
         {impact.review.length > 0 && (
-          <span className="xr-tag xr-tag--review">{impact.review.length} to review</span>
+          <Tag variant="review">{impact.review.length} to review</Tag>
         )}
       </p>
     );
@@ -200,7 +200,7 @@ export function DecisionCard({ node, bindings }: { node: Node<"DecisionCard">; b
     <article className={`xr-decision xr-decision--${decision.state}`}>
       <header className="xr-decision__head">
         <h3 className="xr-display">{decision.question}</h3>
-        <span className={`xr-tag xr-tag--${decision.state}`}>{STATE_LABEL[decision.state]}</span>
+        <Tag variant={decision.state === "needs_review" ? "review" : decision.state === "superseded" ? "faint" : "neutral"}>{STATE_LABEL[decision.state]}</Tag>
       </header>
 
       <p className="xr-decision__chosen">

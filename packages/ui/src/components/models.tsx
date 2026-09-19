@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { LeafSceneNode, ModelProviderView } from "@xeniur/core";
 import type { SceneBindings } from "../bindings.js";
-import { Button, Empty } from "./primitives.jsx";
+import { Button, Empty, Tag } from "./primitives.jsx";
 
 type Node<T extends LeafSceneNode["component"]> = Extract<LeafSceneNode, { component: T }>;
 
@@ -75,8 +75,8 @@ function ProviderCard({ provider: p, bindings }: { provider: ModelProviderView; 
     <li className={`xr-model${p.keyPresent ? " has-key" : ""}${p.local ? " is-local" : ""}`}>
       <header className="xr-model__head">
         <h3>{p.label}</h3>
-        {p.local && <span className="xr-tag">on this machine</span>}
-        {!p.local && p.keyPresent && <span className="xr-tag xr-tag--ok">key stored in your keychain</span>}
+        {p.local && <Tag>on this machine</Tag>}
+        {!p.local && p.keyPresent && <Tag variant="ok">key stored in your keychain</Tag>}
       </header>
 
       {/* What a key unlocks, in the three tiers. Local is lit already. */}
@@ -97,10 +97,10 @@ function ProviderCard({ provider: p, bindings }: { provider: ModelProviderView; 
           <li key={m.id}>
             <span>{m.label}</span>
             {p.local
-              ? <span className="xr-tag xr-tag--ok">local · no cost</span>
+              ? <Tag variant="ok">local · no cost</Tag>
               : m.priceVerifiedOn
-                ? <span className="xr-tag xr-tag--ok">price checked {m.priceVerifiedOn}</span>
-                : <span className="xr-tag xr-tag--review">price not verified — XENIUR will not call this</span>}
+                ? <Tag variant="ok">price checked {m.priceVerifiedOn}</Tag>
+                : <Tag variant="review">price not verified — XENIUR will not call this</Tag>}
           </li>
         ))}
       </ul>

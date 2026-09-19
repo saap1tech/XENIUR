@@ -50,3 +50,14 @@ export function Button({ onClick, variant = "default", children, disabled = fals
     </button>
   );
 }
+
+/**
+ * A fully rounded status tag. Colour comes from the semantic ramp and is never the only
+ * signal: the caller puts a glyph or a word inside. `neutral` is a hairline on graphite.
+ */
+export type TagVariant = "neutral" | "rebuild" | "review" | "ok" | "blocked" | "faint";
+export function Tag({ variant = "neutral", role, children }: {
+  variant?: TagVariant; role?: string; children: ReactNode;
+}) {
+  return <span className={`xr-tag xr-tag--${variant}`} role={role}>{children}</span>;
+}
