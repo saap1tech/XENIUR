@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { extractCandidates } from "@xeniur/sensemaking";
 import { z } from "zod";
 import { ChallengeRulesSchema, ExitReasonSchema, GoalStatusSchema, ModeEnvelopeSchema, ModeKindSchema, OutreachEnvelopeSchema, PublisherRefSchema, ReportReasonSchema, TrustLevelSchema, authorizeFor, campaignPlan, campaignScope, describeEnvelope, describeRecipients, needsCampaign, planDigest, sha256Hex, UuidSchema, type ActionPlan, type IntentResult, type WorldSnapshot } from "@xeniur/core";
-import { contextMaterialFor, importPackage, inspectPackage, outcomeOf, renderAuditPage, renderProofPage, supportMapFor, todayFor, trustFactsFor, trustFactsForWorld } from "@xeniur/graph";
+import { contextMaterialFor, standingFor, importPackage, inspectPackage, outcomeOf, renderAuditPage, renderProofPage, supportMapFor, todayFor, trustFactsFor, trustFactsForWorld } from "@xeniur/graph";
 import { compileContext } from "@xeniur/grammar";
 import { policyFrom } from "@xeniur/models";
 import { proposeFromBound } from "@xeniur/sensemaking";
@@ -124,6 +124,7 @@ const SCHEMAS = {
   "goals:addNextAction": z.object({ id: UuidSchema, text: z.string().min(1).max(200), objectId: UuidSchema.nullable() }),
   "goals:doneNextAction": z.object({ id: UuidSchema, actionId: z.string().min(1) }),
   "goals:relevant": Uuid,
+  "goals:standing": Uuid,
   "today:get": z.undefined(),
   "trust:facts": Uuid,
   "trust:world": Uuid,
@@ -512,6 +513,7 @@ export function registerIpc(services: Services): void {
     "goals:addNextAction": ({ id, text, objectId }) => services.graph.goals.addNextAction(id, { text, objectId }),
     "goals:doneNextAction": ({ id, actionId }) => services.graph.goals.doneNextAction(id, actionId),
     "goals:relevant": ({ id }) => services.graph.goals.relevantObjects(id),
+    "goals:standing": ({ id }) => standingFor(services.graph, id),
     "today:get": () => todayFor(services.graph, { rhythm: services.rhythm }),
     "trust:world": ({ id }) => trustFactsForWorld(services.graph, id),
     "trust:supportMap": ({ id }) => supportMapFor(services.graph, id),

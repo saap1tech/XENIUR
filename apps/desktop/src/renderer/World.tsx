@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   ConstraintRecord, DecisionDetail, FrictionState, ImpactReport, Lane, ObjectState, ProcessProof,
-  ChallengeRecord, EntryRecord, GoalStatus, PackageInspectionView, Representation, Scene, SupportMap, Task, ThinkingMap, TrailRow, TrustFacts,
+  ChallengeRecord, EntryRecord, GoalStatus, PackageInspectionView, Representation, Scene, Standing, SupportMap, Task, ThinkingMap, TrailRow, TrustFacts,
   WorkGoal, WorldSnapshot,
 } from "@xeniur/core";
 import { SceneRenderer, type SceneBindings } from "@xeniur/ui";
@@ -89,6 +89,8 @@ export function World({
   const [goal, setGoal] = useState<WorkGoal | null | undefined>(initialGoal);   // undefined: not read yet
   const [relevant, setRelevant] = useState<string[] | null>(null);
   const [editingGoal, setEditingGoal] = useState(false);
+  const [standing, setStanding] = useState<Standing | null>(null);
+  const [showStanding, setShowStanding] = useState(false);
   const [goalDraft, setGoalDraft] = useState("");
   const [trailRows, setTrailRows] = useState<TrailRow[]>([]);
 
@@ -115,6 +117,22 @@ export function World({
     setRelevant(g ? (await bridge.goals.relevant(g.id)) ?? [] : null);
   }, [bridge, worldId]);
   useEffect(() => { void refreshGoal(); }, [refreshGoal]);
+  const refreshStanding = useCallback(async () => {
+    if (!goal || !bridge?.goals) return;
+    setStanding((await bridge.goals.standing(goal.id)) ?? null);
+  }, [bridge, goal]);
+  useEffect(() => { if (showStanding) void refreshStanding(); }, [showStanding, refreshStanding]);
+  // W: where do I stand. Esc closes it.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "w" || e.key === "W") { if (goal) setShowStanding((v) => !v); }
+      if (e.key === "Escape") setShowStanding(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [goal]);
 
   // The centre follows the goal's focus on open; afterwards the goal follows the centre.
   useEffect(() => {
@@ -176,6 +194,9 @@ export function World({
     processProof: proof ? { [proof.objectId]: proof } : {},
     trust,
     supportMaps: supportMap ? { [supportMap.objectId]: supportMap } : {},
+    standings: standing ? { [standing.goal.id]: standing } : {},
+    onNextActionDone: async (goalId, actionId) => { await bridge?.goals?.doneNextAction(goalId, actionId); await refreshStanding(); await refreshGoal(); },
+    onAddNextAction: async (goalId, text) => { await bridge?.goals?.addNextAction(goalId, text, selectedId); await refreshStanding(); await refreshGoal(); },
     agentTrail: selectedId ? { [selectedId]: trailRows } : {},
     challenges: challenge ? { [challenge.worldId]: challenge } : {},
     challengeEntries: challenge ? { [challenge.worldId]: entries } : {},
@@ -244,8 +265,8 @@ export function World({
       if (updated) setConstraints((items) => items.map((item) => item.objectId === constraintId ? updated : item));
     },
   }), [snapshot, byId, tasks, map, friction, decisions, impact, worldId, bridge,
-       onApprove, onReject, onImported, refreshThinking, refreshChallenge, constraints, proof, trust, supportMap, trailRows,
-       challenge, entries, selfKey, selectedId, gestureProposals, gesturePair, zone]);
+       onApprove, onReject, onImported, refreshThinking, refreshChallenge, refreshStanding, refreshGoal, constraints, proof, trust, supportMap, trailRows,
+       standing, challenge, entries, selfKey, selectedId, gestureProposals, gesturePair, zone]);
 
   /** One thing at a time in the centre, chosen by the zone and what is selected. */
   const scene: Scene = useMemo(() => {
@@ -269,6 +290,14 @@ export function World({
           ? "rebuild" : "review",
       });
     }
+
+    // Where do I stand: the goal's state as the centre, until Esc.
+    if (showStanding && goal) return {
+      worldId, title: snapshot.world.title, reason: "Where you stand on this goal",
+      root: { id: "root", component: "Canvas", layout: "column", children: [
+        { id: "standing", component: "Standing", goalId: goal.id },
+      ] as never },
+    };
 
     // A challenge World: the board is the centre, whatever is selected. Rules before entry.
     if (snapshot.world.kind === "challenge" && challenge) return {
@@ -335,7 +364,7 @@ export function World({
       root.children.push({ id: "support-map", component: "SupportMap", objectId: selected.object.id, lanes: [], disclosure: intent.layer } as never);
     }
     return compiled;
-  }, [zone, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints, challenge, supportMap, goal, relevant]);
+  }, [zone, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints, challenge, supportMap, goal, relevant, showStanding]);
 
   const inspector: Scene | null = useMemo(() => selected ? {
     worldId, title: "", reason: "",
@@ -393,6 +422,8 @@ export function World({
               <button type="button" className="xr-goalbar__outcome" title="Edit what you are trying to accomplish"
                 onClick={() => { setGoalDraft(goal.outcome); setEditingGoal(true); }}>{goal.outcome}</button>
             )}
+            <button type="button" className={`xr-goalbar__where${showStanding ? " is-on" : ""}`} title="Where do I stand? (W)"
+              onClick={() => setShowStanding((v) => !v)}>Where I stand</button>
             <select className="xr-goalbar__status" value={goal.status} aria-label="How you are working on it"
               title={GOAL_STATUS_WORDS[goal.status].means}
               onChange={(e) => { void bridge?.goals?.setStatus(goal.id, e.target.value as GoalStatus).then((g) => { if (g) setGoal(g); }); }}>

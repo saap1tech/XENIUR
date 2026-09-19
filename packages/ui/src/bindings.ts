@@ -4,7 +4,7 @@ import type {
   ObjectState, PlanShape, ProcessProof, ReadinessReport, RebuildPlan, Representation, ResolvedPassage,
   SourceVersion, StepStatus, Task, ThinkingMap, ConstraintRecord, ConstraintValue,
 } from "@xeniur/core";
-import type { ChallengeRecord, EntryRecord, EnvelopeSheet, SupportMap as SupportMapData, TrailRow, ExitReason, ModeKind, ModelProviderView, ModeRecord, TrustFacts } from "@xeniur/core";
+import type { ChallengeRecord, EntryRecord, EnvelopeSheet, Standing as StandingData, SupportMap as SupportMapData, TrailRow, ExitReason, ModeKind, ModelProviderView, ModeRecord, TrustFacts } from "@xeniur/core";
 import { formOf } from "@xeniur/core";
 
 export interface LineageView {
@@ -73,6 +73,8 @@ export interface SceneBindings {
     modelLabel: string | null;
     estimatedUsd: number;
   }>>;
+  /** Where you stand, per goal. */
+  standings?: Readonly<Record<string, StandingData>>;
   /** The claims behind an Object, laned by support state. */
   supportMaps?: Readonly<Record<string, SupportMapData>>;
   /** Saw · decided · authorised · executed rows per Object. */
@@ -155,6 +157,8 @@ export interface SceneBindings {
   onSkipFirstRun?(): void;
   onConfirmContext?(contextDigest: string): void;
   onEnterChallenge?(challengeWorldId: string, objectId: string): void;
+  onNextActionDone?(goalId: string, actionId: string): void;
+  onAddNextAction?(goalId: string, text: string): void;
   onStartMode?(kind: ModeKind, sheetDigest: string): void;
   onDeclineMode?(kind: ModeKind): void;
   /** The same exit for every mode. "emergency" is Escape; it asks nothing. */

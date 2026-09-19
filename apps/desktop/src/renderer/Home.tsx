@@ -1,5 +1,6 @@
-import type { EconomySnapshot, SystemInfo, Task, Today, TodayRow, TrustFacts, World } from "@xeniur/core";
-import { SUPPORT_GLYPHS, describeTrust } from "@xeniur/core";
+import { useState } from "react";
+import type { EconomySnapshot, ResumeCard, SystemInfo, Task, Today, TodayRow, TrustFacts, World } from "@xeniur/core";
+import { SUPPORT_GLYPHS, describeTrust, resumeText } from "@xeniur/core";
 import { ArrowRight, Globe2, Layers3, Plus, Workflow } from "lucide-react";
 import { BrandMark } from "./BrandMark.js";
 import { FolderCard } from "./components/ui/folder-card.js";
@@ -16,7 +17,7 @@ function EconomyBand({ value }: { value: EconomySnapshot | null }) {
   </section>;
 }
 
-export function Home({ worlds, active, info, economy, today, trust, onOpen, onOpenSituation, onCreate, onApprove, onReject, onDismissArrival, onExplore, onWorkflows }: {
+export function Home({ worlds, active, info, economy, today, trust, onOpen, onOpenSituation, onContinue, onStart, onCreate, onApprove, onReject, onDismissArrival, onExplore, onWorkflows }: {
   worlds: World[]; active: Task[]; info: SystemInfo | null; economy: EconomySnapshot | null;
   /** At most seven situations that need a person. Null while loading; quiet when nothing does. */
   today: Today | null;
@@ -25,21 +26,66 @@ export function Home({ worlds, active, info, economy, today, trust, onOpen, onOp
   onOpen(worldId: string): void;
   /** A Today row opens its World with focus already on the Object and the zone selected. */
   onOpenSituation(row: TodayRow): void;
+  /** Continue the last active World, landing on the goal's focus. */
+  onContinue(card: ResumeCard, objectId?: string | null): void;
+  /** Start something: a question, idea, task or outcome in the person's words → a World with that goal. */
+  onStart(outcome: string): void;
   onCreate(entry: HomeEntry): void; onApprove(taskId: string): void; onReject(taskId: string): void;
   onDismissArrival(challengeWorldId: string): void;
   onExplore(): void; onWorkflows(): void;
 }) {
   const parkedTaskId = (row: TodayRow) => row.id.startsWith("task:") ? row.id.slice(5) : null;
+  const [starting, setStarting] = useState(false);
+  const [outcome, setOutcome] = useState("");
   void active;
   return <main className="xr-home xr-home--next">
     <nav className="xr-site-nav"><BrandMark /><p>The visual interface between humans<br />and digital capability.</p><div><button type="button" onClick={onExplore}><Globe2 size={15} /> Protected Web</button><button type="button" onClick={onWorkflows}><Layers3 size={15} /> Workflows</button></div></nav>
     <section className="xr-home-workbench" aria-labelledby="workbench-title">
-      <header className="xr-home-workbench__head"><div><small>Your visual workspace</small><h1 id="workbench-title">Work in view.</h1><p>Open a World and continue from its current situation.</p></div><div className="xr-home-workbench__actions"><button type="button" className="xr-button xr-button--primary" onClick={() => onCreate("import")}><Plus size={17} /> New World</button><button type="button" className="xr-text-action" onClick={onExplore}>Bring in a source <ArrowRight size={15} /></button></div></header>
+      <header className="xr-home-workbench__head"><div><small>Your visual workspace</small><h1 id="workbench-title">Pick up where you left off.</h1><p>What you were doing, what changed, and what you can accomplish next — from the record, not a summary.</p></div></header>
+
+      {/* Continue Work: the last active World, from durable state. Then the two ways to begin. */}
+      <div className="xr-continue">
+        {today?.resume ? (
+          <article className="xr-resume" aria-label={`Continue ${today.resume.worldTitle}`}>
+            <small>Last active World</small>
+            <h2>{today.resume.worldTitle}</h2>
+            <p className="xr-resume__text">
+              {today.resume.fragments.map((f, i) => f.objectId
+                ? <button key={i} type="button" className="xr-resume__link" onClick={() => onContinue(today.resume!, f.objectId)}>{f.text}</button>
+                : <span key={i}>{f.text}</span>)}
+            </p>
+            <button type="button" className="xr-button xr-button--primary" onClick={() => onContinue(today.resume!)}>Continue this work</button>
+          </article>
+        ) : today === null ? (
+          <article className="xr-resume xr-resume--empty"><small>Last active World</small><p className="xr-resume__text">Reading your Worlds…</p></article>
+        ) : (
+          <article className="xr-resume xr-resume--empty"><small>Nothing to pick up yet</small><p className="xr-resume__text">Start with something you want to accomplish, or bring in material you already have.</p></article>
+        )}
+        <div className="xr-begin">
+          <article className="xr-begin__card">
+            <h3>Start something</h3>
+            {starting ? (
+              <form className="xr-begin__form" onSubmit={(e) => { e.preventDefault(); if (outcome.trim()) { onStart(outcome.trim()); setOutcome(""); setStarting(false); } }}>
+                <label htmlFor="begin-outcome">What are you trying to accomplish?</label>
+                <input id="begin-outcome" autoFocus value={outcome} onChange={(e) => setOutcome(e.target.value)} placeholder="One sentence, in your words" />
+                <div className="xr-begin__actions"><button type="submit" className="xr-button xr-button--primary">Begin</button><button type="button" className="xr-button" onClick={() => setStarting(false)}>Not now</button></div>
+              </form>
+            ) : (
+              <><p>Begin with a question, idea, task or desired outcome.</p><button type="button" className="xr-button" onClick={() => setStarting(true)}>Start something</button></>
+            )}
+          </article>
+          <article className="xr-begin__card">
+            <h3>Bring something in</h3>
+            <p>Add a document, image, link, project or other material. XENIUR turns it into a recognizable Object.</p>
+            <div className="xr-begin__actions"><button type="button" className="xr-button" onClick={() => onCreate("import")}><Plus size={15} /> New World from material</button><button type="button" className="xr-text-action" onClick={onExplore}>Bring in a source <ArrowRight size={15} /></button></div>
+          </article>
+        </div>
+      </div>
       <div className="xr-home-workbench__grid">
         <section className="xr-project-section"><header><div><small>Living work</small><h2>Your Worlds</h2></div><span>{worlds.length} on this machine</span></header>
           <div className="xr-folder-grid">{worlds.filter((w) => w.summary !== "__xeniur_settings__").map((world, index) => <FolderCard key={world.id} index={index} title={world.title} subtitle={world.summary || "Research, decisions, outcomes"} count={world.emoji} countLabel="" trust={trust[world.id] ? <FolderTrust facts={trust[world.id]!} /> : null} onClick={() => onOpen(world.id)} />)}
             {worlds.length === 0 && <button type="button" className="xr-empty-world" onClick={() => onCreate("import")}><b>+</b><span>Begin with a source, a thought, or a thing.</span></button>}</div></section>
-        <aside className="xr-today" aria-labelledby="today-title"><header><Workflow size={19} /><div><small>What should I do with my time?</small><h2 id="today-title">Today</h2></div><span className="xr-today__date xr-mono">{today?.date ?? ""}</span></header>
+        <aside className="xr-today" aria-labelledby="today-title"><header><Workflow size={19} /><div><small>Needs you</small><h2 id="today-title">Today</h2></div><span className="xr-today__date xr-mono">{today?.date ?? ""}</span></header>
           {today === null ? <div className="xr-today__quiet"><p>Reading your Worlds…</p></div>
             : today.quiet ? <div className="xr-today__quiet"><strong>Nothing needs you.</strong><p>Open a World when you want to; nothing here is waiting.</p></div>
             : <ol className="xr-today__rows">{today.rows.map((row) => {

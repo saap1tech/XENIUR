@@ -186,6 +186,7 @@ contextBridge.exposeInMainWorld("xeniur", {
       call("goals:addNextAction", { id: goalId, text, objectId: objectId ?? null }),
     doneNextAction: (goalId: string, actionId: string) => call("goals:doneNextAction", { id: goalId, actionId }),
     relevant: (goalId: string) => call("goals:relevant", { id: goalId }),
+    standing: (goalId: string) => call("goals:standing", { id: goalId }),
   },
 
   today: {

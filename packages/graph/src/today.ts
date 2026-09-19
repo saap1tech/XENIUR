@@ -3,6 +3,7 @@ import { TODAY_GLYPHS, TODAY_LIMIT, TODAY_PRECEDENCE } from "@xeniur/core";
 import type { ObjectGraph } from "./graph.js";
 import { impactOf } from "./impact.js";
 import type { RhythmStore } from "./rhythm.js";
+import { lastActiveWorld, resumeCard } from "./standing.js";
 
 /**
  * Today, read from the graph. Every row is a situation that needs a person; nothing that is
@@ -109,8 +110,10 @@ export function todayFor(graph: ObjectGraph, opts: { rhythm?: RhythmStore; at?: 
     .sort((a, b) => TODAY_PRECEDENCE[a.r.kind] - TODAY_PRECEDENCE[b.r.kind] || a.i - b.i)
     .map((x) => x.r);
   const shown = ordered.slice(0, TODAY_LIMIT);
+  const last = lastActiveWorld(graph);
   return {
     date: new Date(at).toISOString().slice(0, 10),
+    resume: last ? resumeCard(graph, last) : null,
     rows: shown, more: Math.max(0, ordered.length - shown.length), quiet: shown.length === 0,
   };
 }

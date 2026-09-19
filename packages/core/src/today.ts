@@ -42,6 +42,8 @@ export interface TodayRow {
 
 export interface Today {
   date: string;
+  /** Pick up where you left off — the last active World, from durable state. Null when there is none. */
+  resume: import("./standing.js").ResumeCard | null;
   rows: TodayRow[];
   /** How many situations were compressed away to keep the page at seven. Shown, not hidden. */
   more: number;

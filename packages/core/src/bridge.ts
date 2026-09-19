@@ -8,6 +8,7 @@ import type { ChallengeRecord, ChallengeRulesInput, EntryRecord } from "./challe
 import type { TrailRow } from "./trail.js";
 import type { Today } from "./today.js";
 import type { GoalStatus, WorkGoal } from "./goal.js";
+import type { Standing } from "./standing.js";
 import type { SupportMap } from "./support-map.js";
 import type { CandidateRecord, ClaimSupport, SupportStatus } from "./sensemaking.js";
 
@@ -231,6 +232,8 @@ export interface XeniurBridge {
     doneNextAction(goalId: string, actionId: string): Promise<WorkGoal | null>;
     /** The Objects the goal is about — what the centre shows around the focus. */
     relevant(goalId: string): Promise<string[]>;
+    /** Where you stand: the persistent state of the work, from rows, never a model. */
+    standing(goalId: string): Promise<Standing | null>;
   };
 
   /* What should I do with my time? — at most seven situations, never a feed */

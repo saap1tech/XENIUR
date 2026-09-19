@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type {
   DecisionDetail, ImpactReport, ObjectState, Representation, Scene,
 } from "@xeniur/core";
-import { describeEnvelope, planDigest, type ChallengeRecord, type Compliance, type EntryRecord, type ModeRecord, type SupportMap as SupportMapData, type TrailRow } from "@xeniur/core";
+import { describeEnvelope, planDigest, type ChallengeRecord, type Compliance, type EntryRecord, type ModeRecord, type Standing as StandingData, type SupportMap as SupportMapData, type TrailRow } from "@xeniur/core";
 import { SceneRenderer, emptyBindings, type SceneBindings } from "./index.js";
 
 const OBJ = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -688,5 +688,48 @@ describe("AgentTrail", () => {
 
   it("says plainly when nothing has been asked", () => {
     expect(trail([])).toContain("No model has been asked anything about this yet.");
+  });
+});
+
+/* M6 A2 — where you stand: rows, not prose. */
+describe("Standing", () => {
+  const GOAL = "8a8a8a8a-8a8a-4a8a-8a8a-8a8a8a8a8a8a";
+  const data: StandingData = {
+    goal: { id: GOAL, worldId: "w", outcome: "Choose a jacket finish the client will accept", status: "making", focusObjectId: OBJ,
+      requiredOutputs: ["print.stl"], openQuestionIds: [], nextActions: [
+        { id: "a1", text: "Prepare the next client delivery", objectId: null, tool: null, origin: "person", doneAt: null },
+        { id: "a2", text: "Pull Q1 returns", objectId: ATOM, tool: null, origin: "accepted_proposal", doneAt: null },
+      ], createdAt: 1, updatedAt: 1, lastActiveAt: 1 },
+    worldId: "w", worldTitle: "Rainwear 2027", focus: { id: OBJ, title: "Rocket" },
+    knowledge: { known: [{ id: ATOM, title: "Consumers prefer orange." }], proposed: [{ id: "candidate-0", title: "a proposed claim awaiting review" }],
+      disputed: [], unknown: [{ id: "print.stl", title: "print.stl" }], chosenDespite: [] },
+    changed: { since: 1, newSources: [{ id: "s", title: "Study 4" }], rebuild: [], review: [{ id: DEC, title: "Which finish for the 2027 shell?" }], critiques: [] },
+    nextActions: [], needed: [{ output: "print.stl", satisfied: false, objectId: null }], lastMove: null,
+  };
+  data.nextActions = data.goal.nextActions;
+  const out = () => render({ id: "st", component: "Standing", goalId: GOAL }, bindings({ standings: { [GOAL]: data }, onAddNextAction: () => {}, onNextActionDone: () => {} }));
+
+  it("shows the goal, the five states with glyph, count and word, and no percentage", () => {
+    const html = out();
+    expect(html).toContain("Choose a jacket finish the client will accept");
+    for (const w of ["known", "proposed", "disputed", "unknown", "chosen despite"]) expect(html).toContain(w);
+    for (const g of ["●", "◐", "◌", "○", "▲"]) expect(html).toContain(g);
+    expect(html).not.toMatch(/\d+\s?%/);
+  });
+
+  it("names what changed, what is next, and what is needed — each from a row", () => {
+    const html = out();
+    expect(html).toContain("Which finish for the 2027 shell?");
+    expect(html).toContain("Study 4");
+    expect(html).toContain("Prepare the next client delivery");
+    expect(html).toContain("accepted proposal");
+    expect(html).toContain("print.stl");
+    expect(html).toContain("not yet made");
+  });
+
+  it("carries no generated sentence: the aria label is the describeStanding template", () => {
+    const html = out();
+    expect(html).toContain("1 known, 1 proposed, 0 disputed, 1 unknown.");
+    expect(html).toContain("Since you left: 1 new source, 1 decision to review.");
   });
 });

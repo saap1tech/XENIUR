@@ -173,13 +173,16 @@ export function App() {
       ];
       return <Home worlds={sampleWorlds} active={[]} info={{ version: "0.1", brainIsMock: true, brainModel: null, capabilities: [], firstRun: false }}
         economy={{ local: { metered: false, label: "Unlimited Local" }, intelligence: { configured: true, rollingRemaining: 938, rollingLimit: 1000, reserveRemaining: 4800, reserveLimit: 5000, resetsAt: now }, compute: { configured: true, balance: 524, usdPerCompute: .02, held: 0 } }}
-        today={{ date: "2026-09-16", quiet: false, more: 0, rows: [
+        today={{ date: "2026-09-16", quiet: false, more: 0, resume: {
+          worldId: "11111111-1111-4111-8111-111111111111", worldTitle: "Rainwear 2027", goalId: null, focusObjectId: null, lastActiveAt: now,
+          fragments: [{ text: "You were weighing ", objectId: null }, { text: "\"two jacket finishes\"", objectId: "11111111-1111-4111-8111-111111111111" }, { text: " before preparing the next client delivery.", objectId: null }, { text: " One decision needs review after something it rested on changed.", objectId: null }],
+        }, rows: [
           { id: "task:1", kind: "parked_approval", glyph: "▲", text: "Delivery 02 parked — $0.12 quote awaiting you", worldId: "22222222-2222-4222-8222-222222222222", worldTitle: "Launch prop", objectId: null, zone: "work", verb: "Look at it" },
           { id: "decision:1", kind: "decision_review", glyph: "◌", text: "Decision \"orange finish\" — brief changed", worldId: "11111111-1111-4111-8111-111111111111", worldTitle: "Rainwear 2027", objectId: null, zone: "decisions", verb: "Review" },
           { id: "streak", kind: "streak", glyph: "·", text: "Streak 6 — a decision or a claim keeps it.", worldId: null, worldTitle: null, objectId: null, zone: null, verb: "" },
         ] }}
         trust={{}}
-        onOpen={() => undefined} onOpenSituation={() => undefined} onCreate={() => undefined} onApprove={() => undefined} onReject={() => undefined} onDismissArrival={() => undefined} onExplore={() => undefined} onWorkflows={() => undefined} />;
+        onOpen={() => undefined} onOpenSituation={() => undefined} onContinue={() => undefined} onStart={() => undefined} onCreate={() => undefined} onApprove={() => undefined} onReject={() => undefined} onDismissArrival={() => undefined} onExplore={() => undefined} onWorkflows={() => undefined} />;
     }
     return <main className="xr-home"><BrandMark />
       <p className="xr-empty">The bridge is unavailable. This window is not XENIUR's own renderer.</p>
@@ -262,6 +265,19 @@ export function App() {
           worlds={worlds} active={tasks} info={info}
           economy={economy} today={today} trust={worldTrust}
           onOpen={(id) => { void openWorld(id); }}
+          onContinue={(card, objectId) => {
+            void bridge?.worlds.open(card.worldId).then((snapshot) => {
+              if (snapshot) setView({ kind: "world", snapshot, selection: objectId ?? card.focusObjectId ?? null });
+            });
+          }}
+          onStart={async (outcome) => {
+            // A World named after the goal, with the goal set — no form, no category, no model.
+            const title = outcome.length > 48 ? `${outcome.slice(0, 47)}…` : outcome;
+            const created = await bridge.worlds.create({ title, emoji: "◻" });
+            await bridge.goals?.create(created.id, outcome);
+            await refreshWorlds();
+            await openWorld(created.id);
+          }}
           onOpenSituation={(row) => {
             if (row.kind === "rhythm") return;
             if (!row.worldId) return;

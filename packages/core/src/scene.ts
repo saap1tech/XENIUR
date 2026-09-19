@@ -34,6 +34,8 @@ export const SCENE_COMPONENTS = [
   "ChallengeBoard",
   // Lenses: a report as its claims; what the agent saw, decided, was allowed, did
   "SupportMap", "AgentTrail",
+  // Where you stand: the persistent state of the work, as a representation
+  "Standing",
 ] as const;
 export const SceneComponentSchema = z.enum(SCENE_COMPONENTS);
 export type SceneComponentName = z.infer<typeof SceneComponentSchema>;
@@ -398,6 +400,9 @@ const AgentTrailNode = z.object({
   ...base, component: z.literal("AgentTrail"), objectId: UuidSchema,
 }).strict();
 
+/** Where you stand on a goal: five knowledge states, what changed, what is next, what is needed. */
+const StandingNode = z.object({ ...base, component: z.literal("Standing"), goalId: UuidSchema }).strict();
+
 const LeafNodeSchema = z.discriminatedUnion("component", [
   ObjectCardNode, InspectorNode, DocumentNode, TimelineNode, TaskProgressNode,
   ComparisonNode, BrowserNode, CodePreviewNode, Viewport3DNode, ApprovalDialogNode,
@@ -411,7 +416,7 @@ const LeafNodeSchema = z.discriminatedUnion("component", [
   RangeMeterNode, PriorityBalanceNode, PeopleChipsNode, CalendarNode, SchematicMapNode,
   ChoiceCardsNode, StepperNode, EvidenceMeterNode, EmptySlotNode, ReviewSheetNode,
   ClaimPairNode, TrustStripNode, ModelSetupNode, ContextReviewNode,
-  FocusContractNode, ChallengeBoardNode, SupportMapNode, AgentTrailNode,
+  FocusContractNode, ChallengeBoardNode, SupportMapNode, AgentTrailNode, StandingNode,
 ]);
 export type LeafSceneNode = z.infer<typeof LeafNodeSchema>;
 
