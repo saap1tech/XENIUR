@@ -940,6 +940,45 @@ CREATE TABLE import_rate (
 );
 `;
 
+/**
+ * Migration 19 — shared Worlds and circles.
+ *
+ * A World gains a kind: `work` (yours), `critique` (someone else's work, read-only here, with
+ * your review beside it) and, later, `challenge`. A critique World remembers whose work it
+ * holds. Circles are opt-in groups around commitments: members are publishers, milestones
+ * are Constraint Objects, and there is no score anywhere.
+ */
+const SHARED_WORLDS = `
+ALTER TABLE worlds ADD COLUMN kind TEXT NOT NULL DEFAULT 'work';   -- work | critique | challenge
+ALTER TABLE worlds ADD COLUMN publisher_id TEXT REFERENCES publishers(id) ON DELETE SET NULL;
+
+-- Who sent each imported Object. An Object in a critique World that arrived this way is
+-- read-only here: the reviewer's own Objects sit beside it and link to it by id.
+CREATE TABLE imported_from (
+  object_id    TEXT PRIMARY KEY REFERENCES objects(id) ON DELETE CASCADE,
+  publisher_id TEXT NOT NULL REFERENCES publishers(id) ON DELETE CASCADE,
+  package_root TEXT NOT NULL,
+  imported_at  INTEGER NOT NULL
+);
+
+CREATE TABLE circles (
+  id         TEXT PRIMARY KEY,
+  title      TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE circle_members (
+  circle_id    TEXT NOT NULL REFERENCES circles(id) ON DELETE CASCADE,
+  publisher_id TEXT NOT NULL REFERENCES publishers(id) ON DELETE CASCADE,
+  joined_at    INTEGER NOT NULL,
+  PRIMARY KEY (circle_id, publisher_id)
+);
+CREATE TABLE circle_milestones (
+  circle_id            TEXT NOT NULL REFERENCES circles(id) ON DELETE CASCADE,
+  constraint_object_id TEXT NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+  PRIMARY KEY (circle_id, constraint_object_id)
+);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: INIT },
   { version: 2, name: "object_model", sql: OBJECT_MODEL },
@@ -959,4 +998,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 16, name: "thinking_moves", sql: THINKING_MOVES },
   { version: 17, name: "modes", sql: MODES },
   { version: 18, name: "publishers", sql: PUBLISHERS },
+  { version: 19, name: "shared_worlds", sql: SHARED_WORLDS },
 ];

@@ -1339,3 +1339,31 @@ input[type="range"] { accent-color: var(--text); }
 @media (prefers-reduced-motion: no-preference) {
   .xr-mode-rule { transition: opacity .3s ease; }
 }
+
+/* ---- Arrival: a package is here, nothing is written ------------------------------------ */
+.xr-arrival {
+  margin: 0 0 16px; padding: 18px 20px; display: grid; gap: 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 4px;
+}
+.xr-arrival__head { display: flex; align-items: baseline; gap: 12px; }
+.xr-arrival__head h2 { margin: 0; font: 600 20px/1.1 var(--font-display); letter-spacing: -.01em; }
+.xr-arrival__file { color: var(--dim); font-size: 11px; }
+/* Trust badge: glyph + word, always. Colour is the semantic ramp, never the signal. */
+.xr-arrival__publisher { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; }
+.xr-arrival__glyph { font-size: 14px; }
+.xr-arrival__who { font-weight: 600; }
+.xr-arrival__trust { color: var(--dim); }
+.xr-arrival__publisher.is-trusted .xr-arrival__glyph { color: var(--ok); }
+.xr-arrival__publisher.is-known .xr-arrival__glyph { color: var(--text); }
+.xr-arrival__publisher.is-unknown .xr-arrival__glyph,
+.xr-arrival__publisher.is-unsigned .xr-arrival__glyph { color: var(--dim); }
+.xr-arrival__publisher.is-blocked .xr-arrival__glyph { color: var(--review); }
+.xr-arrival__key, .xr-arrival__proof, .xr-arrival__rate { color: var(--dim); font-size: 11px; }
+.xr-arrival__contents { margin: 0; display: grid; gap: 6px; font-size: 13px; }
+.xr-arrival__contents div { display: grid; grid-template-columns: 7ch 1fr; gap: 12px; }
+.xr-arrival__contents dt { color: var(--dim); text-transform: uppercase; letter-spacing: .06em; font-size: 11px; padding-top: 2px; }
+.xr-arrival__contents dd { margin: 0; }
+.xr-arrival__note { margin: 0; color: var(--dim); font-size: 13px; }
+.xr-arrival__problems { margin: 0; padding-left: 18px; font-size: 13px; color: var(--review); }
+.xr-arrival__actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.xr-arrival__block { margin-left: auto; }

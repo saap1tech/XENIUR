@@ -9,7 +9,7 @@ describe("Home visual hierarchy", () => {
     const html = renderToStaticMarkup(<Home
       worlds={[{
         id: "11111111-1111-4111-8111-111111111111", title: "Rainwear 2027",
-        emoji: "R", summary: "Research to delivery", createdAt: 1, lastOpenedAt: null,
+        emoji: "R", summary: "Research to delivery", createdAt: 1, lastOpenedAt: null, kind: "work", publisherId: null,
       }]}
       active={[]}
       info={null}

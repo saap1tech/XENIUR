@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { extractCandidates } from "@xeniur/sensemaking";
 import { z } from "zod";
 import { ExitReasonSchema, ModeEnvelopeSchema, ModeKindSchema, PublisherRefSchema, ReportReasonSchema, TrustLevelSchema, describeEnvelope, sha256Hex, UuidSchema, type ActionPlan, type IntentResult, type WorldSnapshot } from "@xeniur/core";
-import { outcomeOf, renderProofPage, trustFactsFor } from "@xeniur/graph";
+import { importPackage, inspectPackage, outcomeOf, renderProofPage, trustFactsFor } from "@xeniur/graph";
 import { InvalidPlanError } from "@xeniur/brain";
 import { planForProposal, proposalsFor } from "@xeniur/grammar";
 import type { Services } from "./services.js";
@@ -87,6 +87,9 @@ const SCHEMAS = {
   "rhythm:offer": z.object({ worldId: UuidSchema, objectId: UuidSchema.nullable() }),
   "rhythm:resolve": z.object({ id: UuidSchema, outcome: z.enum(["taken", "skipped"]) }),
   "rhythm:streak": z.undefined(),
+  "packages:inspect": z.object({ path: z.string().min(1).endsWith(".xeniur") }),
+  "packages:import": z.object({ path: z.string().min(1).endsWith(".xeniur"), as: z.enum(["work", "critique"]),
+    worldId: UuidSchema.nullable() }),
   "publishers:self": z.undefined(),
   "publishers:list": z.undefined(),
   "publishers:setTrust": PublisherRefSchema.extend({ level: TrustLevelSchema }),
@@ -377,6 +380,20 @@ export function registerIpc(services: Services): void {
       services.metrics.record(outcome === "taken" ? "reward_taken" : "reward_skipped");
     },
     "rhythm:streak": () => services.rhythm.streak(),
+    "packages:inspect": async ({ path }) => {
+      const i = await inspectPackage(services.graph, path);
+      return {
+        ok: i.ok, problems: i.problems, intent: i.manifest?.intent ?? null, relationship: i.relationship,
+        contents: { objectId: i.contents.objectId, title: i.contents.title, versions: i.contents.versions,
+          decisions: i.contents.decisions, sources: i.contents.sources, atoms: i.contents.atoms, bytes: i.contents.bytes },
+        discloses: i.discloses, publisher: i.publisher,
+      };
+    },
+    "packages:import": async ({ path, as, worldId }) => {
+      const r = await importPackage(services.graph, path, { as, worldId: worldId ?? undefined });
+      services.metrics.record(as === "critique" ? "critique_received" : "package_imported");
+      return { objectId: r.objectId, worldId: r.worldId, alreadyPresent: r.alreadyPresent };
+    },
     "publishers:self": () => services.graph.publishers.self().ref(),
     "publishers:list": () => services.graph.publishers.list(),
     "publishers:setTrust": ({ publicKey, displayName, level }) => {

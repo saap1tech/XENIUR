@@ -109,3 +109,13 @@ export class ImportRateExceeded extends Error {
     this.name = "ImportRateExceeded";
   }
 }
+
+/** Thrown when something tries to change an Object that belongs to someone else's work. */
+export class ReadOnlyOriginal extends Error {
+  readonly code = "read_only_original" as const;
+  constructor(readonly objectId: string, readonly displayName: string) {
+    super(`this is ${displayName}'s work, here for review. Your claims and decisions sit beside it and link to it; ` +
+      "it is not changed here.");
+    this.name = "ReadOnlyOriginal";
+  }
+}

@@ -80,7 +80,11 @@ export function ClaimPair({ node, bindings }: { node: Node<"ClaimPair">; binding
       </div>
 
       <article className="xr-pair__claim xr-pair__claim--right">
-        <span className="xr-pair__who">Their claim</span>
+        <span className="xr-pair__who">{
+          bindings.importedFrom?.[node.rightObjectId]
+            ? `${bindings.importedFrom[node.rightObjectId]!.displayName}'s claim`
+            : "Their claim"
+        }</span>
         <p>{right.properties.title}</p>
         {passage && (
           <blockquote className="xr-pair__passage">

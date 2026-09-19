@@ -33,6 +33,8 @@ export const SESSION_EVENT_KINDS = [
   "reward_taken",
   "reward_skipped",
   "streak_day",
+  "critique_received",        // someone else's reasoned disagreement arrived and was opened
+  "package_imported",
   "reflection_dismissed",     // friction turned off; a prompt nobody wants is a bad prompt
   "session_ended",
 ] as const;
@@ -120,5 +122,7 @@ export const EVENT_MEANINGS: Record<SessionEventKind, string> = {
   reward_taken: "you took an offer",
   reward_skipped: "you skipped an offer, and offers became rarer",
   streak_day: "a day on which something became",
+  critique_received: "you opened someone's critique beside your work",
+  package_imported: "you brought a package in",
   session_ended: "you closed XENIUR",
 };

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   ConstraintRecord, DecisionDetail, FrictionState, ImpactReport, Lane, ObjectState, ProcessProof,
-  Representation, Scene, Task, ThinkingMap, TrustFacts, WorldSnapshot,
+  PackageInspectionView, Representation, Scene, Task, ThinkingMap, TrustFacts, WorldSnapshot,
 } from "@xeniur/core";
 import { SceneRenderer, type SceneBindings } from "@xeniur/ui";
 import {
@@ -9,6 +9,7 @@ import {
   type GestureProposal,
 } from "@xeniur/grammar";
 import { BrandMark } from "./BrandMark.js";
+import { Arrival } from "./Arrival.js";
 
 /** The project's meaningful things, not XENIUR's subsystems. */
 const ZONES = [
@@ -38,6 +39,8 @@ export interface WorldProps {
   onSubmit(utterance: string, selection: string[]): void;
   onApprove(taskId: string): void;
   onReject(taskId: string): void;
+  /** Something arrived and was opened; the World should be re-read (and maybe another World shown). */
+  onImported?(result: { objectId: string; worldId: string }): void;
 }
 
 /**
@@ -54,7 +57,7 @@ export interface WorldProps {
  */
 export function World({
   snapshot, tasks, busy, initialSelection = null, initialZone = "work",
-  onBack, onOpenObject, onSubmit, onApprove, onReject,
+  onBack, onOpenObject, onSubmit, onApprove, onReject, onImported,
 }: WorldProps) {
   const [zone, setZone] = useState<Zone>(initialZone);
   const [selectedId, setSelectedId] = useState<string | null>(
@@ -74,6 +77,7 @@ export function World({
     sourceId: string; targetId: string; targetKind: "claim" | "object";
   } | null>(null);
   const [languageOpen, setLanguageOpen] = useState(false);
+  const [arrival, setArrival] = useState<{ path: string; inspection: PackageInspectionView } | null>(null);
 
   const bridge = window.xeniur;
   const worldId = snapshot.world.id;
@@ -127,6 +131,19 @@ export function World({
     blobUrl: (hash) => bridge?.blobs.url(hash) ?? "",
     onSelect: (objectId) => setSelectedId(objectId),
     onApprove, onReject,
+    onImport: async (paths, objectId) => {
+      // A .xeniur is inspected and shown, never opened on drop. Anything else is a file.
+      const packages = paths.filter((p) => p.endsWith(".xeniur"));
+      const files = paths.filter((p) => !p.endsWith(".xeniur"));
+      if (files.length > 0) {
+        await bridge?.living.importFiles(files, { worldId, objectId });
+        onImported?.({ objectId: objectId ?? "", worldId });
+      }
+      if (packages[0]) {
+        const inspection = await bridge?.packages?.inspect(packages[0]);
+        if (inspection) setArrival({ path: packages[0], inspection });
+      }
+    },
     onSort: async (objectId, lane: Lane) => {
       await bridge?.sense.sort(objectId, lane);
       await refreshThinking();
@@ -169,7 +186,7 @@ export function World({
       if (updated) setConstraints((items) => items.map((item) => item.objectId === constraintId ? updated : item));
     },
   }), [snapshot, byId, tasks, map, friction, decisions, impact, worldId, bridge,
-       onApprove, onReject, refreshThinking, constraints, proof, trust, gestureProposals, gesturePair, zone]);
+       onApprove, onReject, onImported, refreshThinking, constraints, proof, trust, gestureProposals, gesturePair, zone]);
 
   /** One thing at a time in the centre, chosen by the zone and what is selected. */
   const scene: Scene = useMemo(() => {
@@ -300,6 +317,20 @@ export function World({
       </nav>
 
       <main className="xr-centre">
+        {arrival && (
+          <Arrival path={arrival.path} inspection={arrival.inspection}
+            onOpen={async (as) => {
+              const result = await bridge?.packages?.import(arrival.path, { as, worldId: as === "work" ? worldId : null });
+              setArrival(null);
+              if (result) onImported?.(result);
+            }}
+            onBlock={async () => {
+              const p = arrival.inspection.publisher;
+              if (p) await bridge?.publishers?.setTrust(p.publicKey, p.displayName, "blocked");
+              setArrival(null);
+            }}
+            onDismiss={() => setArrival(null)} />
+        )}
         <div className="xr-centre__solo">
           <SceneRenderer scene={scene} bindings={bindings} />
         </div>

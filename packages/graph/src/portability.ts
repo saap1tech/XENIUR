@@ -29,6 +29,8 @@ export const PACKAGE_VERSION = 3;
 export interface PackageManifest {
   version: number;
   exportedAt: number;
+  /** Why this package was written; decides what a receiver does with it. */
+  intent: PackageIntent;
   /** Who made this package and the signature that proves it was not altered since. */
   publisher: PackageSignature;
   world: { id: string; title: string; emoji: string };
@@ -72,6 +74,10 @@ export interface PackageManifest {
   decisionEvidence: Array<Record<string, unknown>>;
   decisionAssumptions: Array<Record<string, unknown>>;
   semanticLinks: Array<Record<string, unknown>>;
+  /** Whether each cited passage bears on what cites it — traceability is a different fact. */
+  claimSupport: Array<Record<string, unknown>>;
+  /** Process provenance, filtered: kinds, actors and hashes; never a private label. */
+  processEvents: Array<Record<string, unknown>>;
 
   /** Named, not resolved: anything referenced that deliberately did not travel. */
   unresolved: Array<{ kind: string; id: string; why: string }>;
@@ -97,8 +103,17 @@ const rows = (graph: ObjectGraph, sql: string, ...params: unknown[]): Array<Reco
  * **delivery** is what a client receives: the released version and the material that
  * explains it, with the private half left out. The two are different documents, and
  * pretending one can serve as both is how private notes end up in a client's inbox.
+ *
+ * **share** is what a reviewer receives: the current version and its ancestry, the
+ * decisions, the sources with their stored text, the claims and — new — the support states
+ * and the process provenance, so a disagreement can be reasoned with. Private notes,
+ * prompts, paths and keys do not travel.
+ *
+ * **critique** is what comes back: the reviewer's own claims and decisions, with their own
+ * support rows, linking to the original by id. It is shown beside the work and never
+ * written into it.
  */
-export type PackageIntent = "archive" | "delivery";
+export type PackageIntent = "archive" | "delivery" | "share" | "critique";
 
 export interface ExportOptions {
   intent?: PackageIntent;
@@ -132,6 +147,7 @@ export async function exportPackage(
 
   const manifest: PackageManifest = {
     version: PACKAGE_VERSION,
+    intent,
     // Filled in last, over the finished manifest. A placeholder here so the type is whole.
     publisher: null as unknown as PackageSignature,
     exportedAt: Date.now(),
@@ -155,7 +171,7 @@ export async function exportPackage(
     relatedRepresentations: [],
     sources: [], sourceVersions: [], atoms: [], atomLinks: [],
     decisions: [], decisionOptions: [], decisionEvidence: [], decisionAssumptions: [],
-    semanticLinks: [], unresolved: [],
+    semanticLinks: [], claimSupport: [], processEvents: [], unresolved: [],
   };
 
   const recipeIds = manifest.recipes.map((r) => r["id"] as string);
@@ -211,6 +227,14 @@ export async function exportPackage(
     relatedIds.add(link["from_object_id"] as string);
     relatedIds.add(link["to_object_id"] as string);
   }
+  // A claim's own links: a critique is a claim set against someone else's claim, and the
+  // package has to carry the other end's identity for the link to land anywhere.
+  const ownAtomLinks = rows(graph,
+    `SELECT * FROM atom_links WHERE from_object_id = ? OR to_object_id = ?`, objectId, objectId);
+  for (const link of ownAtomLinks) {
+    relatedIds.add(link["from_object_id"] as string);
+    relatedIds.add(link["to_object_id"] as string);
+  }
   relatedIds.delete(objectId);
 
   // Decisions cite atoms, and atoms belong to Objects of their own. One hop, so a
@@ -263,11 +287,29 @@ export async function exportPackage(
     ? rows(graph, `SELECT * FROM decision_assumptions WHERE decision_id IN (${decisionList})`, ...decisionIds)
     : [];
 
+  // Support states: for every claim or decision that travels. A receiver sees what has been
+  // checked and by whom, and an unresolved chip stays unresolved on their machine too.
+  const citingIds = [...new Set([...decisionIds, ...relatedIdList, objectId])];
+  const citingList = citingIds.map(() => "?").join(",") || "''";
+  manifest.claimSupport = rows(graph,
+    `SELECT * FROM claim_support WHERE claim_object_id IN (${citingList})`, ...citingIds);
+
+  // Process provenance, filtered as a Process Share is: the kind and the actor stay; the
+  // label a person typed and the hashes they did not disclose do not.
+  manifest.processEvents = intent === "share" || intent === "critique"
+    ? rows(graph,
+        `SELECT id, object_id, version_id, kind, actor, kind AS label, NULL AS tool, NULL AS model,
+                input_hashes, output_hashes, duration_ms, at
+         FROM process_events WHERE object_id IN (${citingList})`, ...citingIds)
+        .map((e) => ({ ...e, label: String(e["label"]).replaceAll("_", " ") }))
+    : [];
+
   // The thinking half: the atoms that travelled, the copies they came out of, and the
   // sources those copies are of. A citation that cannot be read is not a citation.
-  manifest.atoms = relatedIdList.length > 0
-    ? rows(graph, `SELECT * FROM atoms WHERE object_id IN (${relatedList})`, ...relatedIdList)
-    : [];
+  // The Object itself may be an atom — a claim being shared or sent back as critique.
+  const atomOwnerIds = [...relatedIdList, objectId];
+  const atomOwnerList = atomOwnerIds.map(() => "?").join(",");
+  manifest.atoms = rows(graph, `SELECT * FROM atoms WHERE object_id IN (${atomOwnerList})`, ...atomOwnerIds);
   const sourceVersionIds = new Set<string>();
   for (const atom of manifest.atoms) {
     const v = atom["source_version_id"] as string | null;
@@ -320,6 +362,7 @@ export async function exportPackage(
   manifest.blobs = rows(graph, `SELECT * FROM blobs WHERE sha256 IN (${hashList})`, ...hashes);
 
   if (intent === "delivery") narrowToDelivery(graph, manifest, objectId, opts.releaseId);
+  if (intent === "share" || intent === "critique") narrowToShare(graph, manifest, objectId);
 
   // Staged in a temp directory, then tarred, so a failed export leaves nothing behind.
   const staging = mkdtempSync(join(tmpdir(), "xeniur-pkg-"));
@@ -469,6 +512,50 @@ function narrowToDelivery(
   manifest.releases = manifest.releases.map((r) => ({ ...r, note: null }));
   // A raw scrape is the publisher's bytes, not the delivery's; the normalised text that a
   // citation actually resolves against stays.
+  manifest.sourceVersions = manifest.sourceVersions.map((v) => ({ ...v, raw_blob_hash: null }));
+}
+
+/**
+ * Narrows to what a reviewer needs and removes what they must not receive.
+ *
+ * History is cut to the current version's ancestry. The private half goes the way it goes
+ * for a delivery — prompts, settings, paths, release notes, raw scrapes. Decisions keep
+ * their rationale: the reason is the thing being reviewed. Claims keep their support rows.
+ * Nothing is blanked in place; it is removed, so a package does not hint at what was taken.
+ */
+function narrowToShare(graph: ObjectGraph, manifest: PackageManifest, objectId: string): void {
+  const current = graph.getObject(objectId)?.currentVersionId ?? null;
+  if (current) {
+    const keep = new Set(graph.versionAncestry(current).map((v) => v.id));
+    manifest.versions = manifest.versions.filter((v) => keep.has(v["id"] as string));
+    manifest.versionForms = manifest.versionForms.filter((f) => keep.has(f["version_id"] as string));
+    const reps = new Set(manifest.versionForms.map((f) => f["representation_id"] as string));
+    for (const edge of manifest.edges) {
+      if (reps.has(edge["to_representation_id"] as string)) reps.add(edge["from_representation_id"] as string);
+    }
+    for (const r of manifest.relatedRepresentations) reps.add(r["id"] as string);
+    manifest.representations = manifest.representations.filter((r) => reps.has(r["id"] as string));
+    manifest.edges = manifest.edges.filter((e) =>
+      reps.has(e["from_representation_id"] as string) && reps.has(e["to_representation_id"] as string));
+    manifest.versionForms = manifest.versionForms.filter((f) => reps.has(f["representation_id"] as string));
+    manifest.checks = manifest.checks.filter((c) => {
+      const subject = c["subject_id"] as string | null;
+      return subject === null || reps.has(subject);
+    });
+    manifest.processEvents = manifest.processEvents.filter((e) => {
+      const v = e["version_id"] as string | null;
+      return v === null || keep.has(v) || (e["object_id"] as string) !== objectId;
+    });
+    const blobHashes = new Set([...manifest.representations, ...manifest.relatedRepresentations]
+      .map((r) => r["blob_hash"] as string | null).filter((h): h is string => h !== null));
+    for (const v of manifest.sourceVersions) {
+      const text = v["text_blob_hash"] as string | null;
+      if (text) blobHashes.add(text);
+    }
+    manifest.blobs = manifest.blobs.filter((b) => blobHashes.has(b["sha256"] as string));
+  }
+  manifest.actions = manifest.actions.map((a) => ({ ...a, generation_params: "{}", plan: "{}" }));
+  manifest.releases = manifest.releases.map((r) => ({ ...r, note: null }));
   manifest.sourceVersions = manifest.sourceVersions.map((v) => ({ ...v, raw_blob_hash: null }));
 }
 
@@ -710,8 +797,18 @@ function relationshipTo(
   return "divergent";
 }
 
+export interface ImportOptions {
+  worldId?: string;
+  /**
+   * `critique`: open someone else's work for review. It lands in a critique World, read-only,
+   * with the sender recorded against every Object that arrived. A critique package coming
+   * *back* needs no flag — it is new Objects that link to yours, and is placed beside them.
+   */
+  as?: "work" | "critique";
+}
+
 export async function importPackage(
-  graph: ObjectGraph, packagePath: string, opts: { worldId?: string } = {},
+  graph: ObjectGraph, packagePath: string, opts: ImportOptions = {},
 ): Promise<ImportResult> {
   // Nothing is written until everything has been checked: the archive's shape, the
   // manifest's closure, and how it relates to what is already here.
@@ -743,15 +840,38 @@ export async function importPackage(
       };
     }
 
-    // The World is recreated only if it is not already here, so importing two Objects
-    // from the same World does not produce two Worlds.
-    let worldId = opts.worldId ?? manifest.world.id;
-    if (!graph.getWorld(worldId)) {
-      graph.db.prepare(
-        `INSERT INTO worlds (id, title, emoji, summary, created_at, last_opened_at)
-         VALUES (?, ?, ?, '', ?, NULL)`,
-      ).run(worldId, manifest.world.title, manifest.world.emoji, Date.now());
-      worldId = worldId;
+    const asCritique = opts.as === "critique";
+    // Which Objects were already here before this import. Their pointers are theirs and are
+    // never rewritten by a package — that would be a merge, and XENIUR does not merge.
+    const existedBefore = new Set(
+      [...manifest.relatedObjects.map((o) => o["id"] as string)].filter((id) => graph.getObject(id) !== null),
+    );
+
+    // Where it lands. A critique World is someone else's work, read-only, one per sender and
+    // source World. A critique coming back lands beside the work it links to.
+    let worldId: string;
+    if (asCritique) {
+      const existing = graph.getWorld(manifest.world.id);
+      if (existing && existing.kind !== "critique") {
+        throw new PackageRefused([
+          `"${manifest.world.title}" is one of your own Worlds; a critique World holds someone else's work`,
+        ], inspection.relationship);
+      }
+      graph.publishers.seen(sender);                       // the World names them; they must exist first
+      worldId = existing?.id ?? graph.createWorld({
+        id: manifest.world.id, title: `Critique: ${manifest.world.title}`, emoji: manifest.world.emoji,
+        kind: "critique", publisherId: sender.publicKey,
+      }).id;
+    } else if (opts.worldId) {
+      worldId = opts.worldId;
+    } else if (manifest.intent === "critique" && existedBefore.size > 0) {
+      const home = graph.getObject([...existedBefore][0]!)!;
+      worldId = home.worldId;
+    } else {
+      worldId = manifest.world.id;
+      if (!graph.getWorld(worldId)) {
+        graph.createWorld({ id: worldId, title: manifest.world.title, emoji: manifest.world.emoji });
+      }
     }
 
     for (const blob of manifest.blobs) {
@@ -811,13 +931,31 @@ export async function importPackage(
       insertAll("decision_evidence", manifest.decisionEvidence);
       insertAll("decision_assumptions", manifest.decisionAssumptions);
       insertAll("semantic_links", manifest.semanticLinks);
+      insertAll("claim_support", manifest.claimSupport ?? []);
+      insertAll("process_events", manifest.processEvents ?? []);
 
-      // Pointers go back last, once everything they name exists.
+      // Who sent each Object that arrived. In a critique World this is what makes them
+      // read-only; everywhere it is what a trust badge and a proof history are built from.
+      const arrived = [objectId, ...manifest.relatedObjects.map((o) => o["id"] as string)]
+        .filter((id) => !existedBefore.has(id));
+      graph.publishers.seen(sender);
+      for (const id of arrived) {
+        graph.db.prepare(
+          `INSERT OR IGNORE INTO imported_from (object_id, publisher_id, package_root, imported_at) VALUES (?, ?, ?, ?)`,
+        ).run(id, sender.publicKey, manifest.publisher.rootHash, Date.now());
+      }
+
+      // Pointers go back last, once everything they name exists — and only for what this
+      // import brought. An Object that was already here keeps its own head.
+      const branchOwner = new Map<string, string>();
+      for (const b of [...manifest.relatedBranches, ...manifest.branches]) branchOwner.set(b["id"] as string, b["object_id"] as string);
       for (const branch of [...manifest.relatedBranches, ...manifest.branches]) {
+        if (existedBefore.has(branchOwner.get(branch["id"] as string) ?? "")) continue;
         graph.db.prepare(`UPDATE branches SET head_version_id = ? WHERE id = ?`)
           .run(branch["head_version_id"] as string | null, branch["id"] as string);
       }
       for (const related of manifest.relatedObjects) {
+        if (existedBefore.has(related["id"] as string)) continue;
         graph.db.prepare(`UPDATE objects SET current_version_id = ?, current_branch_id = ? WHERE id = ?`)
           .run(related["current_version_id"] as string | null,
                related["current_branch_id"] as string | null, related["id"] as string);

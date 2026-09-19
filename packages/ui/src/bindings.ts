@@ -55,6 +55,8 @@ export interface SceneBindings {
   passages?: Readonly<Record<string, ResolvedPassage & { sourceTitle: string }>>;
   /** Support rows per citing Object (claim or decision), keyed by the citing Object's id. */
   support?: Readonly<Record<string, ClaimSupport[]>>;
+  /** Who an Object arrived from, keyed by Object id — for "Samir's claim" rather than "their claim". */
+  importedFrom?: Readonly<Record<string, { publicKey: string; displayName: string }>>;
   /** Five cells of facts per Object, for the Trust Strip. */
   trust?: Readonly<Record<string, TrustFacts>>;
   /**

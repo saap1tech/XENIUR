@@ -149,9 +149,9 @@ export function App() {
     if (window.location.hostname === "localhost" && new URLSearchParams(window.location.search).has("visual-preview")) {
       const now = Date.now();
       const sampleWorlds: WorldRow[] = [
-        { id: "11111111-1111-4111-8111-111111111111", title: "Rainwear 2027", emoji: "◒", summary: "Interview → decision → jacket → delivery", createdAt: now, lastOpenedAt: now },
-        { id: "22222222-2222-4222-8222-222222222222", title: "Tokyo / April", emoji: "⌁", summary: "People · places · priorities · cost", createdAt: now, lastOpenedAt: now },
-        { id: "33333333-3333-4333-8333-333333333333", title: "XR Identity", emoji: "XR", summary: "Logo · typography · voice · process", createdAt: now, lastOpenedAt: now },
+        { id: "11111111-1111-4111-8111-111111111111", title: "Rainwear 2027", emoji: "◒", summary: "Interview → decision → jacket → delivery", createdAt: now, lastOpenedAt: now, kind: "work", publisherId: null },
+        { id: "22222222-2222-4222-8222-222222222222", title: "Tokyo / April", emoji: "⌁", summary: "People · places · priorities · cost", createdAt: now, lastOpenedAt: now, kind: "work", publisherId: null },
+        { id: "33333333-3333-4333-8333-333333333333", title: "XR Identity", emoji: "XR", summary: "Logo · typography · voice · process", createdAt: now, lastOpenedAt: now, kind: "work", publisherId: null },
       ];
       return <Home worlds={sampleWorlds} active={[]} info={{ version: "0.1", brainIsMock: true, brainModel: null, capabilities: [], firstRun: false }}
         economy={{ local: { metered: false, label: "Unlimited Local" }, intelligence: { configured: true, rollingRemaining: 938, rollingLimit: 1000, reserveRemaining: 4800, reserveLimit: 5000, resetsAt: now }, compute: { configured: true, balance: 524, usdPerCompute: .02, held: 0 } }}
@@ -227,6 +227,11 @@ export function App() {
           onBack={() => setView({ kind: "home" })}
           onOpenObject={(id) => { void openObject(id, view.snapshot); }}
           onSubmit={submit} onApprove={approve} onReject={reject}
+          onImported={(result) => {
+            // Re-read whichever World it landed in — the same one, or a new critique World.
+            void bridge?.worlds.list().then(setWorlds);
+            void openWorld(result.worldId);
+          }}
         />
       ) : (
         <Home

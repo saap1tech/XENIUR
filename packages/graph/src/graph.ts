@@ -5,7 +5,7 @@ import type {
   ActionPlan, PermissionLevel, SigningKeyStore,
 } from "@xeniur/core";
 import {
-  MAIN_BRANCH, MemorySigningKeyStore, ObjectPropertiesSchema, StaleBaseVersion, addCost, defaultProperties,
+  MAIN_BRANCH, MemorySigningKeyStore, ObjectPropertiesSchema, ReadOnlyOriginal, StaleBaseVersion, addCost, defaultProperties,
   newId, now, zeroCost,
 } from "@xeniur/core";
 import { BlobStore } from "./blobs.js";
@@ -16,6 +16,7 @@ import { ConstraintStore } from "./constraints.js";
 import { ProcessStore } from "./process.js";
 import { ModeStore } from "./modes.js";
 import { PublisherStore } from "./publishers.js";
+import { CircleStore } from "./shared.js";
 import { ActionReceiptStore } from "./action-receipts.js";
 import { json, openDatabase, type Db } from "./db.js";
 import * as rows from "./rows.js";
@@ -71,6 +72,8 @@ export class ObjectGraph {
   readonly modes: ModeStore;
   /** Who sent what, how the person trusts them, and this machine's own identity. */
   readonly publishers: PublisherStore;
+  /** Opt-in groups around commitments. Counts, never scores. */
+  readonly circles: CircleStore;
 
   private constructor(readonly db: Db, readonly blobs: BlobStore, signingKeys: SigningKeyStore) {
     this.recipes = new RecipeStore(db, {
@@ -84,6 +87,7 @@ export class ObjectGraph {
     this.actionReceipts = new ActionReceiptStore(db, this);
     this.modes = new ModeStore(db);
     this.publishers = new PublisherStore(db, signingKeys);
+    this.circles = new CircleStore(db, this);
   }
 
   static open(opts: GraphOptions): ObjectGraph {
@@ -95,15 +99,19 @@ export class ObjectGraph {
 
   /* ---------------------------------------------------------------- worlds */
 
-  createWorld(input: { title: string; emoji: string; summary?: string }): World {
+  createWorld(input: {
+    title: string; emoji: string; summary?: string;
+    kind?: World["kind"]; publisherId?: string | null; id?: string;
+  }): World {
     const w: World = {
-      id: newId(), title: input.title, emoji: input.emoji,
+      id: input.id ?? newId(), title: input.title, emoji: input.emoji,
       summary: input.summary ?? "", createdAt: now(), lastOpenedAt: null,
+      kind: input.kind ?? "work", publisherId: input.publisherId ?? null,
     };
     this.db.prepare(
-      `INSERT INTO worlds (id, title, emoji, summary, created_at, last_opened_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(w.id, w.title, w.emoji, w.summary, w.createdAt, w.lastOpenedAt);
+      `INSERT INTO worlds (id, title, emoji, summary, created_at, last_opened_at, kind, publisher_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(w.id, w.title, w.emoji, w.summary, w.createdAt, w.lastOpenedAt, w.kind, w.publisherId);
     return w;
   }
 
@@ -546,6 +554,7 @@ export class ObjectGraph {
     representations: Representation[]; action: ActionRecord; state: ObjectState | null;
     conflict: StaleBaseVersion | null;
   } {
+    this.assertWritable(input.objectId);
     return this.db.transaction(() => {
       const created = input.representations.map((r) => this.addRepresentation(r));
 
@@ -629,6 +638,21 @@ export class ObjectGraph {
    * the STL and the turntable. Forms are upserted by role, properties are patched, and
    * anything untouched carries forward unchanged.
    */
+  /**
+   * An Object that arrived in a critique World is someone else's work. It is read here and
+   * linked to; it is never changed here. The reviewer's own Objects in the same World are
+   * theirs and are not affected.
+   */
+  assertWritable(objectId: string): void {
+    const row = this.db.prepare(
+      `SELECT i.publisher_id, p.display_name FROM imported_from i
+       JOIN objects o ON o.id = i.object_id JOIN worlds w ON w.id = o.world_id
+       LEFT JOIN publishers p ON p.id = i.publisher_id
+       WHERE i.object_id = ? AND w.kind = 'critique'`,
+    ).get(objectId) as { publisher_id: string; display_name: string | null } | undefined;
+    if (row) throw new ReadOnlyOriginal(objectId, row.display_name ?? "someone");
+  }
+
   commitVersion(input: {
     objectId: string;
     properties?: Partial<ObjectProperties>;
@@ -649,6 +673,7 @@ export class ObjectGraph {
      */
     expectedBaseVersionId?: string | null;
   }): ObjectState {
+    this.assertWritable(input.objectId);
     return this.db.transaction(() => {
       const object = this.getObject(input.objectId);
       if (!object) throw new Error(`no such object: ${input.objectId}`);

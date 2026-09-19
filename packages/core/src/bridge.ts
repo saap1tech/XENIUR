@@ -3,6 +3,17 @@ import type { DecisionDetail, InfluenceReport } from "./decisions.js";
 import type { ImpactReport, OutcomeLedger, TrustFacts } from "./impact.js";
 import type { EnvelopeSheet, ExitReason, ModeEnvelopeInput, ModeKind, ModeRecord, Reward, Streak } from "./modes.js";
 import type { PublisherReport, PublisherView, ReportReason, TrustLevel } from "./publisher.js";
+
+/** What the renderer learns about a package before deciding. No manifest, no rows — the shape. */
+export interface PackageInspectionView {
+  ok: boolean;
+  problems: string[];
+  intent: "archive" | "delivery" | "share" | "critique" | null;
+  relationship: "new" | "identical" | "descendant" | "ancestor" | "divergent";
+  contents: { objectId: string | null; title: string; versions: number; decisions: number; sources: number; atoms: number; bytes: number };
+  discloses: string[];
+  publisher: PublisherView | null;
+}
 import type { Check, ReadinessReport, Release } from "./readiness.js";
 import type { RebuildPlan, StepStatus } from "./recipe.js";
 import type { DnaReport } from "./ingredients.js";
@@ -224,6 +235,16 @@ export interface XeniurBridge {
     offer(worldId: string, objectId: string | null): Promise<{ id: string; reward: Reward } | null>;
     resolve(offerId: string, outcome: "taken" | "skipped"): Promise<void>;
     streak(): Promise<Streak>;
+  };
+
+  /* Packages from elsewhere — inspected before anything is written */
+  packages: {
+    /** Everything about a .xeniur file that can be known without opening it. */
+    inspect(path: string): Promise<PackageInspectionView>;
+    /** Opens it: as someone else's work for review, or into a World of yours. */
+    import(path: string, input: { as: "work" | "critique"; worldId?: string | null }): Promise<{
+      objectId: string; worldId: string; alreadyPresent: boolean;
+    }>;
   };
 
   /* Who sent what — identity, trust the person set, block and report */

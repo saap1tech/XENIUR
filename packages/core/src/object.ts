@@ -13,6 +13,10 @@ export const WorldSchema = z.object({
   summary: z.string().default(""),
   createdAt: TimestampSchema,
   lastOpenedAt: TimestampSchema.nullable(),
+  /** Yours, someone else's under review here, or a challenge. */
+  kind: z.enum(["work", "critique", "challenge"]).default("work"),
+  /** For a critique or challenge World: whose it is. */
+  publisherId: z.string().nullable().default(null),
 });
 export type World = z.infer<typeof WorldSchema>;
 

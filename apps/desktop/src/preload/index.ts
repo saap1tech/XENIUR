@@ -139,6 +139,12 @@ contextBridge.exposeInMainWorld("xeniur", {
     streak: () => call("rhythm:streak"),
   },
 
+  packages: {
+    inspect: (path: string) => call("packages:inspect", { path }),
+    import: (path: string, input: { as: string; worldId?: string | null }) =>
+      call("packages:import", { path, as: input.as, worldId: input.worldId ?? null }),
+  },
+
   publishers: {
     self: () => call("publishers:self"),
     list: () => call("publishers:list"),

@@ -7,7 +7,7 @@ import { json } from "./db.js";
 
 /* Row shapes as SQLite returns them: snake_case, JSON-as-TEXT, no booleans. */
 
-export interface WorldRow { id: string; title: string; emoji: string; summary: string; created_at: number; last_opened_at: number | null; }
+export interface WorldRow { id: string; title: string; emoji: string; summary: string; created_at: number; last_opened_at: number | null; kind: "work" | "critique" | "challenge"; publisher_id: string | null; }
 export interface ObjectRow { id: string; world_id: string; parent_id: string | null; current_version_id: string | null; current_branch_id: string | null; created_at: number; archived_at: number | null; }
 export interface RepresentationRow { id: string; object_id: string; modality: string; format: string; blob_hash: string | null; produced_by_action_id: string | null; provenance: string; provider: string | null; model: string | null; tool_version: string | null; generation_params: string; created_at: number; }
 export interface VersionRow { id: string; object_id: string; seq: number; parent_version_id: string | null; branch_id: string | null; properties: string; recipe_id: string | null; cause_action_id: string | null; label: string | null; created_at: number; }
@@ -24,6 +24,7 @@ type Rec = Record<string, unknown>;
 export const toWorld = (r: WorldRow): World => ({
   id: r.id, title: r.title, emoji: r.emoji, summary: r.summary,
   createdAt: r.created_at, lastOpenedAt: r.last_opened_at,
+  kind: r.kind ?? "work", publisherId: r.publisher_id ?? null,
 });
 
 export const toObject = (r: ObjectRow): XeniurObject => ({
