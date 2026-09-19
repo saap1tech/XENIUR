@@ -27,6 +27,7 @@ export * from "./process.js";
 export * from "./modes.js";
 export * from "./publisher.js";
 export * from "./outreach.js";
+export * from "./challenges.js";
 export * from "./web.js";
 export * from "./compute.js";
 export * from "./workflow.js";

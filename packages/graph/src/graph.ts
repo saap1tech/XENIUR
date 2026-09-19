@@ -18,6 +18,7 @@ import { ModeStore } from "./modes.js";
 import { PublisherStore } from "./publishers.js";
 import { CircleStore } from "./shared.js";
 import { OutreachStore } from "./outreach.js";
+import { ChallengeStore } from "./challenges.js";
 import { ActionReceiptStore } from "./action-receipts.js";
 import { json, openDatabase, type Db } from "./db.js";
 import * as rows from "./rows.js";
@@ -77,6 +78,8 @@ export class ObjectGraph {
   readonly circles: CircleStore;
   /** Bounded campaigns; every send a receipted COMMUNICATE. */
   readonly outreach: OutreachStore;
+  /** Explicit Worlds with signed rules and an AI policy the record can be checked against. */
+  readonly challenges: ChallengeStore;
 
   private constructor(readonly db: Db, readonly blobs: BlobStore, signingKeys: SigningKeyStore) {
     this.recipes = new RecipeStore(db, {
@@ -92,6 +95,7 @@ export class ObjectGraph {
     this.publishers = new PublisherStore(db, signingKeys);
     this.circles = new CircleStore(db, this);
     this.outreach = new OutreachStore(db, this);
+    this.challenges = new ChallengeStore(db, this);
   }
 
   static open(opts: GraphOptions): ObjectGraph {

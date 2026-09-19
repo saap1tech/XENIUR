@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { extractCandidates } from "@xeniur/sensemaking";
 import { z } from "zod";
-import { ExitReasonSchema, ModeEnvelopeSchema, ModeKindSchema, OutreachEnvelopeSchema, PublisherRefSchema, ReportReasonSchema, TrustLevelSchema, authorizeFor, campaignPlan, campaignScope, describeEnvelope, describeRecipients, needsCampaign, planDigest, sha256Hex, UuidSchema, type ActionPlan, type IntentResult, type WorldSnapshot } from "@xeniur/core";
+import { ChallengeRulesSchema, ExitReasonSchema, ModeEnvelopeSchema, ModeKindSchema, OutreachEnvelopeSchema, PublisherRefSchema, ReportReasonSchema, TrustLevelSchema, authorizeFor, campaignPlan, campaignScope, describeEnvelope, describeRecipients, needsCampaign, planDigest, sha256Hex, UuidSchema, type ActionPlan, type IntentResult, type WorldSnapshot } from "@xeniur/core";
 import { importPackage, inspectPackage, outcomeOf, renderProofPage, trustFactsFor } from "@xeniur/graph";
 import { InvalidPlanError } from "@xeniur/brain";
 import { planForProposal, proposalsFor } from "@xeniur/grammar";
@@ -90,6 +90,14 @@ const SCHEMAS = {
   "packages:inspect": z.object({ path: z.string().min(1).endsWith(".xeniur") }),
   "packages:import": z.object({ path: z.string().min(1).endsWith(".xeniur"), as: z.enum(["work", "critique"]),
     worldId: UuidSchema.nullable() }),
+  "challenges:list": z.undefined(),
+  "challenges:get": Uuid,
+  "challenges:matching": z.undefined(),
+  "challenges:dismiss": Uuid,
+  "challenges:create": z.object({ rules: ChallengeRulesSchema }),
+  "challenges:enter": z.object({ worldId: UuidSchema, objectId: UuidSchema }),
+  "challenges:entries": Uuid,
+  "challenges:evaluate": z.object({ worldId: UuidSchema, objectId: UuidSchema }),
   "outreach:describe": z.object({ envelope: OutreachEnvelopeSchema }),
   "outreach:create": z.object({ worldId: UuidSchema, envelope: OutreachEnvelopeSchema, digest: z.string().min(1) }),
   "outreach:send": z.object({ id: UuidSchema, message: z.object({
@@ -403,6 +411,16 @@ export function registerIpc(services: Services): void {
       services.metrics.record(as === "critique" ? "critique_received" : "package_imported");
       return { objectId: r.objectId, worldId: r.worldId, alreadyPresent: r.alreadyPresent };
     },
+    "challenges:list": () => services.graph.challenges.list(),
+    "challenges:get": ({ id }) => services.graph.challenges.get(id),
+    "challenges:matching": () => services.graph.challenges.matching(),
+    "challenges:dismiss": ({ id }) => { services.graph.challenges.dismiss(id); },
+    "challenges:create": ({ rules }) => services.graph.challenges.create(rules, services.graph.publishers.self()),
+    "challenges:enter": ({ worldId, objectId }) =>
+      services.graph.challenges.enter(worldId, objectId, services.graph.publishers.self().ref()),
+    "challenges:entries": ({ id }) =>
+      services.graph.challenges.entries(id, { self: services.graph.publishers.self().publicKey }),
+    "challenges:evaluate": ({ worldId, objectId }) => services.graph.challenges.evaluate(worldId, objectId),
     "outreach:describe": ({ envelope }) => {
       const plan = campaignPlan(envelope);
       const r = envelope.recipients;

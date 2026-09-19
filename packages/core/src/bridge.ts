@@ -4,6 +4,7 @@ import type { ImpactReport, OutcomeLedger, TrustFacts } from "./impact.js";
 import type { EnvelopeSheet, ExitReason, ModeEnvelopeInput, ModeKind, ModeRecord, Reward, Streak } from "./modes.js";
 import type { PublisherReport, PublisherView, ReportReason, TrustLevel } from "./publisher.js";
 import type { CampaignRecord, OutboundMessage, OutreachEnvelopeInput } from "./outreach.js";
+import type { ChallengeRecord, ChallengeRulesInput, EntryRecord } from "./challenges.js";
 
 /** What the renderer learns about a package before deciding. No manifest, no rows — the shape. */
 export interface PackageInspectionView {
@@ -246,6 +247,21 @@ export interface XeniurBridge {
     import(path: string, input: { as: "work" | "critique"; worldId?: string | null }): Promise<{
       objectId: string; worldId: string; alreadyPresent: boolean;
     }>;
+  };
+
+  /* Challenges — explicit Worlds with signed rules and an AI policy */
+  challenges: {
+    list(): Promise<ChallengeRecord[]>;
+    get(worldId: string): Promise<ChallengeRecord | null>;
+    /** Challenges open now whose deliverable overlaps this person's work, not yet dismissed. */
+    matching(): Promise<ChallengeRecord[]>;
+    dismiss(worldId: string): Promise<void>;
+    /** Publish one from this machine, signed by its identity. */
+    create(rules: ChallengeRulesInput): Promise<ChallengeRecord>;
+    enter(worldId: string, objectId: string): Promise<EntryRecord>;
+    /** Entries visible now: yours while open; everyone's, in arrival order, after close. */
+    entries(worldId: string): Promise<EntryRecord[]>;
+    evaluate(worldId: string, objectId: string): Promise<EntryRecord | null>;
   };
 
   /* Delegated outreach — one approval over one envelope; every send receipted */

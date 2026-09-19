@@ -20,3 +20,4 @@ export {
 export { ThinkingMapView, IngredientPanel, FocusView } from "./components/thinking.jsx";
 export { SupportChip } from "./components/trust.jsx";
 export { FocusContract } from "./components/modes.jsx";
+export { ChallengeBoard, ComplianceTag, PolicyTag } from "./components/challenges.jsx";

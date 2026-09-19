@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type {
   DecisionDetail, ImpactReport, ObjectState, Representation, Scene,
 } from "@xeniur/core";
-import { describeEnvelope, planDigest, type ModeRecord } from "@xeniur/core";
+import { describeEnvelope, planDigest, type ChallengeRecord, type Compliance, type EntryRecord, type ModeRecord } from "@xeniur/core";
 import { SceneRenderer, emptyBindings, type SceneBindings } from "./index.js";
 
 const OBJ = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -547,5 +547,64 @@ describe("FocusContract", () => {
     const html = render({ id: "m", component: "FocusContract", phase: "running", sheetDigest: null, modeId: MODE },
                         bindings({ modes: { [MODE]: ended } }));
     expect(html).not.toContain("xr-mode-rule");
+  });
+});
+
+/* M5 Stage 12 — a challenge shows its rules before entry and never rounds a verdict. */
+describe("ChallengeBoard", () => {
+  const CW = "5c5c5c5c-5c5c-4c5c-8c5c-5c5c5c5c5c5c";
+  const ME = "M".repeat(43);
+  const challenge: ChallengeRecord = {
+    worldId: CW, publisher: { publicKey: "P".repeat(43), displayName: "Blender Club" },
+    rules: { title: "Desk accessory", brief: "A printable desk object under 60 mm.", rules: ["one entry per person"],
+      startsAt: Date.now() - 86_400_000, endsAt: Date.now() + 4 * 86_400_000,
+      deliverable: { formRoles: ["print.stl"], description: "an STL that prints without supports" },
+      judging: { criteria: ["prints cleanly"], by: "publisher" }, aiPolicy: "no_generative_geometry" },
+    signature: { publicKey: "P".repeat(43), displayName: "Blender Club", signedAt: 1, rootHash: "a".repeat(64), signature: "s".repeat(86) },
+    deadlineConstraintId: OBJ, policyConstraintId: OBJ, createdAt: 1, dismissedAt: null,
+  };
+  const entry = (verdict: Compliance["verdict"], who = ME): EntryRecord => ({
+    id: `e-${verdict}-${who.slice(0, 2)}`, challengeWorldId: CW, objectId: OBJ,
+    publisher: { publicKey: who, displayName: who === ME ? "You" : "Samir" }, packageRoot: null, submittedAt: 1,
+    compliance: { verdict, policy: "no_generative_geometry",
+      because: verdict === "violates" ? ["geometry was generated: model step (3d.generate) by m"] : ["the record does not say: no forms are recorded"],
+      over: { events: 0, modelEvents: 0, representations: 0, generated: 0 } },
+  });
+  const board = (entries: EntryRecord[], over: Partial<ChallengeRecord["rules"]> = {}) => render(
+    { id: "c", component: "ChallengeBoard", worldId: CW },
+    bindings({ challenges: { [CW]: { ...challenge, rules: { ...challenge.rules, ...over } } },
+      challengeEntries: { [CW]: entries }, selfPublicKey: ME, focusObjectId: OBJ, onEnterChallenge: () => {} }),
+  );
+
+  it("shows rules, dates, deliverable, judging and the policy as a tag before anything is entered", () => {
+    const html = board([]);
+    for (const s of ["Desk accessory", "one entry per person", "prints without supports", "prints cleanly", "no generative geometry", "days left"]) {
+      expect(html).toContain(s);
+    }
+    expect(html).toContain("Enter what is in the centre");
+    expect(html).toContain("Other entries appear after the challenge closes");
+  });
+
+  it("an empty record renders the record does not say — never ready green", () => {
+    const html = board([entry("insufficient_record")]);
+    expect(html).toContain("the record does not say");
+    expect(html).toContain("is-insufficient_record");
+    expect(html).not.toContain("is-complies");
+  });
+
+  it("a violation names the violating event beside the tag", () => {
+    const html = board([entry("violates")]);
+    expect(html).toContain("◌");
+    expect(html).toContain("violates");
+    expect(html).toContain("3d.generate");
+  });
+
+  it("hides other entries while open and lists them in arrival order, unranked, after close", () => {
+    const open = board([entry("complies"), entry("complies", "S".repeat(43))]);
+    expect(open).not.toContain("Samir");
+    const closed = board([entry("complies"), entry("complies", "S".repeat(43))], { endsAt: Date.now() - 1 });
+    expect(closed).toContain("Samir");
+    expect(closed).toContain("in the order they arrived");
+    expect(closed).not.toMatch(/#\d|rank|score|1st|winner/i);
   });
 });

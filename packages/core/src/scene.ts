@@ -30,6 +30,8 @@ export const SCENE_COMPONENTS = [
   "ContextReview",
   // Bounded, visible, leavable contracts
   "FocusContract",
+  // Challenges: signed rules, an AI policy, a three-state verdict
+  "ChallengeBoard",
 ] as const;
 export const SceneComponentSchema = z.enum(SCENE_COMPONENTS);
 export type SceneComponentName = z.infer<typeof SceneComponentSchema>;
@@ -376,6 +378,11 @@ const FocusContractNode = z.object({
   modeId: UuidSchema.nullable().default(null),
 }).strict();
 
+/** A challenge World's centre: rules, dates, deliverable, judging, policy, and the entries. */
+const ChallengeBoardNode = z.object({
+  ...base, component: z.literal("ChallengeBoard"), worldId: UuidSchema,
+}).strict();
+
 const LeafNodeSchema = z.discriminatedUnion("component", [
   ObjectCardNode, InspectorNode, DocumentNode, TimelineNode, TaskProgressNode,
   ComparisonNode, BrowserNode, CodePreviewNode, Viewport3DNode, ApprovalDialogNode,
@@ -389,7 +396,7 @@ const LeafNodeSchema = z.discriminatedUnion("component", [
   RangeMeterNode, PriorityBalanceNode, PeopleChipsNode, CalendarNode, SchematicMapNode,
   ChoiceCardsNode, StepperNode, EvidenceMeterNode, EmptySlotNode, ReviewSheetNode,
   ClaimPairNode, TrustStripNode, ModelSetupNode, ContextReviewNode,
-  FocusContractNode,
+  FocusContractNode, ChallengeBoardNode,
 ]);
 export type LeafSceneNode = z.infer<typeof LeafNodeSchema>;
 

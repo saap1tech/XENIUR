@@ -1367,3 +1367,28 @@ input[type="range"] { accent-color: var(--text); }
 .xr-arrival__problems { margin: 0; padding-left: 18px; font-size: 13px; color: var(--review); }
 .xr-arrival__actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .xr-arrival__block { margin-left: auto; }
+
+/* ---- Challenges: signed rules, an AI policy, a three-state verdict ---------------------- */
+.xr-challenge { display: grid; gap: 18px; max-width: 78ch; }
+.xr-challenge__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px; }
+.xr-challenge__head h2 { margin: 0; font: 600 26px/1 var(--font-display); letter-spacing: -.02em; text-transform: uppercase; }
+.xr-challenge__by, .xr-challenge__dates { color: var(--dim); font-size: 12px; }
+.xr-challenge__brief { margin: 0; font-size: 15px; line-height: 1.55; }
+.xr-challenge__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.xr-challenge__block { background: var(--surface); padding: 14px 16px; font-size: 13px; }
+.xr-challenge__block h4 { margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; }
+.xr-challenge__block ul { margin: 0; padding-left: 16px; } .xr-challenge__block p { margin: 0 0 6px; }
+.xr-challenge__roles { color: var(--dim); font-size: 11px; }
+.xr-challenge__entries h3 { margin: 12px 0 8px; font-size: 13px; font-weight: 600; }
+.xr-challenge__order { color: var(--dim); font-weight: 400; margin-left: 8px; }
+.xr-challenge__none { margin: 0; color: var(--dim); font-size: 13px; display: flex; gap: 10px; align-items: center; }
+.xr-entry { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); margin-bottom: 8px; }
+.xr-entry__title { background: none; border: 0; padding: 0; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.xr-entry__who { color: var(--dim); font-size: 12px; }
+.xr-entry__because { grid-column: 1 / -1; margin: 0; padding-left: 16px; font-size: 12px; color: var(--dim); }
+/* Policy: blocked-grey outline. Compliance: ready green ● / review amber ◌ / blocked grey ○ —
+   the semantic ramp, never the signal. */
+.xr-tag--policy { border-color: var(--blocked); color: var(--text); }
+.xr-tag--compliance.is-complies { border-color: var(--ok); color: var(--ok); }
+.xr-tag--compliance.is-violates { border-color: var(--review); color: var(--review); }
+.xr-tag--compliance.is-insufficient_record { border-color: var(--blocked); color: var(--dim); }

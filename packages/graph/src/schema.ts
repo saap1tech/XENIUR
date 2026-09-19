@@ -1009,6 +1009,43 @@ CREATE TABLE outreach_sends (
 CREATE INDEX idx_outreach_sends ON outreach_sends(campaign_id, at);
 `;
 
+/**
+ * Migration 21 — challenges.
+ *
+ * A challenge is a World (kind 'challenge') whose rules are signed by its publisher and whose
+ * dates and AI policy are Constraint Objects in the World. Entries record a compliance
+ * verdict computed from the process ledger and representation provenance — three answers,
+ * the third never rounded.
+ */
+const CHALLENGES = `
+CREATE TABLE challenges (
+  world_id               TEXT PRIMARY KEY REFERENCES worlds(id) ON DELETE CASCADE,
+  publisher_id           TEXT NOT NULL REFERENCES publishers(id) ON DELETE CASCADE,
+  rules                  TEXT NOT NULL,      -- JSON, as signed
+  rules_digest           TEXT NOT NULL,
+  signature              TEXT NOT NULL,      -- JSON PackageSignature over rules_digest
+  starts_at              INTEGER NOT NULL,
+  ends_at                INTEGER NOT NULL,
+  ai_policy              TEXT NOT NULL,
+  deadline_constraint_id TEXT NOT NULL REFERENCES objects(id) ON DELETE RESTRICT,
+  policy_constraint_id   TEXT NOT NULL REFERENCES objects(id) ON DELETE RESTRICT,
+  created_at             INTEGER NOT NULL,
+  dismissed_at           INTEGER
+);
+CREATE INDEX idx_challenges_dates ON challenges(starts_at, ends_at);
+
+CREATE TABLE challenge_entries (
+  id                 TEXT PRIMARY KEY,
+  challenge_world_id TEXT NOT NULL REFERENCES challenges(world_id) ON DELETE CASCADE,
+  object_id          TEXT NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+  publisher_id       TEXT NOT NULL REFERENCES publishers(id) ON DELETE CASCADE,
+  package_root       TEXT,
+  compliance         TEXT NOT NULL,          -- JSON Compliance
+  submitted_at       INTEGER NOT NULL,
+  UNIQUE(challenge_world_id, object_id)
+);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: INIT },
   { version: 2, name: "object_model", sql: OBJECT_MODEL },
@@ -1030,4 +1067,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 18, name: "publishers", sql: PUBLISHERS },
   { version: 19, name: "shared_worlds", sql: SHARED_WORLDS },
   { version: 20, name: "outreach", sql: OUTREACH },
+  { version: 21, name: "challenges", sql: CHALLENGES },
 ];

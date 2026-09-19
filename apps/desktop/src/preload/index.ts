@@ -145,6 +145,17 @@ contextBridge.exposeInMainWorld("xeniur", {
       call("packages:import", { path, as: input.as, worldId: input.worldId ?? null }),
   },
 
+  challenges: {
+    list: () => call("challenges:list"),
+    get: (worldId: string) => call("challenges:get", { id: worldId }),
+    matching: () => call("challenges:matching"),
+    dismiss: (worldId: string) => call("challenges:dismiss", { id: worldId }),
+    create: (rules: Record<string, unknown>) => call("challenges:create", { rules }),
+    enter: (worldId: string, objectId: string) => call("challenges:enter", { worldId, objectId }),
+    entries: (worldId: string) => call("challenges:entries", { id: worldId }),
+    evaluate: (worldId: string, objectId: string) => call("challenges:evaluate", { worldId, objectId }),
+  },
+
   outreach: {
     describe: (envelope: Record<string, unknown>) => call("outreach:describe", { envelope }),
     create: (worldId: string, envelope: Record<string, unknown>, digest: string) =>

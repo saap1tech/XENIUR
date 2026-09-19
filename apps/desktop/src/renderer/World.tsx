@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   ConstraintRecord, DecisionDetail, FrictionState, ImpactReport, Lane, ObjectState, ProcessProof,
-  PackageInspectionView, Representation, Scene, Task, ThinkingMap, TrustFacts, WorldSnapshot,
+  ChallengeRecord, EntryRecord, PackageInspectionView, Representation, Scene, Task, ThinkingMap, TrustFacts, WorldSnapshot,
 } from "@xeniur/core";
 import { SceneRenderer, type SceneBindings } from "@xeniur/ui";
 import {
@@ -78,6 +78,9 @@ export function World({
   } | null>(null);
   const [languageOpen, setLanguageOpen] = useState(false);
   const [arrival, setArrival] = useState<{ path: string; inspection: PackageInspectionView } | null>(null);
+  const [challenge, setChallenge] = useState<ChallengeRecord | null>(null);
+  const [entries, setEntries] = useState<EntryRecord[]>([]);
+  const [selfKey, setSelfKey] = useState<string | null>(null);
 
   const bridge = window.xeniur;
   const worldId = snapshot.world.id;
@@ -93,6 +96,15 @@ export function World({
   useEffect(() => {
     void bridge?.constraints?.list(worldId).then((items) => setConstraints(items ?? []));
   }, [bridge, worldId]);
+
+  // A challenge World's centre is its board. Read once, and again when an entry changes.
+  const refreshChallenge = useCallback(async () => {
+    if (snapshot.world.kind !== "challenge") return;
+    setChallenge((await bridge?.challenges?.get(worldId)) ?? null);
+    setEntries((await bridge?.challenges?.entries(worldId)) ?? []);
+    setSelfKey((await bridge?.publishers?.self())?.publicKey ?? null);
+  }, [bridge, worldId, snapshot.world.kind]);
+  useEffect(() => { void refreshChallenge(); }, [refreshChallenge]);
 
   // Impact is per-Object and only needed for the one in the centre.
   useEffect(() => {
@@ -127,6 +139,14 @@ export function World({
     constraints: Object.fromEntries(constraints.map((constraint) => [constraint.objectId, constraint])),
     processProof: proof ? { [proof.objectId]: proof } : {},
     trust,
+    challenges: challenge ? { [challenge.worldId]: challenge } : {},
+    challengeEntries: challenge ? { [challenge.worldId]: entries } : {},
+    selfPublicKey: selfKey,
+    focusObjectId: selectedId,
+    onEnterChallenge: async (challengeWorldId, objectId) => {
+      await bridge?.challenges?.enter(challengeWorldId, objectId);
+      await refreshChallenge();
+    },
     gestureProposals: Object.fromEntries(gestureProposals.map((proposal) => [proposal.id, proposal])),
     blobUrl: (hash) => bridge?.blobs.url(hash) ?? "",
     onSelect: (objectId) => setSelectedId(objectId),
@@ -186,7 +206,8 @@ export function World({
       if (updated) setConstraints((items) => items.map((item) => item.objectId === constraintId ? updated : item));
     },
   }), [snapshot, byId, tasks, map, friction, decisions, impact, worldId, bridge,
-       onApprove, onReject, onImported, refreshThinking, constraints, proof, trust, gestureProposals, gesturePair, zone]);
+       onApprove, onReject, onImported, refreshThinking, refreshChallenge, constraints, proof, trust, challenge, entries, selfKey, selectedId,
+       gestureProposals, gesturePair, zone]);
 
   /** One thing at a time in the centre, chosen by the zone and what is selected. */
   const scene: Scene = useMemo(() => {
@@ -210,6 +231,15 @@ export function World({
           ? "rebuild" : "review",
       });
     }
+
+    // A challenge World: the board is the centre, whatever is selected. Rules before entry.
+    if (snapshot.world.kind === "challenge" && challenge) return {
+      worldId, title: snapshot.world.title, reason: "The rules, the dates, the deliverable, the policy — then your entry",
+      root: { id: "root", component: "Canvas", layout: "column", children: [
+        ...nodes,
+        { id: "board", component: "ChallengeBoard", worldId },
+      ] as never },
+    };
 
     if (!selected) return {
       worldId, title: snapshot.world.title, reason: "Bring something in to establish focus",
@@ -253,7 +283,7 @@ export function World({
     const root = compiled.root.component === "Canvas" ? compiled.root : null;
     if (root && nodes.length > 0) root.children.unshift(...nodes as never[]);
     return compiled;
-  }, [zone, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints]);
+  }, [zone, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints, challenge]);
 
   const inspector: Scene | null = useMemo(() => selected ? {
     worldId, title: "", reason: "",

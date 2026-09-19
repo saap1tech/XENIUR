@@ -4,7 +4,7 @@ import type {
   ObjectState, PlanShape, ProcessProof, ReadinessReport, RebuildPlan, Representation, ResolvedPassage,
   SourceVersion, StepStatus, Task, ThinkingMap, ConstraintRecord, ConstraintValue,
 } from "@xeniur/core";
-import type { EnvelopeSheet, ExitReason, ModeKind, ModelProviderView, ModeRecord, TrustFacts } from "@xeniur/core";
+import type { ChallengeRecord, EntryRecord, EnvelopeSheet, ExitReason, ModeKind, ModelProviderView, ModeRecord, TrustFacts } from "@xeniur/core";
 import { formOf } from "@xeniur/core";
 
 export interface LineageView {
@@ -73,6 +73,13 @@ export interface SceneBindings {
     modelLabel: string | null;
     estimatedUsd: number;
   }>>;
+  /** Challenges by World id, and their entries. */
+  challenges?: Readonly<Record<string, ChallengeRecord>>;
+  challengeEntries?: Readonly<Record<string, EntryRecord[]>>;
+  /** This machine's publisher key, so "your entry" can be told from the rest. */
+  selfPublicKey?: string | null;
+  /** The Object in the centre, so a challenge can be entered from where the person is. */
+  focusObjectId?: string | null;
   /** Envelope sheets awaiting a verb, keyed by digest — what `start` will be asked to echo. */
   modeSheets?: Readonly<Record<string, EnvelopeSheet>>;
   /** Modes by id; only a running one renders. */
@@ -143,6 +150,7 @@ export interface SceneBindings {
   onVerifyModel?(provider: string): void;
   onSkipFirstRun?(): void;
   onConfirmContext?(contextDigest: string): void;
+  onEnterChallenge?(challengeWorldId: string, objectId: string): void;
   onStartMode?(kind: ModeKind, sheetDigest: string): void;
   onDeclineMode?(kind: ModeKind): void;
   /** The same exit for every mode. "emergency" is Escape; it asks nothing. */
