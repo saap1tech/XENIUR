@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld("xeniur", {
   },
   objects: {
     get: (objectId: string) => call("objects:get", { id: objectId }),
+    setAiProcessing: (objectId: string, mode: string) => call("objects:setAiProcessing", { id: objectId, mode }),
     representations: (objectId: string) => call("objects:representations", { id: objectId }),
     lineage: (representationId: string) => call("objects:lineage", { id: representationId }),
     undo: (objectId: string) => call("objects:undo", { id: objectId }),
@@ -236,6 +237,7 @@ contextBridge.exposeInMainWorld("xeniur", {
   },
 
   brain: {
+    resolve: (utterance: string, selection: string[]) => call("brain:resolve", { utterance, selection }),
     prepare: (input: { worldId: string; objectId: string; intent: string; question: string }) => call("brain:prepare", input),
     ask: (input: { trailId: string; contextDigest: string; planDigest: string }) => call("brain:ask", input),
     trail: (objectId: string) => call("brain:trail", { id: objectId }),

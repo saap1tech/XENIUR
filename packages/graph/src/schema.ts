@@ -1099,6 +1099,24 @@ CREATE TABLE goals (
 CREATE INDEX idx_goals_world ON goals(world_id, last_active_at);
 `;
 
+/**
+ * Migration 24 — context envelopes.
+ *
+ * What a person has already approved a model to see, per World and intent, as the set of
+ * item ids. A request whose included set stays inside the envelope is ordinary and shows a
+ * compact indicator; one that would carry new material shows only the delta; one that acts
+ * outward shows everything. The envelope grows only when the person approves.
+ */
+const CONTEXT_ENVELOPES = `
+CREATE TABLE context_envelopes (
+  world_id    TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+  intent      TEXT NOT NULL,
+  item_ids    TEXT NOT NULL DEFAULT '[]',   -- JSON array of context item ids ever approved
+  approved_at INTEGER NOT NULL,
+  PRIMARY KEY (world_id, intent)
+);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: INIT },
   { version: 2, name: "object_model", sql: OBJECT_MODEL },
@@ -1123,4 +1141,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 21, name: "challenges", sql: CHALLENGES },
   { version: 22, name: "agent_trail", sql: AGENT_TRAIL },
   { version: 23, name: "goals", sql: GOALS },
+  { version: 24, name: "context_envelopes", sql: CONTEXT_ENVELOPES },
 ];

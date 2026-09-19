@@ -365,4 +365,6 @@ export const INTENT_TOOLS: Record<BrainIntent, readonly Tool[]> = {
   prepare_delivery: ["export.package", "export.file"],
   research_plan: ["knowledge.propose"],
   write_document: ["doc.write"],
+  challenge_claim: ["knowledge.propose"],
+  propose_test: ["knowledge.propose"],
 };

@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type {
   DecisionDetail, ImpactReport, ObjectState, Representation, Scene,
 } from "@xeniur/core";
-import { describeEnvelope, planDigest, type ChallengeRecord, type Compliance, type EntryRecord, type ModeRecord, type Standing as StandingData, type SupportMap as SupportMapData, type TrailRow } from "@xeniur/core";
+import { describeEnvelope, planDigest, type CandidateRecord, type ChallengeRecord, type Compliance, type EntryRecord, type ModeRecord, type Standing as StandingData, type SupportMap as SupportMapData, type TrailRow } from "@xeniur/core";
 import { SceneRenderer, emptyBindings, type SceneBindings } from "./index.js";
 
 const OBJ = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -731,5 +731,61 @@ describe("Standing", () => {
     const html = out();
     expect(html).toContain("1 known, 1 proposed, 0 disputed, 1 unknown.");
     expect(html).toContain("Since you left: 1 new source, 1 decision to review.");
+  });
+});
+
+/* M6 A4 — proposals are not knowledge; the indicator interrupts nobody. */
+describe("ProposalsTray", () => {
+  const W = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+  const SV = "44444444-4444-4444-8444-444444444444";
+  const cand = (id: string, text: string, over: Partial<CandidateRecord> = {}): CandidateRecord => ({
+    id, worldId: W, sourceId: null, sourceVersionId: null, atomType: "claim", text, locator: { selectors: [] },
+    stance: "assertion", citations: [], extraction: "model/research_plan", state: "proposed", createdAt: 1, ...over,
+  } as CandidateRecord);
+  const tray = (items: CandidateRecord[]) => render({ id: "p", component: "ProposalsTray", worldId: W },
+    bindings({ candidates: { [W]: items }, onAcceptCandidate: () => {}, onRejectCandidate: () => {} }));
+
+  it("an unsupported assertion says so and shows no green chip; a hypothesis is the model's own", () => {
+    const html = tray([cand("c1", "Welded seams are 18% cheaper."), cand("c2", "The margin is worth paying.", { stance: "hypothesis" })]);
+    expect(html).toContain("unsupported by the sources given");
+    expect(html).not.toContain("is-supported");
+    expect(html).toContain("hypothesis");
+    expect(html).toContain("None of this is knowledge until you accept it.");
+  });
+
+  it("an assertion with unreviewed citations offers Accept anyway, never Accept", () => {
+    const html = tray([cand("c1", "Most returns are seam failures.", {
+      citations: [{ sourceVersionId: SV, locator: { selectors: [] }, proposedStatus: "supported" }] })]);
+    expect(html).toContain("Accept anyway");
+    expect(html).toContain("supported · proposed");
+    expect(html).not.toMatch(/>Accept</);
+    expect(html).toContain("its citations have not been reviewed");
+  });
+
+  it("compresses steps to seven primary with the rest behind Show supporting detail", () => {
+    const steps = Array.from({ length: 9 }, (_, i) => cand(`s${i}`, `Step ${i + 1}`, { atomType: "moment", stance: "direction" }));
+    const html = tray(steps);
+    expect(html).toContain("Step 7");
+    expect(html).not.toContain("Step 8");
+    expect(html).toContain("Show supporting detail · 2 more");
+  });
+
+  it("renders nothing when there is nothing proposed", () => {
+    expect(tray([])).not.toContain("xr-proposals");
+  });
+});
+
+describe("ContextIndicator", () => {
+  it("says how much, what was left out, and where it goes — in one line", () => {
+    const digest = "d".repeat(64);
+    const html = render({ id: "i", component: "ContextIndicator", contextDigest: digest }, bindings({ contexts: { [digest]: {
+      included: [{ kind: "focus", id: "a", label: "Rocket", tokens: 40 }, { kind: "decision", id: "b", label: "Which finish?", tokens: 80 }],
+      excluded: [{ kind: "passage", id: "c", label: "Internal returns data", why: "restricted_rights" }],
+      tokens: 120, includesRestricted: false, destination: "local", modelLabel: "llama3", estimatedUsd: 0,
+    } } }));
+    expect(html).toContain("2 items");
+    expect(html).toContain("1 left out");
+    expect(html).toContain("stays on this machine");
+    expect(html).toContain("what it sees");
   });
 });

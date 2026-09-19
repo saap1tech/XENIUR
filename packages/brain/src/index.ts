@@ -19,3 +19,6 @@ export {
 } from "./outcome.js";
 export type { BrainOutcome, BrainIntent, Executable } from "./outcome.js";
 export { GATED_SYSTEM_PROMPT } from "./prompt.js";
+
+export { resolveAsk, intentWord } from "./resolve.js";
+export type { ResolvedAsk, AskSelection } from "./resolve.js";

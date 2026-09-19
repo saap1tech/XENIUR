@@ -1,5 +1,6 @@
 import type { LineageStep } from "@xeniur/graph";
 import type {
+  CandidateRecord,
   ActionRecord, Atom, Check, ClaimSupport, DecisionDetail, DnaReport, FrictionState, ImpactReport, Lane,
   ObjectState, PlanShape, ProcessProof, ReadinessReport, RebuildPlan, Representation, ResolvedPassage,
   SourceVersion, StepStatus, Task, ThinkingMap, ConstraintRecord, ConstraintValue,
@@ -73,6 +74,8 @@ export interface SceneBindings {
     modelLabel: string | null;
     estimatedUsd: number;
   }>>;
+  /** A model's proposals awaiting review, per World. */
+  candidates?: Readonly<Record<string, CandidateRecord[]>>;
   /** Where you stand, per goal. */
   standings?: Readonly<Record<string, StandingData>>;
   /** The claims behind an Object, laned by support state. */
@@ -158,6 +161,10 @@ export interface SceneBindings {
   onConfirmContext?(contextDigest: string): void;
   onEnterChallenge?(challengeWorldId: string, objectId: string): void;
   onNextActionDone?(goalId: string, actionId: string): void;
+  onAcceptCandidate?(candidateId: string, edit: { acceptUnreviewed?: boolean }): void;
+  onRejectCandidate?(candidateId: string): void;
+  /** Open the full "what the model sees" sheet from the compact indicator. */
+  onOpenContext?(contextDigest: string): void;
   onAddNextAction?(goalId: string, text: string): void;
   onStartMode?(kind: ModeKind, sheetDigest: string): void;
   onDeclineMode?(kind: ModeKind): void;

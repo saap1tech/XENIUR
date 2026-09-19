@@ -1939,3 +1939,48 @@ input[type="range"] { accent-color: var(--text); }
 .xr-standing__add input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-control); color: var(--text); font: 13px var(--font-sans); padding: 6px 8px; }
 .xr-standing__col li.is-satisfied span { color: var(--ok); }
 .xr-standing__col li.is-missing { color: var(--dim); }
+
+/* ---- Ask: the Brain, visible, inside the Scene ------------------------------------------ */
+.xr-ask { margin: 0 0 var(--s-4); padding: var(--s-4) var(--s-5); display: grid; gap: var(--s-3); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); }
+.xr-ask__utterance { margin: 0; font-size: 15px; color: var(--text); }
+.xr-ask__chip { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
+.xr-ask__reading { font: 13px var(--font-mono); color: var(--dim); border: 1px dashed var(--line); border-radius: var(--r-tag); padding: 4px 12px; }
+.xr-ask__nearest { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.xr-ask__quiet { margin: 0; color: var(--dim); font-size: 13px; }
+.xr-ask__level { font-size: 13px; color: var(--dim); } .xr-ask__level strong { color: var(--text); font-weight: 600; }
+.xr-ask__delta { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: 13px; }
+.xr-ask__kind { font: 10px var(--font-mono); text-transform: uppercase; letter-spacing: .08em; color: var(--dim); margin-right: 6px; }
+.xr-ask__result { margin: 0; font-size: 14px; } .xr-ask__result strong { font-weight: 600; }
+.xr-ask__result.is-gated strong, .xr-ask__result.is-refused strong, .xr-ask__result.is-over_budget strong, .xr-ask__result.is-failed strong { color: var(--review); }
+.xr-centre__notice { display: flex; gap: var(--s-3); align-items: center; margin: 0 0 var(--s-3); padding: var(--s-2) var(--s-3); border: 1px solid var(--line); border-radius: var(--r-card); font-size: 13px; color: var(--dim); }
+.xr-centre__tray { margin-top: var(--s-6); }
+
+/* Context indicator: one line, no interruption. */
+.xr-ctxind { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font: 12px var(--font-mono); color: var(--dim); }
+.xr-ctxind__scope { color: var(--text); }
+.xr-ctxind__dest, .xr-ctxind__excluded { color: var(--dim); }
+.xr-ctxind__open { background: none; border: 0; padding: 0; color: var(--dim); font: inherit; text-decoration: underline; text-decoration-color: var(--line); cursor: pointer; margin-left: 4px; }
+
+/* Proposals: none of it is knowledge yet. */
+.xr-proposals { display: grid; gap: var(--s-4); padding: var(--s-4) var(--s-5); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); }
+.xr-proposals__head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-2); }
+.xr-proposals__head h2 { margin: 0; font: 600 16px/1 var(--font-display); letter-spacing: .02em; text-transform: uppercase; }
+.xr-proposals__count { color: var(--dim); }
+.xr-proposals__note { color: var(--dim); font-size: 12px; }
+.xr-proposals__group { display: grid; gap: var(--s-2); }
+.xr-proposals__group h3 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; }
+.xr-proposals__steps { margin: 0; padding-left: 20px; display: grid; gap: var(--s-2); }
+.xr-candidate { display: grid; gap: 6px; padding: var(--s-3); border: 1px dashed var(--line); border-radius: var(--r-card); background: var(--bg); }
+.xr-candidate--step { border-style: solid; }
+.xr-candidate__text { margin: 0; font-size: 14px; line-height: 1.45; }
+.xr-candidate__meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 11px; color: var(--dim); }
+.xr-candidate__stance { text-transform: uppercase; letter-spacing: .06em; }
+.xr-candidate__chip { border: 1px dashed var(--line); border-radius: var(--r-tag); padding: 1px 8px; }
+.xr-candidate__chip.is-supported { border-color: var(--ok); color: var(--ok); }
+.xr-candidate__chip.is-contradicted { border-color: var(--review); color: var(--review); }
+.xr-candidate__actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.xr-candidate__why { color: var(--dim); font-size: 11px; }
+
+/* A processing permission on the focused Object. */
+.xr-aiperm { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-top: var(--s-4); padding-top: var(--s-3); border-top: 1px solid var(--line-soft); font-size: 12px; }
+.xr-aiperm__state { color: var(--review); font: 11px var(--font-mono); text-transform: uppercase; letter-spacing: .06em; }

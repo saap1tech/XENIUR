@@ -17,15 +17,15 @@ const material = (over: Partial<ContextMaterial> = {}): ContextMaterial => ({
       { text: "The film is shot under hard studio light", reviewTrigger: "the shoot moves outdoors", kind: "assumption" },
       { text: "Matte can look flat under overcast light", reviewTrigger: "", kind: "steelman" },
     ],
-    rejectedOptions: ["Satin on the fins"], relatedToFocus: true,
+    rejectedOptions: ["Satin on the fins"], relatedToFocus: true, aiAllowed: true,
   }],
   passages: [
     { sourceVersionId: SV1, sourceTitle: "Client brief", text: "Finish is matte throughout, because the film is shot under hard studio light.",
-      rights: "permitted", citedBy: DEC, supportReviewed: true, relatedToFocus: true },
+      rights: "permitted", citedBy: DEC, supportReviewed: true, relatedToFocus: true, aiAllowed: true },
     { sourceVersionId: SV2, sourceTitle: "Internal returns data", text: "Seam failure caused 63% of warranty returns in Q1.",
-      rights: "restricted", citedBy: null, supportReviewed: false, relatedToFocus: true },
+      rights: "restricted", citedBy: null, supportReviewed: false, relatedToFocus: true, aiAllowed: true },
   ],
-  constraints: [{ objectId: CON, title: "Budget", kind: "range", value: 1500, relatedToFocus: true }],
+  constraints: [{ objectId: CON, title: "Budget", kind: "range", value: 1500, relatedToFocus: true, aiAllowed: true }],
   changes: [{ kind: "review", subject: "How should the prop be finished?", because: "the brief changed" }],
   ...over,
 });
@@ -49,7 +49,7 @@ describe("the context compiler is pure", () => {
 
   it("changes its digest when what is sent changes", () => {
     const a = compileContext(material(), remote);
-    const b = compileContext(material({ constraints: [{ objectId: CON, title: "Budget", kind: "range", value: 1000, relatedToFocus: true }] }), remote);
+    const b = compileContext(material({ constraints: [{ objectId: CON, title: "Budget", kind: "range", value: 1000, relatedToFocus: true, aiAllowed: true }] }), remote);
     expect(a.contextDigest).not.toBe(b.contextDigest);
   });
 });
@@ -106,20 +106,20 @@ describe("what is left out is named, with why", () => {
   });
 
   it("excludes material not connected to the focus", () => {
-    const plan = compileContext(material({ constraints: [{ objectId: CON, title: "Other project's budget", kind: "range", value: 9, relatedToFocus: false }] }), remote);
+    const plan = compileContext(material({ constraints: [{ objectId: CON, title: "Other project's budget", kind: "range", value: 9, relatedToFocus: false, aiAllowed: true }] }), remote);
     expect(plan.excluded.find((e) => e.id === CON)!.why).toBe("outside_focus");
   });
 
   it("can exclude passages whose citation nobody has reviewed", () => {
     const plan = compileContext(material({ passages: [
-      { sourceVersionId: SV1, sourceTitle: "Client brief", text: "matte throughout", rights: "permitted", citedBy: DEC, supportReviewed: false, relatedToFocus: true },
+      { sourceVersionId: SV1, sourceTitle: "Client brief", text: "matte throughout", rights: "permitted", citedBy: DEC, supportReviewed: false, relatedToFocus: true, aiAllowed: true },
     ] }), { ...remote, onlyReviewedSupport: true });
     expect(plan.excluded[0]!.why).toBe("unresolved_support");
   });
 
   it("says in the block when a passage's support is not yet reviewed", () => {
     const plan = compileContext(material({ passages: [
-      { sourceVersionId: SV1, sourceTitle: "Client brief", text: "matte throughout", rights: "permitted", citedBy: DEC, supportReviewed: false, relatedToFocus: true },
+      { sourceVersionId: SV1, sourceTitle: "Client brief", text: "matte throughout", rights: "permitted", citedBy: DEC, supportReviewed: false, relatedToFocus: true, aiAllowed: true },
     ] }), remote);
     expect(plan.rendered).toContain("support not yet reviewed");
   });
@@ -128,5 +128,20 @@ describe("what is left out is named, with why", () => {
     const plan = compileContext(material(), { ...remote, includePassages: false, includeChanges: false });
     expect(plan.included.some((i) => i.kind === "passage")).toBe(false);
     expect(plan.excluded.filter((e) => e.why === "not_requested").length).toBeGreaterThan(0);
+  });
+});
+
+/* M6 A4 — "Don't send this to AI" is a processing permission the compiler honours by name. */
+describe("a person can bar an Object from any model", () => {
+  it("excludes it with the reason, changes no rights, and the digest changes", () => {
+    const allowed = compileContext(material(), remote);
+    const barred = compileContext(material({
+      decisions: [{ ...material().decisions[0]!, aiAllowed: false }],
+    }), remote);
+    expect(barred.included.some((i) => i.id === DEC)).toBe(false);
+    expect(barred.excluded.find((e) => e.id === DEC)?.why).toBe("not_allowed_by_person");
+    expect(barred.contextDigest).not.toBe(allowed.contextDigest);
+    // The passage the barred decision cited stays in the material as a passage — rights untouched.
+    expect(barred.excluded.find((e) => e.id === DEC)).toBeDefined();
   });
 });

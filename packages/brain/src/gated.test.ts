@@ -603,7 +603,7 @@ describe("what the Brain is allowed to be asked", () => {
   it("names its intents, and each one navigates what XENIUR already does", () => {
     // Eight: M5 added research_plan (proposes candidates through a local, reversible tool)
     // and write_document (prose, through the existing doc.write, because prose was asked for).
-    expect(BRAIN_INTENTS).toHaveLength(8);
+    expect(BRAIN_INTENTS).toHaveLength(10);
     // None of them generates media, spends money, or decides whether something is safe.
     for (const intent of BRAIN_INTENTS) {
       expect(intent).not.toMatch(/generate|buy|purchase|approve|authorise|authorize/);

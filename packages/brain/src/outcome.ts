@@ -59,6 +59,8 @@ export const BRAIN_INTENTS = [
   "prepare_delivery",     // assemble the preview of what would go out
   "research_plan",        // claims → steps, each bound to a stored passage; never prose
   "write_document",       // prose, because prose is the artifact that was asked for
+  "challenge_claim",      // counterclaims as candidates with a proposed contradicts link — a proposal, never a verdict
+  "propose_test",         // a hypothesis and the steps that would test it — a plan, never a result
 ] as const;
 export const BrainIntentSchema = z.enum(BRAIN_INTENTS);
 export type BrainIntent = z.infer<typeof BrainIntentSchema>;

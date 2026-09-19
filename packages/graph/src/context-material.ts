@@ -22,6 +22,10 @@ export function contextMaterialFor(graph: ObjectGraph, focusId: string): Record<
     ...graph.decisions.linksFrom(focusId).map((l) => l.toObjectId),
     ...graph.decisions.linksTo(focusId).map((l) => l.fromObjectId),
   ]);
+  // "Don't send this to AI": a versioned processing permission on the Object's settings. It
+  // never changes rights or removes anything; the compiler names it as the reason.
+  const aiAllowed = (objectId: string): boolean =>
+    graph.currentState(objectId)?.properties.settings["aiProcessing"] !== "never";
   const decisions = graph.decisions.list(worldId).map((d) => ({
     objectId: d.objectId, question: d.question, chosenOption:
       d.options.find((o) => o.key === d.chosenOption)?.label ?? d.chosenOption,
@@ -29,6 +33,7 @@ export function contextMaterialFor(graph: ObjectGraph, focusId: string): Record<
     assumptions: d.assumptions.map((a) => ({ text: a.text, reviewTrigger: a.reviewTrigger, kind: a.kind })),
     rejectedOptions: d.options.filter((o) => o.key !== d.chosenOption).map((o) => o.label),
     relatedToFocus: linked.has(d.objectId) || d.objectId === focusId,
+    aiAllowed: aiAllowed(d.objectId),
   }));
 
   // Passages: every source copy cited by a related decision, as stored words.
@@ -52,6 +57,9 @@ export function contextMaterialFor(graph: ObjectGraph, focusId: string): Record<
         citedBy: d.objectId,
         supportReviewed: support?.checkedBy === "human",
         relatedToFocus: true,
+        // A passage travels with the decision that cites it; if the person barred the atom
+        // that carries it, the passage stays home too.
+        aiAllowed: e.atomObjectId ? aiAllowed(e.atomObjectId) : true,
       });
     }
   }
@@ -60,6 +68,7 @@ export function contextMaterialFor(graph: ObjectGraph, focusId: string): Record<
     objectId: c.objectId, title: graph.currentState(c.objectId)?.properties.title ?? "a constraint",
     kind: c.definition.kind, value: c.value,
     relatedToFocus: c.appliesTo === focusId || c.appliesTo === worldId,
+    aiAllowed: aiAllowed(c.objectId),
   }));
 
   const impact = impactOf(graph, focusId);

@@ -23,3 +23,4 @@ export { FocusContract } from "./components/modes.jsx";
 export { ChallengeBoard, ComplianceTag, PolicyTag } from "./components/challenges.jsx";
 export { AgentTrail, SupportMap } from "./components/lenses.jsx";
 export { Standing } from "./components/standing.jsx";
+export { ProposalsTray, ContextIndicator } from "./components/proposals.jsx";

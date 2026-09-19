@@ -30,6 +30,8 @@ export const ContextDecisionSchema = z.object({
   })).default([]),
   rejectedOptions: z.array(z.string()).default([]),
   relatedToFocus: z.boolean().default(true),
+  /** The person said "Don't send this to AI". A versioned processing permission, not a rights change. */
+  aiAllowed: z.boolean().default(true),
 }).strict();
 
 export const ContextPassageSchema = z.object({
@@ -41,11 +43,13 @@ export const ContextPassageSchema = z.object({
   citedBy: UuidSchema.nullable().default(null),
   supportReviewed: z.boolean().default(false),
   relatedToFocus: z.boolean().default(true),
+  aiAllowed: z.boolean().default(true),
 }).strict();
 
 export const ContextConstraintSchema = z.object({
   objectId: UuidSchema, title: z.string().min(1), kind: z.string().min(1), value: z.unknown(),
   relatedToFocus: z.boolean().default(true),
+  aiAllowed: z.boolean().default(true),
 }).strict();
 
 export const ContextChangeSchema = z.object({
@@ -65,6 +69,7 @@ export const ContextMaterialSchema = z.object({
   changes: z.array(ContextChangeSchema).default([]),
 }).strict();
 export type ContextMaterial = z.infer<typeof ContextMaterialSchema>;
+export type ContextMaterialInput = z.input<typeof ContextMaterialSchema>;
 
 /**
  * What a person allows to be sent, as a shape — never "send whatever".
@@ -85,7 +90,7 @@ export const ContextPolicySchema = z.object({
 export type ContextPolicy = z.infer<typeof ContextPolicySchema>;
 
 export const EXCLUSION_REASONS = [
-  "restricted_rights", "over_budget", "outside_focus", "unresolved_support", "not_requested",
+  "restricted_rights", "over_budget", "outside_focus", "unresolved_support", "not_requested", "not_allowed_by_person",
 ] as const;
 export type ExclusionReason = (typeof EXCLUSION_REASONS)[number];
 
@@ -154,6 +159,7 @@ export function compileContext(materialInput: unknown, policyInput: unknown): Co
     const label = d.question;
     if (!policy.includeDecisions) { excluded.push({ kind: "decision", id: d.objectId, label, why: "not_requested" }); continue; }
     if (!d.relatedToFocus) { excluded.push({ kind: "decision", id: d.objectId, label, why: "outside_focus" }); continue; }
+    if (!d.aiAllowed) { excluded.push({ kind: "decision", id: d.objectId, label, why: "not_allowed_by_person" }); continue; }
     if (d.state === "draft" || d.state === "superseded") {
       excluded.push({ kind: "decision", id: d.objectId, label, why: "not_requested" }); continue;
     }
@@ -175,6 +181,7 @@ export function compileContext(materialInput: unknown, policyInput: unknown): Co
   for (const c of constraints) {
     if (!policy.includeConstraints) { excluded.push({ kind: "constraint", id: c.objectId, label: c.title, why: "not_requested" }); continue; }
     if (!c.relatedToFocus) { excluded.push({ kind: "constraint", id: c.objectId, label: c.title, why: "outside_focus" }); continue; }
+    if (!c.aiAllowed) { excluded.push({ kind: "constraint", id: c.objectId, label: c.title, why: "not_allowed_by_person" }); continue; }
     const text = `CONSTRAINT: ${c.title} (${c.kind}) = ${canonicalJson(c.value ?? null)}`;
     admit({ kind: "constraint", id: c.objectId, label: c.title, tokens: estimateTokens(text), text });
   }
@@ -198,6 +205,7 @@ export function compileContext(materialInput: unknown, policyInput: unknown): Co
     const label = p.sourceTitle;
     if (!policy.includePassages) { excluded.push({ kind: "passage", id, label, why: "not_requested" }); continue; }
     if (!p.relatedToFocus) { excluded.push({ kind: "passage", id, label, why: "outside_focus" }); continue; }
+    if (!p.aiAllowed) { excluded.push({ kind: "passage", id, label, why: "not_allowed_by_person" }); continue; }
     if (p.rights === "restricted" && policy.destination === "remote") {
       excluded.push({ kind: "passage", id, label, why: "restricted_rights" }); continue;
     }
@@ -223,6 +231,7 @@ export const EXCLUSION_WORDS: Record<ExclusionReason, string> = {
   restricted_rights: "marked restricted — stays on this machine",
   over_budget: "would not fit in what this call can carry",
   outside_focus: "not connected to what you are working on",
+  not_allowed_by_person: "you said not to send this to AI",
   unresolved_support: "its citation has not been reviewed",
   not_requested: "not part of what you allowed",
 };

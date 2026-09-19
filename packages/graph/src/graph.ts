@@ -21,6 +21,7 @@ import { OutreachStore } from "./outreach.js";
 import { ChallengeStore } from "./challenges.js";
 import { TrailStore } from "./trail.js";
 import { GoalStore } from "./goals.js";
+import { EnvelopeStore } from "./envelopes.js";
 import { ActionReceiptStore } from "./action-receipts.js";
 import { json, openDatabase, type Db } from "./db.js";
 import * as rows from "./rows.js";
@@ -86,6 +87,8 @@ export class ObjectGraph {
   readonly trail: TrailStore;
   /** What the person is trying to accomplish, per World, in their words. */
   readonly goals: GoalStore;
+  /** What a model has already been allowed to see, per World and intent. */
+  readonly envelopes: EnvelopeStore;
 
   private constructor(readonly db: Db, readonly blobs: BlobStore, signingKeys: SigningKeyStore) {
     this.recipes = new RecipeStore(db, {
@@ -104,6 +107,7 @@ export class ObjectGraph {
     this.challenges = new ChallengeStore(db, this);
     this.trail = new TrailStore(db);
     this.goals = new GoalStore(db, this);
+    this.envelopes = new EnvelopeStore(db);
   }
 
   static open(opts: GraphOptions): ObjectGraph {

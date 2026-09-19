@@ -10,7 +10,7 @@ import { policyFrom } from "@xeniur/models";
 import { proposeFromBound } from "@xeniur/sensemaking";
 import { SupportStatusSchema, type Tool, type PlanShape } from "@xeniur/core";
 import { policyConstraints } from "./services.js";
-import { BrainIntentSchema, InvalidPlanError, bindProposal, type BrainIntent } from "@xeniur/brain";
+import { BrainIntentSchema, InvalidPlanError, bindProposal, resolveAsk, type BrainIntent } from "@xeniur/brain";
 import { planForProposal, proposalsFor } from "@xeniur/grammar";
 import type { Services } from "./services.js";
 import { assertTrustedSender, UntrustedSenderError } from "./security.js";
@@ -167,6 +167,8 @@ const SCHEMAS = {
   "sense:rejectCandidate": Uuid,
 
   /* The Brain — what it would see is compiled and shown; what it did is one trail row */
+  "brain:resolve": z.object({ utterance: z.string().min(1).max(2000), selection: z.array(UuidSchema).max(8) }),
+  "objects:setAiProcessing": z.object({ id: UuidSchema, mode: z.enum(["allowed", "never"]) }),
   "brain:prepare": z.object({ worldId: UuidSchema, objectId: UuidSchema, intent: BrainIntentSchema, question: z.string().min(1).max(2000) }),
   "brain:ask": z.object({ trailId: UuidSchema, contextDigest: z.string().min(1), planDigest: z.string().min(1) }),
   "brain:trail": Uuid,
@@ -682,6 +684,22 @@ export function registerIpc(services: Services): void {
 
     /* --------------------------------------------------------- The Brain */
 
+    "brain:resolve": ({ utterance, selection }) => {
+      const subjects = selection.map((id) => services.graph.currentState(id))
+        .filter((s): s is NonNullable<typeof s> => s !== null)
+        .map((s) => ({ id: s.object.id, title: s.properties.title, semanticType: s.properties.semanticType }));
+      return resolveAsk(utterance, subjects);
+    },
+    "objects:setAiProcessing": ({ id, mode }) => {
+      const current = services.graph.currentState(id);
+      if (!current) return null;
+      const state = services.graph.commitVersion({
+        objectId: id, properties: { settings: { ...current.properties.settings, aiProcessing: mode } },
+        label: mode === "never" ? "not sent to AI" : "may be sent to AI",
+      });
+      if (mode === "never") services.graph.envelopes.revoke(current.object.worldId, id);
+      return state;
+    },
     "brain:prepare": ({ worldId, objectId, intent, question }) => {
       const material = contextMaterialFor(services.graph, objectId);
       if (!material) throw new Error("no such Object to compile a context for");
@@ -707,8 +725,11 @@ export function registerIpc(services: Services): void {
       }
       if (probe) services.metrics.record("model_routed", { objectId, detail: { intent, model: probe.id, escalation: probe.escalation, localOnly: policy.localOnlyForRestricted } });
       pending.set(row.id, { worldId, objectId, intent, question, compiled, plan, planDigest: planDigest(plan) });
+      const includedIds = compiled.included.map((i) => i.id);
+      const level = services.graph.envelopes.level(worldId, intent, includedIds, compiled.includesRestricted);
       return {
-        trailId: row.id,
+        trailId: row.id, level, delta: services.graph.envelopes.delta(worldId, intent, includedIds),
+        needsKey: destination === "remote" && probe === null,
         context: {
           included: compiled.included.map((i) => ({ kind: i.kind, id: i.id, label: i.label, tokens: i.tokens })),
           excluded: compiled.excluded.map((e) => ({ kind: e.kind, id: e.id, label: e.label, why: e.why })),
@@ -726,6 +747,8 @@ export function registerIpc(services: Services): void {
         throw new Error("what was shown is not what would be sent — review it again");
       }
       pending.delete(trailId);
+      // Proceeding is approval of exactly this content: the envelope grows by it.
+      services.graph.envelopes.approve(prepared.worldId, prepared.intent, prepared.compiled.included.map((i) => i.id));
       const authorization = authorizeFor(prepared.plan, { scope: "brain.ask" });
       services.graph.trail.decided(trailId, "pending", null);   // provisional; overwritten below via a fresh read
       const world = services.graph.getWorld(prepared.worldId)!;

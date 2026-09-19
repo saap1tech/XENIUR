@@ -36,6 +36,8 @@ export const SCENE_COMPONENTS = [
   "SupportMap", "AgentTrail",
   // Where you stand: the persistent state of the work, as a representation
   "Standing",
+  // A model's proposals before they are knowledge; the compact context indicator
+  "ProposalsTray", "ContextIndicator",
 ] as const;
 export const SceneComponentSchema = z.enum(SCENE_COMPONENTS);
 export type SceneComponentName = z.infer<typeof SceneComponentSchema>;
@@ -403,6 +405,11 @@ const AgentTrailNode = z.object({
 /** Where you stand on a goal: five knowledge states, what changed, what is next, what is needed. */
 const StandingNode = z.object({ ...base, component: z.literal("Standing"), goalId: UuidSchema }).strict();
 
+/** Candidates awaiting review, per World. Nothing here is an atom. */
+const ProposalsTrayNode = z.object({ ...base, component: z.literal("ProposalsTray"), worldId: UuidSchema }).strict();
+/** An ordinary request's context, in one line: scope, exclusions, destination. */
+const ContextIndicatorNode = z.object({ ...base, component: z.literal("ContextIndicator"), contextDigest: z.string().min(1) }).strict();
+
 const LeafNodeSchema = z.discriminatedUnion("component", [
   ObjectCardNode, InspectorNode, DocumentNode, TimelineNode, TaskProgressNode,
   ComparisonNode, BrowserNode, CodePreviewNode, Viewport3DNode, ApprovalDialogNode,
@@ -417,6 +424,7 @@ const LeafNodeSchema = z.discriminatedUnion("component", [
   ChoiceCardsNode, StepperNode, EvidenceMeterNode, EmptySlotNode, ReviewSheetNode,
   ClaimPairNode, TrustStripNode, ModelSetupNode, ContextReviewNode,
   FocusContractNode, ChallengeBoardNode, SupportMapNode, AgentTrailNode, StandingNode,
+  ProposalsTrayNode, ContextIndicatorNode,
 ]);
 export type LeafSceneNode = z.infer<typeof LeafNodeSchema>;
 

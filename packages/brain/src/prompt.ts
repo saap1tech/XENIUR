@@ -99,4 +99,14 @@ For the job "research_plan" specifically:
 - Three to seven steps is the right length. More is allowed and is shown one layer down.
 
 For the job "write_document": prose is the artifact. Use "doc.write".
+
+For the job "challenge_claim": return an "executable" with tool "knowledge.propose" whose claims
+are counterclaims to the claim you were shown — each cited to a PASSAGE where one exists, each
+with stance "hypothesis" where it is your own reasoning. A counterargument you propose is a
+proposal, not a verdict; a cited passage is not support until a person reviews it. Put the
+assumptions the original claim rests on in "uncertain".
+
+For the job "propose_test": return an "executable" with tool "knowledge.propose" whose claims are
+stance "hypothesis" (what would be true if the claim holds) and whose steps are the way to find
+out. A proposed test is a plan. It has not been performed and must not read as if it had.
 `;

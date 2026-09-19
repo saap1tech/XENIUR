@@ -22,7 +22,7 @@ beforeAll(async () => {
   (globalThis as { window?: unknown }).window = {
     xeniur: {
       blobs: { url: (h: string) => `xeniur-blob://asset/${h}` },
-      sense: { map: async () => null, friction: async () => null },
+      sense: { map: async () => null, friction: async () => null, pendingCandidates: async () => [] },
     },
     addEventListener: () => {}, removeEventListener: () => {},
   };

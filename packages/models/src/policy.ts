@@ -11,6 +11,7 @@ import { isPriceVerified } from "./registry.js";
 export const ROUTED_INTENTS = [
   "explain_check", "find_evidence", "draft_decision", "choose_transform",
   "describe_impact", "prepare_delivery", "research_plan", "write_document",
+  "challenge_claim", "propose_test",
 ] as const;
 export type RoutedIntent = (typeof ROUTED_INTENTS)[number];
 
@@ -33,6 +34,7 @@ export const DEFAULT_POLICY: RoutingPolicy = {
   strength: {
     explain_check: 0.2, find_evidence: 0.2, choose_transform: 0.2, describe_impact: 0.3,
     prepare_delivery: 0.4, draft_decision: 0.8, research_plan: 0.8, write_document: 0.6,
+    challenge_claim: 0.7, propose_test: 0.6,
   },
   localOnlyForRestricted: true,
   maxEscalations: 1,

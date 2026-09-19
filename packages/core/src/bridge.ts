@@ -123,6 +123,8 @@ export interface XeniurBridge {
   };
   objects: {
     get(objectId: string): Promise<ObjectState | null>;
+    /** "Don't send this to AI" / "Use this for the current task": a versioned processing permission. */
+    setAiProcessing(objectId: string, mode: "allowed" | "never"): Promise<ObjectState | null>;
     representations(objectId: string): Promise<Representation[]>;
     lineage(representationId: string): Promise<LineagePayload>;
     undo(objectId: string): Promise<ObjectState | null>;
@@ -356,6 +358,10 @@ export interface XeniurBridge {
 
   /* The Brain, behind its gates — what it would see, then what it did */
   brain: {
+    /** Reads a request into one of the things XENIUR can do, by rule. Null intent: choose from `nearest`. */
+    resolve(utterance: string, selection: string[]): Promise<{
+      intent: string | null; objects: string[]; interpretation: string; by: "rule" | "unresolved"; nearest: string[];
+    }>;
     /**
      * Compiles what the model would see for this focus and intent, routes it, and opens a
      * trail row. Nothing is sent. The person reads the ContextReview and confirms the digest.
@@ -369,8 +375,13 @@ export interface XeniurBridge {
         destination: "local" | "remote"; modelLabel: string | null; estimatedUsd: number;
       };
       planDigest: string;
+      /** ordinary: within what was approved before · expanded: `delta` is new · consequential: acts outward. */
+      level: "ordinary" | "expanded" | "consequential";
+      delta: string[];
+      /** True when the destination is remote and no key exists: the sheet offers model setup. */
+      needsKey: boolean;
     }>;
-    /** Runs exactly the prepared call. Refused if the digest is not the one shown. */
+    /** Runs exactly the prepared call. Refused if the digest is not the one shown. Approving grows the envelope. */
     ask(input: { trailId: string; contextDigest: string; planDigest: string }): Promise<{
       status: "ok" | "gated" | "refused" | "over_budget";
       reason: string | null;

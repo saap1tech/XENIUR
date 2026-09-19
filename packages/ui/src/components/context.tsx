@@ -12,6 +12,7 @@ const WHY_WORD: Record<string, string> = {
   restricted_rights: "marked restricted — stays on this machine",
   over_budget: "would not fit in what this call can carry",
   outside_focus: "not connected to what you are working on",
+  not_allowed_by_person: "you said not to send this to AI",
   unresolved_support: "its citation has not been reviewed",
   not_requested: "not part of what you allowed",
 };

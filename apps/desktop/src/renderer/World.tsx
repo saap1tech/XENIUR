@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   ConstraintRecord, DecisionDetail, FrictionState, ImpactReport, Lane, ObjectState, ProcessProof,
-  ChallengeRecord, EntryRecord, GoalStatus, PackageInspectionView, Representation, Scene, Standing, SupportMap, Task, ThinkingMap, TrailRow, TrustFacts,
-  WorkGoal, WorldSnapshot,
+  CandidateRecord, ChallengeRecord, EntryRecord, GoalStatus, PackageInspectionView, Representation, Scene, Standing, SupportMap, Task,
+  ThinkingMap, TrailRow, TrustFacts, WorkGoal, WorldSnapshot,
 } from "@xeniur/core";
 import { SceneRenderer, type SceneBindings } from "@xeniur/ui";
 import {
@@ -12,6 +12,7 @@ import {
 import { GOAL_STATUSES, GOAL_STATUS_WORDS } from "@xeniur/core";
 import { BrandMark } from "./BrandMark.js";
 import { Arrival } from "./Arrival.js";
+import { Ask } from "./Ask.js";
 
 /** The project's meaningful things, not XENIUR's subsystems. */
 const ZONES = [
@@ -92,6 +93,9 @@ export function World({
   const [relevant, setRelevant] = useState<string[] | null>(null);
   const [editingGoal, setEditingGoal] = useState(false);
   const [standing, setStanding] = useState<Standing | null>(null);
+  const [ask, setAsk] = useState<{ utterance: string; selection: string[] } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [candidates, setCandidates] = useState<CandidateRecord[]>([]);
   const [showStanding, setShowStanding] = useState(false);
   const [goalDraft, setGoalDraft] = useState("");
   const [trailRows, setTrailRows] = useState<TrailRow[]>([]);
@@ -106,6 +110,10 @@ export function World({
   }, [bridge, worldId]);
 
   useEffect(() => { void refreshThinking(); }, [refreshThinking]);
+  const refreshCandidates = useCallback(async () => {
+    setCandidates((await bridge?.sense?.pendingCandidates?.(worldId)) ?? []);
+  }, [bridge, worldId]);
+  useEffect(() => { void refreshCandidates(); }, [refreshCandidates]);
 
   useEffect(() => {
     void bridge?.constraints?.list(worldId).then((items) => setConstraints(items ?? []));
@@ -198,6 +206,13 @@ export function World({
     trust,
     supportMaps: supportMap ? { [supportMap.objectId]: supportMap } : {},
     standings: standing ? { [standing.goal.id]: standing } : {},
+    candidates: { [worldId]: candidates },
+    onAcceptCandidate: async (id, edit) => {
+      const atom = await bridge?.sense?.acceptCandidate?.(id, edit);
+      if (atom === null) return;                       // the tray already offers Accept anyway
+      await refreshCandidates(); await refreshThinking(); await refreshStanding();
+    },
+    onRejectCandidate: async (id) => { await bridge?.sense?.rejectCandidate?.(id); await refreshCandidates(); },
     onNextActionDone: async (goalId, actionId) => { await bridge?.goals?.doneNextAction(goalId, actionId); await refreshStanding(); await refreshGoal(); },
     onAddNextAction: async (goalId, text) => { await bridge?.goals?.addNextAction(goalId, text, selectedId); await refreshStanding(); await refreshGoal(); },
     agentTrail: selectedId ? { [selectedId]: trailRows } : {},
@@ -270,7 +285,7 @@ export function World({
     },
   }), [snapshot, byId, tasks, map, friction, decisions, impact, worldId, bridge,
        onApprove, onReject, onImported, refreshThinking, refreshChallenge, refreshStanding, refreshGoal, constraints, proof, trust, supportMap, trailRows,
-       standing, challenge, entries, selfKey, selectedId, gestureProposals, gesturePair, zone]);
+       standing, candidates, refreshCandidates, challenge, entries, selfKey, selectedId, gestureProposals, gesturePair, zone]);
 
   /** One thing at a time in the centre, chosen by the zone and what is selected. */
   const scene: Scene = useMemo(() => {
@@ -402,8 +417,18 @@ export function World({
       setUtterance(""); setLanguageOpen(false);
       return;
     }
-    void bridge?.metrics?.record("typed_instead", ZONE_INTENT[zone].meaning);
-    onSubmit(text, selectedId ? [selectedId] : []);
+    const selection = selectedId ? [selectedId] : [];
+    // A question to the Brain opens Ask, inside the Scene. A command goes to the planner as before.
+    void (async () => {
+      const read = await bridge?.brain?.resolve(text, selection);
+      if (read && (read.by === "rule" || text.endsWith("?"))) {
+        setAsk({ utterance: text, selection });
+        setLanguageOpen(false);
+      } else {
+        void bridge?.metrics?.record("typed_instead", ZONE_INTENT[zone].meaning);
+        onSubmit(text, selection);
+      }
+    })();
     setUtterance("");
   };
 
@@ -498,9 +523,23 @@ export function World({
             }}
             onDismiss={() => setArrival(null)} />
         )}
+        {ask && (
+          <Ask worldId={worldId} utterance={ask.utterance} selection={ask.selection} bindings={bindings}
+            onCandidates={() => { void refreshCandidates(); }}
+            onTrail={(row) => { if (row && selectedId) setTrailRows((rows) => [row, ...rows.filter((r) => r.id !== row.id)]); }}
+            onNeedsKey={() => setNotice("This task can use cloud AI. Connect a key in Settings › Your models, or continue with local capabilities.")}
+            onClose={() => setAsk(null)} />
+        )}
+        {notice && <p className="xr-centre__notice" role="status">{notice}<button type="button" className="xr-button" onClick={() => setNotice(null)}>Close</button></p>}
         <div className="xr-centre__solo">
           <SceneRenderer scene={scene} bindings={bindings} />
         </div>
+        {candidates.length > 0 && snapshot.world.kind === "work" && (
+          <div className="xr-centre__tray">
+            <SceneRenderer scene={{ worldId, title: "", reason: "", root: { id: "tray", component: "Canvas", layout: "column",
+              children: [{ id: "proposals", component: "ProposalsTray", worldId } as never] } }} bindings={bindings} />
+          </div>
+        )}
 
         <footer className={`xr-language-dock${languageOpen || askingForGoal ? " is-open" : ""}`}>
           {!languageOpen && !askingForGoal ? <button type="button" className="xr-language-dock__trigger" onClick={() => setLanguageOpen(true)}>
@@ -520,9 +559,20 @@ export function World({
         </footer>
       </main>
 
-      {inspector && (
+      {inspector && selected && (
         <aside className="xr-inspector-zone">
           <SceneRenderer scene={inspector} bindings={bindings} />
+          {/* A processing permission, versioned on the Object. Never a rights change, never a deletion. */}
+          <div className="xr-aiperm">
+            {selected.properties.settings["aiProcessing"] === "never" ? (
+              <>
+                <span className="xr-aiperm__state">Not sent to AI</span>
+                <button type="button" className="xr-button" onClick={() => { void bridge?.objects?.setAiProcessing(selected.object.id, "allowed").then(() => onImported?.({ objectId: selected.object.id, worldId })); }}>Use this for the current task</button>
+              </>
+            ) : (
+              <button type="button" className="xr-button" onClick={() => { void bridge?.objects?.setAiProcessing(selected.object.id, "never").then(() => onImported?.({ objectId: selected.object.id, worldId })); }}>Don’t send this to AI</button>
+            )}
+          </div>
         </aside>
       )}
     </div>
