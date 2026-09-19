@@ -62,7 +62,7 @@ function main(): void {
     ],
     chosenOption: "orange", rationale: "The customer interview made visibility the safer choice.",
   });
-  graph.decisions.accept(decision.objectId, "creator");
+  graph.decisions.accept(decision.objectId, "creator", { skipSteelman: true });
   graph.decisions.link({
     fromObjectId: claim.object.id, fromVersionId: graph.currentState(claim.object.id)!.versionId,
     toObjectId: decision.objectId, toVersionId: graph.currentState(decision.objectId)!.versionId,

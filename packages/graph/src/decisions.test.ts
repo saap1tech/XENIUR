@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ActionPlan, Tool } from "@xeniur/core";
-import { zeroCost } from "@xeniur/core";
+import { SteelmanRequired, zeroCost } from "@xeniur/core";
 import { ObjectGraph, ReadinessEvaluator, loadProfiles } from "./index.js";
 
 let dir: string, g: ObjectGraph, worldId: string;
@@ -76,7 +76,7 @@ describe("a decision is an ordinary Object with a rendered brief", () => {
       text: "Cold-weather use dominates the range",
       reviewTrigger: "if the range moves to milder markets",
     });
-    const accepted = g.decisions.accept(d.objectId, "Ada")!;
+    const accepted = g.decisions.accept(d.objectId, "Ada", { skipSteelman: true })!;
 
     expect(accepted.state).toBe("accepted");
     expect(accepted.acceptedVersionId).toBe(g.currentState(d.objectId)!.versionId);
@@ -103,7 +103,7 @@ describe("a decision is an ordinary Object with a rendered brief", () => {
         options: [{ key: "matte", label: "Matte", note: "" }],
         chosenOption: "matte", rationale: "It photographs better.",
       });
-      g.decisions.accept(d.objectId);
+      g.decisions.accept(d.objectId, "you", { skipSteelman: true });
       return g.decisions.briefOf(d.objectId)!;
     };
     expect(make()).toBe(make());
@@ -111,7 +111,7 @@ describe("a decision is an ordinary Object with a rendered brief", () => {
 
   it("refuses to accept a decision with no choice in it", () => {
     const d = g.decisions.create({ worldId, question: "Which finish?" });
-    expect(() => g.decisions.accept(d.objectId)).toThrow(/without a choice/);
+    expect(() => g.decisions.accept(d.objectId, "you", { skipSteelman: true })).toThrow(/without a choice/);
   });
 
   it("keeps a superseded decision exactly as it was accepted", () => {
@@ -120,7 +120,7 @@ describe("a decision is an ordinary Object with a rendered brief", () => {
       options: [{ key: "matte", label: "Matte", note: "" }],
       chosenOption: "matte", rationale: "Photographs better.",
     });
-    g.decisions.accept(first.objectId);
+    g.decisions.accept(first.objectId, "you", { skipSteelman: true });
     const acceptedVersion = g.decisions.get(first.objectId)!.acceptedVersionId;
     const briefBefore = g.decisions.briefOf(first.objectId);
 
@@ -150,7 +150,7 @@ describe("review and rebuild travel on different edges and never merge", () => {
       sourceVersionId: null, atomObjectId: source, atomVersionId: null,
       relation: "supports", note: "",
     });
-    g.decisions.accept(d.objectId);
+    g.decisions.accept(d.objectId, "you", { skipSteelman: true });
 
     // The claim is edited: the person reworded what they captured.
     g.setProperties(source, { title: "Seam failure causes most returns in cold climates." });
@@ -184,7 +184,7 @@ describe("review and rebuild travel on different edges and never merge", () => {
       sourceVersionId: null, atomObjectId: source, atomVersionId: null,
       relation: "supports", note: "",
     });
-    g.decisions.accept(d.objectId);
+    g.decisions.accept(d.objectId, "you", { skipSteelman: true });
 
     // A new mesh: real, mechanical, downstream-invalidating.
     const newMesh = g.addRepresentation({
@@ -244,11 +244,11 @@ describe("review and rebuild travel on different edges and never merge", () => {
       sourceVersionId: null, atomObjectId: article, atomVersionId: null,
       relation: "informed_by", note: "",
     });
-    g.decisions.accept(first.objectId);
+    g.decisions.accept(first.objectId, "you", { skipSteelman: true });
     g.decisions.link({
       fromObjectId: first.objectId, toObjectId: second.objectId, relation: "informed_by",
     });
-    g.decisions.accept(second.objectId);
+    g.decisions.accept(second.objectId, "you", { skipSteelman: true });
 
     g.setProperties(article, { title: "The article, corrected." });
 
@@ -270,7 +270,7 @@ describe("review and rebuild travel on different edges and never merge", () => {
       sourceVersionId: null, atomObjectId: source, atomVersionId: null,
       relation: "supports", note: "",
     });
-    g.decisions.accept(d.objectId);
+    g.decisions.accept(d.objectId, "you", { skipSteelman: true });
     g.setProperties(source, { title: "A claim, reworded." });
 
     g.decisions.reviewQueue(worldId);
@@ -306,7 +306,7 @@ describe("a delivery can say what it was decided under", () => {
       sourceVersionId: copy.id, atomObjectId: article, atomVersionId: null,
       relation: "supports", note: "paragraph 3",
     });
-    g.decisions.accept(d.objectId, "Ada");
+    g.decisions.accept(d.objectId, "Ada", { skipSteelman: true });
 
     // The asset satisfies the decision — asserted by a person, so a semantic link.
     g.decisions.link({
@@ -389,7 +389,7 @@ describe("a build can depend on an accepted decision", () => {
       ],
       chosenOption: "taped", rationale: "Durability first.",
     });
-    g.decisions.accept(d.objectId);
+    g.decisions.accept(d.objectId, "you", { skipSteelman: true });
 
     const recipe = recipeWith(d.objectId, objectId);
     g.commitVersion({ objectId, recipeId: recipe.id });
@@ -401,7 +401,7 @@ describe("a build can depend on an accepted decision", () => {
     // A different choice, accepted: the brief changes, so the build genuinely is out of
     // date. This is the one place a decision drives a rebuild — the brief is a real input.
     g.decisions.update(d.objectId, { chosenOption: "welded", rationale: "Margin won." });
-    g.decisions.accept(d.objectId);
+    g.decisions.accept(d.objectId, "you", { skipSteelman: true });
 
     const after = g.recipes.statusOf(objectId).find((s) => s.stepKey === "export")!;
     expect(after.fingerprint).not.toBe(fingerprintBefore);
@@ -414,7 +414,7 @@ describe("a build can depend on an accepted decision", () => {
       options: [{ key: "taped", label: "Taped seams", note: "" }],
       chosenOption: "taped", rationale: "Durability first.",
     });
-    g.decisions.accept(d.objectId);
+    g.decisions.accept(d.objectId, "you", { skipSteelman: true });
     const recipe = recipeWith(d.objectId, objectId);
     g.commitVersion({ objectId, recipeId: recipe.id });
     const before = g.recipes.statusOf(objectId).find((s) => s.stepKey === "export")!.fingerprint;
@@ -434,7 +434,7 @@ describe("review travels in the direction the assertion was made", () => {
       worldId, question: "Which finish?",
       options: [{ key: "matte", label: "Matte", note: "" }], chosenOption: "matte",
     });
-    g.decisions.accept(d.objectId);
+    g.decisions.accept(d.objectId, "you", { skipSteelman: true });
     g.decisions.link({ fromObjectId: objectId, toObjectId: d.objectId, relation: "satisfies" });
 
     // The mesh is edited. That is a rebuild, and it is not a reason to re-open the choice.
@@ -455,12 +455,12 @@ describe("review travels in the direction the assertion was made", () => {
       sourceVersionId: null, atomObjectId: source, atomVersionId: null,
       relation: "supports", note: "",
     });
-    g.decisions.accept(d.objectId);
+    g.decisions.accept(d.objectId, "you", { skipSteelman: true });
     g.decisions.link({ fromObjectId: objectId, toObjectId: d.objectId, relation: "satisfies" });
 
     // The decision moves — a new acceptance is a new version of it.
     g.decisions.update(d.objectId, { rationale: "Reconsidered after the lighting change." });
-    g.decisions.accept(d.objectId);
+    g.decisions.accept(d.objectId, "you", { skipSteelman: true });
 
     const queue = g.decisions.reviewQueue(worldId);
     const item = queue.find((r) => r.objectId === objectId);
@@ -501,5 +501,59 @@ describe("a decision's cited passage starts unsettled", () => {
 
     g.support.review(rows[0]!.id, "supported");
     expect(g.support.summary(d.objectId).reviewedSupported).toBe(true);
+  });
+});
+
+describe("one reason this could be wrong, asked before acceptance", () => {
+  const draft = () => g.decisions.create({
+    worldId, question: "Which finish?",
+    options: [{ key: "matte", label: "Matte", note: "" }], chosenOption: "matte",
+    rationale: "Photographs better.",
+  });
+
+  it("will not accept without the question being answered or deliberately skipped", () => {
+    const d = draft();
+    expect(() => g.decisions.accept(d.objectId)).toThrow(SteelmanRequired);
+    expect(g.decisions.get(d.objectId)!.state).toBe("draft");
+  });
+
+  it("records the steelman as an assumption with a review trigger, and puts it in the brief", () => {
+    const d = draft();
+    g.decisions.accept(d.objectId, "Ada", {
+      steelman: "Matte reads flat under overcast light.", reviewTrigger: "the shoot moves outdoors",
+    });
+    const detail = g.decisions.detail(d.objectId)!;
+    expect(detail.steelman).toBe("recorded");
+    expect(detail.assumptions.some((a) => a.kind === "steelman" && a.text.includes("overcast"))).toBe(true);
+    expect(g.decisions.briefOf(d.objectId)).toContain("## How this could be wrong");
+    expect(g.decisions.briefOf(d.objectId)).toContain("the shoot moves outdoors");
+  });
+
+  it("records a skip as a skip — never as silence, never as agreement", () => {
+    const d = draft();
+    g.decisions.accept(d.objectId, "Ada", { skipSteelman: true });
+    expect(g.decisions.get(d.objectId)!.steelman).toBe("skipped");
+    expect(g.decisions.briefOf(d.objectId)).toContain("deliberately skipped");
+  });
+
+  it("an accepted decision always carries one or the other, never neither", () => {
+    const a = draft(); g.decisions.accept(a.objectId, "Ada", { steelman: "It might not." });
+    const b = draft(); g.decisions.accept(b.objectId, "Ada", { skipSteelman: true });
+    for (const id of [a.objectId, b.objectId]) {
+      const d = g.decisions.get(id)!;
+      expect(d.state).toBe("accepted");
+      expect(d.steelman).not.toBe("none");
+    }
+    const rows = g.db.prepare(
+      `SELECT COUNT(*) n FROM decisions WHERE state = 'accepted' AND steelman = 'none'`,
+    ).get() as { n: number };
+    expect(rows.n).toBe(0);
+  });
+
+  it("asks once: re-accepting after an edit does not ask again", () => {
+    const d = draft();
+    g.decisions.accept(d.objectId, "Ada", { steelman: "Could be wrong." });
+    g.decisions.update(d.objectId, { rationale: "Photographs better, and the client agreed." });
+    expect(() => g.decisions.accept(d.objectId, "Ada")).not.toThrow();
   });
 });

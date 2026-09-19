@@ -62,7 +62,7 @@ const decision: DecisionDetail = {
   chosenOption: "orange", rationale: "The client's own returns data points at visibility.",
   state: "needs_review", acceptedBy: "Ada", acceptedAt: 1,
   acceptedVersionId: "22222222-2222-4222-8222-222222222222",
-  supersedesDecisionId: null, supersedesVersionId: null,
+  supersedesDecisionId: null, supersedesVersionId: null, steelman: "recorded",
   options: [
     { key: "orange", label: "Orange", note: "high visibility" },
     { key: "graphite", label: "Graphite", note: "sells better in Europe" },
@@ -71,7 +71,7 @@ const decision: DecisionDetail = {
     sourceVersionId: "55555555-5555-4555-8555-555555555555", atomObjectId: ATOM,
     atomVersionId: null, relation: "informed_by", note: "paragraph 3",
   }],
-  assumptions: [{ text: "Cold-weather use dominates", reviewTrigger: "the range moves south" }],
+  assumptions: [{ text: "Cold-weather use dominates", reviewTrigger: "the range moves south", kind: "assumption" }],
 };
 
 const bindings = (over: Partial<SceneBindings> = {}): SceneBindings => ({

@@ -592,3 +592,33 @@ describe("a citation existing and a citation supporting the claim are two facts"
       .toContain("1 assertion cites sources that have not been checked");
   });
 });
+
+describe("what would change your mind", () => {
+  it("becomes a question the graph watches, linked to the claim it would revisit", () => {
+    const claim = store.observe(worldId, "Taped seams are worth the margin.", { lane: "keep" });
+    store.rate(claim.objectId, 0.8);
+
+    const question = store.wouldChangeMind(claim.objectId, "returns data shows welded seams holding up in cold cycling");
+
+    expect(question.atomType).toBe("question");
+    expect(question.stance).toBe("hypothesis");
+    expect(question.lane).toBe("test");
+    const links = g.decisions.linksTo(claim.objectId);
+    expect(links.some((l) => l.fromObjectId === question.objectId && l.relation === "review_on_change")).toBe(true);
+  });
+
+  it("counts as challenging your own position", () => {
+    const claim = store.observe(worldId, "Orange is the right call.");
+    store.wouldChangeMind(claim.objectId, "the client's brand team objects");
+    expect(store.movesOn(claim.objectId).some((m) => m.kind === "challenged")).toBe(true);
+  });
+
+  it("propagates review to the claim when the question is later edited", () => {
+    const claim = store.observe(worldId, "Orange is the right call.");
+    const question = store.wouldChangeMind(claim.objectId, "the brand team objects");
+    // The person comes back and rewrites the condition: the claim is worth a look.
+    g.setProperties(question.objectId, { title: "What would change my mind: the brand team objected, in writing" });
+    const queue = g.decisions.reviewQueue(worldId);
+    expect(queue.map((r) => r.objectId)).toContain(claim.objectId);
+  });
+});

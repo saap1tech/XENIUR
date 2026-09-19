@@ -139,7 +139,7 @@ async function main(): Promise<void> {
     atomObjectId: evidence.objectId, atomVersionId: null,
     relation: "supports", note: "the 63% figure",
   });
-  graph.decisions.accept(decisionId, "you");
+  graph.decisions.accept(decisionId, "you", { skipSteelman: true });
 
   /* Typed fixtures for the full M4 primitive gallery. */
   const constraintObject = (title: string) => graph.createObject({

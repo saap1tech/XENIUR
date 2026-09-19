@@ -57,8 +57,12 @@ export type DecisionEvidence = z.infer<typeof DecisionEvidenceSchema>;
 export const AssumptionSchema = z.object({
   text: z.string().min(1),
   reviewTrigger: z.string().default(""),
+  /** A steelman is the one reason this could be wrong, asked for before acceptance. */
+  kind: z.enum(["assumption", "steelman"]).default("assumption"),
 });
 export type Assumption = z.infer<typeof AssumptionSchema>;
+/** What a caller writes: `kind` and `reviewTrigger` may be left to their defaults. */
+export type AssumptionInput = z.input<typeof AssumptionSchema>;
 
 export const DecisionSchema = z.object({
   objectId: UuidSchema,
@@ -72,8 +76,28 @@ export const DecisionSchema = z.object({
   acceptedVersionId: UuidSchema.nullable().default(null),
   supersedesDecisionId: UuidSchema.nullable().default(null),
   supersedesVersionId: UuidSchema.nullable().default(null),
+  /**
+   * Whether the person named a reason this could be wrong before accepting. `skipped` is a
+   * recorded choice, not agreement; `none` is only ever true of a draft.
+   */
+  steelman: z.enum(["none", "recorded", "skipped"]).default("none"),
 });
 export type Decision = z.infer<typeof DecisionSchema>;
+
+/**
+ * Raised when a decision would be accepted without the person having been asked for one
+ * reason it could be wrong.
+ *
+ * Not a refusal: an answer, like NotReady. The caller either supplies a steelman or says
+ * deliberately that they are skipping it, and either is recorded on the decision.
+ */
+export class SteelmanRequired extends Error {
+  readonly code = "steelman_required" as const;
+  constructor(readonly objectId: string) {
+    super("before accepting, name one reason this could be wrong — or skip the question deliberately");
+    this.name = "SteelmanRequired";
+  }
+}
 
 export interface DecisionDetail extends Decision {
   options: DecisionOption[];

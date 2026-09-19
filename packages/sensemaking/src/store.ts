@@ -397,6 +397,33 @@ export class SensemakingStore {
   supportOf(claimObjectId: string): ClaimSupport[] { return this.graph.support.of(claimObjectId); }
   supportSummary(claimObjectId: string): SupportSummary { return this.graph.support.summary(claimObjectId); }
 
+  /**
+   * "What would change your mind?" — asked of a claim the person has rated.
+   *
+   * The answer becomes a question Object of its own, linked `review_on_change` to the claim,
+   * so the graph watches for it: when that question is later answered, edited or linked to
+   * evidence, review propagates to the claim the way a changed citation would. A recorded
+   * condition for changing one's mind is the second-cheapest critical-thinking move there
+   * is, and like the steelman it is asked at the moment it matters.
+   */
+  wouldChangeMind(claimObjectId: string, condition: string): Atom {
+    const claim = this.getAtom(claimObjectId);
+    if (!claim) throw new Error(`no such claim: ${claimObjectId}`);
+    const world = this.graph.getObject(claimObjectId)!.worldId;
+
+    const question = this.createAtom({
+      worldId: world, atomType: "question", stance: "hypothesis",
+      text: `What would change my mind: ${condition}`,
+      extraction: "manual", provenance: "human", lane: "test",
+    });
+    this.graph.decisions.link({
+      fromObjectId: question.objectId, toObjectId: claimObjectId,
+      relation: "review_on_change", note: "the condition under which this claim would be revisited",
+    });
+    this.#recordMove(claimObjectId, "challenged", `would change mind if: ${condition.slice(0, 60)}`);
+    return question;
+  }
+
   /** Whether an atom speaks for the person rather than about the world. */
   static isOwnStance(stance: Stance): boolean { return OWN_STANCES.includes(stance); }
 

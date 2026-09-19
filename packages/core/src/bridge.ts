@@ -166,7 +166,8 @@ export interface XeniurBridge {
       relation?: "supports" | "contradicts" | "informed_by"; note?: string;
     }): Promise<DecisionDetail | null>;
     assume(objectId: string, assumption: { text: string; reviewTrigger?: string }): Promise<DecisionDetail | null>;
-    accept(objectId: string): Promise<DecisionDetail | null>;
+    /** Returns null when the steelman question still needs answering. */
+    accept(objectId: string, answer?: { steelman?: string; reviewTrigger?: string; skipSteelman?: boolean }): Promise<DecisionDetail | null>;
     reaffirm(objectId: string): Promise<DecisionDetail | null>;
     /** The stored passage an atom came from, for a source chip. */
     passage(atomObjectId: string): Promise<(ResolvedPassage & { sourceTitle: string }) | null>;

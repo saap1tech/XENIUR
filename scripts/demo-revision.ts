@@ -180,7 +180,11 @@ async function main(): Promise<void> {
     text: "The film is shot under hard studio light",
     reviewTrigger: "the shoot moves outdoors or the brief changes its lighting",
   });
-  const accepted = graph.decisions.accept(decision.objectId, "you")!;
+  // Asked once, at the moment it matters: one reason this could be wrong.
+  const accepted = graph.decisions.accept(decision.objectId, "you", {
+    steelman: "Matte can look flat under the flat light of an overcast exterior.",
+    reviewTrigger: "the shoot moves outdoors",
+  })!;
   metrics.record("decision_accepted", { objectId: decision.objectId });
 
   check("the decision was accepted, and pinned to a version",

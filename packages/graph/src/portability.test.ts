@@ -201,7 +201,7 @@ describe("a package carries the reasons, not just the files", () => {
       sourceVersionId: copyId, atomObjectId: claim.object.id, atomVersionId: null,
       relation: "supports", note: "the 63% figure",
     });
-    source.decisions.accept(decision.objectId, "Ada");
+    source.decisions.accept(decision.objectId, "Ada", { skipSteelman: true });
 
     // An asset built under it, released, and linked to it.
     const asset = source.createObject({ worldId: world.id, semanticType: "prop", title: "Prop" });
@@ -566,7 +566,7 @@ describe("a recipient can read the delivery without installing anything", () => 
       sourceVersionId: copyId, atomObjectId: null, atomVersionId: null,
       relation: "supports", note: "",
     });
-    source.decisions.accept(decision.objectId, "Ada");
+    source.decisions.accept(decision.objectId, "Ada", { skipSteelman: true });
     source.decisions.link({
       fromObjectId: objectId, toObjectId: decision.objectId, relation: "satisfies",
     });

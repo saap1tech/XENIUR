@@ -852,6 +852,20 @@ ALTER TABLE capture_candidates ADD COLUMN stance    TEXT NOT NULL DEFAULT 'asser
 ALTER TABLE capture_candidates ADD COLUMN citations TEXT NOT NULL DEFAULT '[]';
 `;
 
+
+/**
+ * Migration 16 — thinking moves leave a mark.
+ *
+ * Before a decision is accepted, XENIUR asks for one reason it could be wrong. The answer is
+ * an assumption with a review trigger — a row that already existed — tagged as a steelman.
+ * Skipping the question is allowed and is recorded as a skip, never as agreement: an
+ * accepted decision always carries one or the other, and never neither.
+ */
+const THINKING_MOVES = `
+ALTER TABLE decision_assumptions ADD COLUMN kind TEXT NOT NULL DEFAULT 'assumption';  -- assumption | steelman
+ALTER TABLE decisions ADD COLUMN steelman TEXT NOT NULL DEFAULT 'none';               -- none | recorded | skipped
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: INIT },
   { version: 2, name: "object_model", sql: OBJECT_MODEL },
@@ -868,4 +882,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 13, name: "creator_layer", sql: CREATOR_LAYER },
   { version: 14, name: "action_receipts", sql: ACTION_RECEIPTS },
   { version: 15, name: "claim_support", sql: CLAIM_SUPPORT },
+  { version: 16, name: "thinking_moves", sql: THINKING_MOVES },
 ];

@@ -1,8 +1,8 @@
 import type {
-  Assumption, Decision, DecisionDetail, DecisionEvidence, DecisionOption, DecisionState,
+  Assumption, AssumptionInput, Decision, DecisionDetail, DecisionEvidence, DecisionOption, DecisionState,
   InfluenceReport, ReviewItem, SemanticLink, SemanticRelation,
 } from "@xeniur/core";
-import { newId, now } from "@xeniur/core";
+import { SteelmanRequired, newId, now } from "@xeniur/core";
 import type { ObjectGraph } from "./graph.js";
 
 const BRIEF_ROLE = "decision.brief";
@@ -110,10 +110,32 @@ export class DecisionStore {
     }
   }
 
-  assume(objectId: string, assumption: Assumption): void {
+  assume(objectId: string, assumption: AssumptionInput): void {
     this.graph.db.prepare(
-      `INSERT INTO decision_assumptions (id, decision_id, text, review_trigger) VALUES (?, ?, ?, ?)`,
-    ).run(newId(), objectId, assumption.text, assumption.reviewTrigger);
+      `INSERT INTO decision_assumptions (id, decision_id, text, review_trigger, kind) VALUES (?, ?, ?, ?, ?)`,
+    ).run(newId(), objectId, assumption.text, assumption.reviewTrigger ?? "", assumption.kind ?? "assumption");
+  }
+
+  /**
+   * One reason this could be wrong, asked for before acceptance.
+   *
+   * Stored as an assumption tagged `steelman`, with an optional review trigger — the
+   * condition under which the person would want to look again. The cheapest critical-thinking
+   * move there is, and the one most often skipped, which is why it is asked at the moment
+   * that matters rather than offered as a feature.
+   */
+  steelman(objectId: string, text: string, reviewTrigger = ""): void {
+    this.graph.db.transaction(() => {
+      this.assume(objectId, { text, reviewTrigger, kind: "steelman" });
+      this.graph.db.prepare(`UPDATE decisions SET steelman = 'recorded' WHERE object_id = ?`).run(objectId);
+    })();
+  }
+
+  /** Declining the question is a recorded choice — never silence, never agreement. */
+  skipSteelman(objectId: string): void {
+    this.graph.db.prepare(
+      `UPDATE decisions SET steelman = 'skipped' WHERE object_id = ? AND steelman = 'none'`,
+    ).run(objectId);
   }
 
   /**
@@ -124,10 +146,22 @@ export class DecisionStore {
    * model, and having one write it would make the one document that explains a delivery
    * the least trustworthy thing in the package.
    */
-  accept(objectId: string, by = "you"): DecisionDetail | null {
-    const detail = this.detail(objectId);
-    if (!detail) return null;
-    if (!detail.chosenOption) throw new Error("a decision cannot be accepted without a choice");
+  accept(
+    objectId: string, by = "you",
+    opts: { steelman?: string; reviewTrigger?: string; skipSteelman?: boolean } = {},
+  ): DecisionDetail | null {
+    const existing = this.detail(objectId);
+    if (!existing) return null;
+    if (!existing.chosenOption) throw new Error("a decision cannot be accepted without a choice");
+
+    // Asked once, at the moment it matters. An answer is recorded; a skip is recorded; an
+    // accepted decision never carries neither. Re-acceptance keeps whatever was already said.
+    if (existing.steelman === "none") {
+      if (opts.steelman) this.steelman(objectId, opts.steelman, opts.reviewTrigger ?? "");
+      else if (opts.skipSteelman) this.skipSteelman(objectId);
+      else throw new SteelmanRequired(objectId);
+    }
+    const detail = this.detail(objectId)!;
 
     return this.graph.db.transaction(() => {
       const markdown = renderBrief(detail, this.graph);
@@ -215,6 +249,7 @@ export class DecisionStore {
       acceptedVersionId: (r["accepted_version_id"] as string | null) ?? null,
       supersedesDecisionId: (r["supersedes_decision_id"] as string | null) ?? null,
       supersedesVersionId: (r["supersedes_version_id"] as string | null) ?? null,
+      steelman: ((r["steelman"] as string | undefined) ?? "none") as Decision["steelman"],
     };
   }
 
@@ -238,9 +273,10 @@ export class DecisionStore {
         note: r["note"] as string,
       })),
       assumptions: (this.graph.db.prepare(
-        `SELECT text, review_trigger FROM decision_assumptions WHERE decision_id = ? ORDER BY rowid`,
+        `SELECT text, review_trigger, kind FROM decision_assumptions WHERE decision_id = ? ORDER BY rowid`,
       ).all(objectId) as Array<Record<string, unknown>>).map((r) => ({
         text: r["text"] as string, reviewTrigger: r["review_trigger"] as string,
+        kind: ((r["kind"] as string | undefined) ?? "assumption") as Assumption["kind"],
       })),
     };
   }
@@ -518,12 +554,23 @@ export function renderBrief(detail: DecisionDetail, graph: ObjectGraph): string 
     lines.push("");
   }
 
-  if (detail.assumptions.length > 0) {
+  const assumed = detail.assumptions.filter((a) => a.kind !== "steelman");
+  const steelmen = detail.assumptions.filter((a) => a.kind === "steelman");
+  if (assumed.length > 0) {
     lines.push("## Assumed", "");
-    for (const a of detail.assumptions) {
+    for (const a of assumed) {
       lines.push(`- ${a.text}${a.reviewTrigger ? `\n  - Revisit if: ${a.reviewTrigger}` : ""}`);
     }
     lines.push("");
+  }
+  if (steelmen.length > 0) {
+    lines.push("## How this could be wrong", "");
+    for (const a of steelmen) {
+      lines.push(`- ${a.text}${a.reviewTrigger ? `\n  - Revisit if: ${a.reviewTrigger}` : ""}`);
+    }
+    lines.push("");
+  } else if (detail.steelman === "skipped") {
+    lines.push("## How this could be wrong", "", "_The question was asked and deliberately skipped._", "");
   }
 
   lines.push("---", "",

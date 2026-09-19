@@ -104,7 +104,8 @@ contextBridge.exposeInMainWorld("xeniur", {
       call("decisions:cite", { id: objectId, ...evidence }),
     assume: (objectId: string, assumption: Record<string, unknown>) =>
       call("decisions:assume", { id: objectId, ...assumption }),
-    accept: (objectId: string) => call("decisions:accept", { id: objectId }),
+    accept: (objectId: string, answer?: { steelman?: string; reviewTrigger?: string; skipSteelman?: boolean }) =>
+      call("decisions:accept", { id: objectId, ...(answer ?? {}) }),
     reaffirm: (objectId: string) => call("decisions:reaffirm", { id: objectId }),
     passage: (atomObjectId: string) => call("decisions:passage", { id: atomObjectId }),
     influence: (objectId: string, releaseId?: string) =>

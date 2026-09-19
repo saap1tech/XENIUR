@@ -134,7 +134,13 @@ const SCHEMAS = {
     text: z.string().min(1).max(1000),
     reviewTrigger: z.string().max(500).default(""),
   }),
-  "decisions:accept": Uuid,
+  "decisions:accept": z.object({
+    id: UuidSchema,
+    /** One reason this could be wrong. Either this or skipSteelman must be present. */
+    steelman: z.string().max(1000).optional(),
+    reviewTrigger: z.string().max(500).optional(),
+    skipSteelman: z.boolean().optional(),
+  }),
   "decisions:reaffirm": Uuid,
   "decisions:passage": Uuid,
   "decisions:influence": z.object({ id: UuidSchema, releaseId: UuidSchema.optional() }),
@@ -367,7 +373,17 @@ export function registerIpc(services: Services): void {
 
     // Accepting renders the brief deterministically. No model is involved, so this needs
     // no permission beyond being in the app.
-    "decisions:accept": ({ id }) => services.graph.decisions.accept(id),
+    "decisions:accept": ({ id, steelman, reviewTrigger, skipSteelman }) => {
+      try {
+        return services.graph.decisions.accept(id, "you", { steelman, reviewTrigger, skipSteelman });
+      } catch (err) {
+        // SteelmanRequired is an answer, not a crash: the renderer asks the question.
+        if (err instanceof Error && "code" in err && (err as { code: string }).code === "steelman_required") {
+          return null;
+        }
+        throw err;
+      }
+    },
     "decisions:reaffirm": ({ id }) => {
       services.graph.decisions.reaffirm(id);
       return services.graph.decisions.detail(id);
