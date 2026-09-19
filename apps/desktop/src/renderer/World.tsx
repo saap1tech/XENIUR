@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   ConstraintRecord, DecisionDetail, FrictionState, ImpactReport, Lane, ObjectState, ProcessProof,
-  Representation, Scene, Task, ThinkingMap, WorldSnapshot,
+  Representation, Scene, Task, ThinkingMap, TrustFacts, WorldSnapshot,
 } from "@xeniur/core";
 import { SceneRenderer, type SceneBindings } from "@xeniur/ui";
 import {
@@ -68,6 +68,7 @@ export function World({
   const [showHow, setShowHow] = useState<{ objectId: string; subject: string } | null>(null);
   const [constraints, setConstraints] = useState<ConstraintRecord[]>([]);
   const [proof, setProof] = useState<ProcessProof | null>(null);
+  const [trust, setTrust] = useState<Record<string, TrustFacts>>({});
   const [gestureProposals, setGestureProposals] = useState<GestureProposal[]>([]);
   const [gesturePair, setGesturePair] = useState<{
     sourceId: string; targetId: string; targetKind: "claim" | "object";
@@ -96,7 +97,11 @@ export function World({
       if (report) setImpact((prev) => ({ ...prev, [selectedId]: report }));
     });
     void bridge?.process?.proof(selectedId).then((value) => setProof(value ?? null));
-  }, [bridge, selectedId, snapshot]);
+    // Facts the graph can show about the focused Object. Never a tick; re-read on every change.
+    void bridge?.trust?.facts(selectedId).then((facts) => {
+      if (facts) setTrust((prev) => ({ ...prev, [selectedId]: facts }));
+    });
+  }, [bridge, selectedId, snapshot, decisions, proof?.counts]);
 
   const byId = useMemo(
     () => new Map(snapshot.representations.map((r: Representation) => [r.id, r])),
@@ -117,6 +122,7 @@ export function World({
     impact,
     constraints: Object.fromEntries(constraints.map((constraint) => [constraint.objectId, constraint])),
     processProof: proof ? { [proof.objectId]: proof } : {},
+    trust,
     gestureProposals: Object.fromEntries(gestureProposals.map((proposal) => [proposal.id, proposal])),
     blobUrl: (hash) => bridge?.blobs.url(hash) ?? "",
     onSelect: (objectId) => setSelectedId(objectId),
@@ -163,7 +169,7 @@ export function World({
       if (updated) setConstraints((items) => items.map((item) => item.objectId === constraintId ? updated : item));
     },
   }), [snapshot, byId, tasks, map, friction, decisions, impact, worldId, bridge,
-       onApprove, onReject, refreshThinking, constraints, proof, gestureProposals, gesturePair, zone]);
+       onApprove, onReject, refreshThinking, constraints, proof, trust, gestureProposals, gesturePair, zone]);
 
   /** One thing at a time in the centre, chosen by the zone and what is selected. */
   const scene: Scene = useMemo(() => {
@@ -236,10 +242,11 @@ export function World({
     worldId, title: "", reason: "",
     root: {
       id: "inspector", component: "Canvas", layout: "column",
-      children: [{
-        id: "questions", component: "InspectorQuestions",
-        objectId: selected.object.id, open: "what",
-      } as never],
+      children: [
+        // "Can I trust this work?" is answered before any question is asked of it.
+        { id: "trust", component: "TrustStrip", objectId: selected.object.id, compact: true } as never,
+        { id: "questions", component: "InspectorQuestions", objectId: selected.object.id, open: "what" } as never,
+      ],
     },
   } : null, [selected, worldId]);
 

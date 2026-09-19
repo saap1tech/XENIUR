@@ -125,6 +125,11 @@ contextBridge.exposeInMainWorld("xeniur", {
     setValue: (objectId: string, value: unknown) => call("constraints:setValue", { id: objectId, value }),
   },
 
+  trust: {
+    facts: (objectId: string) => call("trust:facts", { id: objectId }),
+    outcome: (objectId: string, releaseId?: string) => call("trust:outcome", { id: objectId, releaseId }),
+  },
+
   process: {
     proof: (objectId: string) => call("process:proof", { id: objectId }),
     publish: (objectId: string, privacy?: "filtered" | "public") =>

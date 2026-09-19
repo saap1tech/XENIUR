@@ -145,6 +145,27 @@ export interface TrustFacts {
   settled: boolean;
 }
 
+/**
+ * What a delivery actually cost, joined from records that already exist: spend rows and
+ * action costs behind the delivered files, recorded sessions, decisions and source copies.
+ * Recorded work is *recorded*, never *total*.
+ */
+export interface OutcomeLedger {
+  objectId: string;
+  releaseId: string | null;
+  label: string;
+  /** Deterministic transforms and generation, from the cost recorded on each lineage action. */
+  generation: { usd: number; actions: number; generativeActions: number };
+  /** Model calls attributed to the tasks behind this release, from the spend ledger. */
+  intelligence: { usd: number; calls: number; escalations: number; failed: number };
+  /** Recorded XENIUR sessions on this Object. Recorded, not total. */
+  recordedWork: { sessions: number; ms: number };
+  decisions: number;
+  sourceCopies: number;
+  /** One sentence, for the delivery report. */
+  summary: string;
+}
+
 /** The sentence a screen reader hears for a Trust Strip. Facts, in order, no adjectives. */
 export function describeTrust(t: TrustFacts): string {
   const s = t.support;

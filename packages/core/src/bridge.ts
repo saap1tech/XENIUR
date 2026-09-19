@@ -1,6 +1,6 @@
 import type { ObjectState, Representation, World } from "./object.js";
 import type { DecisionDetail, InfluenceReport } from "./decisions.js";
-import type { ImpactReport } from "./impact.js";
+import type { ImpactReport, OutcomeLedger, TrustFacts } from "./impact.js";
 import type { Check, ReadinessReport, Release } from "./readiness.js";
 import type { RebuildPlan, StepStatus } from "./recipe.js";
 import type { DnaReport } from "./ingredients.js";
@@ -198,6 +198,13 @@ export interface XeniurBridge {
     passage(atomObjectId: string): Promise<(ResolvedPassage & { sourceTitle: string }) | null>;
     /** Which accepted decisions and source copies a delivery was made under. */
     influence(objectId: string, releaseId?: string): Promise<InfluenceReport | null>;
+  };
+
+  /* Can I trust this work? — facts the graph can show, never a tick */
+  trust: {
+    facts(objectId: string): Promise<TrustFacts | null>;
+    /** What a delivery cost, joined to its spend rows. Latest release when none is given. */
+    outcome(objectId: string, releaseId?: string): Promise<OutcomeLedger | null>;
   };
 
   constraints: {

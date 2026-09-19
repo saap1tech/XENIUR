@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { extractCandidates } from "@xeniur/sensemaking";
 import { z } from "zod";
 import { sha256Hex, UuidSchema, type ActionPlan, type IntentResult, type WorldSnapshot } from "@xeniur/core";
-import { renderProofPage } from "@xeniur/graph";
+import { outcomeOf, renderProofPage, trustFactsFor } from "@xeniur/graph";
 import { InvalidPlanError } from "@xeniur/brain";
 import { planForProposal, proposalsFor } from "@xeniur/grammar";
 import type { Services } from "./services.js";
@@ -78,6 +78,8 @@ const SCHEMAS = {
   "living:impact": Uuid,
   "constraints:list": Uuid,
   "constraints:setValue": z.object({ id: UuidSchema, value: z.unknown() }),
+  "trust:facts": Uuid,
+  "trust:outcome": z.object({ id: UuidSchema, releaseId: UuidSchema.optional() }),
   "process:proof": Uuid,
   "process:publish": z.object({ id: UuidSchema, privacy: z.enum(["filtered", "public"]).default("filtered") }),
   "process:exportPage": z.object({ id: UuidSchema, eventIds: z.array(UuidSchema).max(500),
@@ -339,6 +341,8 @@ export function registerIpc(services: Services): void {
     "constraints:list": ({ id }) => services.graph.constraints.list(id),
     "constraints:setValue": ({ id, value }) => services.graph.constraints.get(id)
       ? services.graph.constraints.setValue(id, value) : null,
+    "trust:facts": ({ id }) => services.graph.getObject(id) ? trustFactsFor(services.graph, id) : null,
+    "trust:outcome": ({ id, releaseId }) => services.graph.getObject(id) ? outcomeOf(services.graph, id, releaseId) : null,
     "process:proof": ({ id }) => services.graph.process.proof(id),
     "process:publish": ({ id, privacy }) => services.graph.process.publish(id, privacy),
     "process:exportPage": ({ id, eventIds, discloseHashes, discloseTiming }) => {

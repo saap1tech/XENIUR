@@ -589,6 +589,10 @@ describe("a recipient can read the delivery without installing anything", () => 
     // And it does not claim the sources caused the choice.
     expect(html).toContain("only that it was cited when the");
     expect(html).toContain("without a model");
+    // The Outcome Ledger travels with it, in the process ledger's words.
+    expect(html).toContain("What it cost");
+    expect(html).toContain("recorded, not total");
+    expect(html).not.toMatch(/total time|hours worked|time saved/i);
   });
 
   it("stands alone: no scripts, no fetches, nothing to install", () => {

@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { KeyWouldLeak, findKeyShaped, formRoleName } from "@xeniur/core";
 import type { ObjectGraph } from "./graph.js";
 import { inspectArchive, verifyBlobs } from "./package-safety.js";
+import { outcomeOf } from "./outcomes.js";
 
 const exec = promisify(execFile);
 
@@ -822,6 +823,7 @@ export function deliveryReport(
     `SELECT * FROM releases WHERE object_id = ? ORDER BY approved_at DESC`, objectId);
   const release = (releaseId ? releases.find((r) => r["id"] === releaseId) : releases[0]) ?? null;
   const influence = graph.decisions.influenceOn(objectId, release?.["id"] as string | undefined);
+  const outcome = outcomeOf(graph, objectId, release?.["id"] as string | undefined);
 
   const versionId = (release?.["version_id"] as string | undefined) ?? state?.versionId;
   const forms = versionId ? graph.formsAt(versionId) : [];
@@ -917,6 +919,21 @@ against the exact file delivered. A profile states what it checks and what it do
 
 <h2>Read from</h2>
 <ul>${rowsHtml(sourceLines)}</ul>
+
+<h2>What it cost</h2>
+<ul>
+  <li>Generation <strong>$${outcome.generation.usd.toFixed(2)}</strong>
+    <span class=meta>${outcome.generation.actions} action${outcome.generation.actions === 1 ? "" : "s"}, ${
+      outcome.generation.generativeActions} generative</span></li>
+  <li>Intelligence <strong>$${outcome.intelligence.usd.toFixed(2)}</strong>
+    <span class=meta>${outcome.intelligence.calls} model call${outcome.intelligence.calls === 1 ? "" : "s"}${
+      outcome.intelligence.escalations > 0 ? `, ${outcome.intelligence.escalations} escalated` : ""}${
+      outcome.intelligence.failed > 0 ? `, ${outcome.intelligence.failed} failed and still billed` : ""}</span></li>
+  <li>Recorded work <strong>${Math.round(outcome.recordedWork.ms / 60_000)} min</strong>
+    <span class=meta>${outcome.recordedWork.sessions} session${outcome.recordedWork.sessions === 1 ? "" : "s"} — recorded, not total</span></li>
+</ul>
+<p class=meta>Money is summed from the spend rows and action costs behind the delivered files.
+Time counts only sessions XENIUR recorded; work done elsewhere is not here and is not estimated.</p>
 
 <footer>
   ${esc(influence.summary)}<br>
