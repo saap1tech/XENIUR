@@ -21,6 +21,7 @@ export { PublisherStore, PublisherIdentity, verifySignature, packageRootHash } f
 export { CircleStore, critiquePairs, importedFrom } from "./shared.js";
 export { OutreachStore, DisabledTransport, MockTransport } from "./outreach.js";
 export { ChallengeStore, rulesDigest } from "./challenges.js";
+export { TrailStore } from "./trail.js";
 export type { CritiquePair, Circle, CircleProgress } from "./shared.js";
 export { RhythmStore, loadRhythmConfig, nextOfferAt, insideWindows } from "./rhythm.js";
 export type { Offer } from "./rhythm.js";

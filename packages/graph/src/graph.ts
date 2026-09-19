@@ -19,6 +19,7 @@ import { PublisherStore } from "./publishers.js";
 import { CircleStore } from "./shared.js";
 import { OutreachStore } from "./outreach.js";
 import { ChallengeStore } from "./challenges.js";
+import { TrailStore } from "./trail.js";
 import { ActionReceiptStore } from "./action-receipts.js";
 import { json, openDatabase, type Db } from "./db.js";
 import * as rows from "./rows.js";
@@ -80,6 +81,8 @@ export class ObjectGraph {
   readonly outreach: OutreachStore;
   /** Explicit Worlds with signed rules and an AI policy the record can be checked against. */
   readonly challenges: ChallengeStore;
+  /** Saw · decided · authorised · executed, one row per model call or consequential action. */
+  readonly trail: TrailStore;
 
   private constructor(readonly db: Db, readonly blobs: BlobStore, signingKeys: SigningKeyStore) {
     this.recipes = new RecipeStore(db, {
@@ -96,6 +99,7 @@ export class ObjectGraph {
     this.circles = new CircleStore(db, this);
     this.outreach = new OutreachStore(db, this);
     this.challenges = new ChallengeStore(db, this);
+    this.trail = new TrailStore(db);
   }
 
   static open(opts: GraphOptions): ObjectGraph {

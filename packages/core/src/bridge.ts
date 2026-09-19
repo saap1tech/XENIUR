@@ -5,6 +5,8 @@ import type { EnvelopeSheet, ExitReason, ModeEnvelopeInput, ModeKind, ModeRecord
 import type { PublisherReport, PublisherView, ReportReason, TrustLevel } from "./publisher.js";
 import type { CampaignRecord, OutboundMessage, OutreachEnvelopeInput } from "./outreach.js";
 import type { ChallengeRecord, ChallengeRulesInput, EntryRecord } from "./challenges.js";
+import type { TrailRow } from "./trail.js";
+import type { CandidateRecord, ClaimSupport, SupportStatus } from "./sensemaking.js";
 
 /** What the renderer learns about a package before deciding. No manifest, no rows — the shape. */
 export interface PackageInspectionView {
@@ -314,6 +316,39 @@ export interface XeniurBridge {
     sort(objectId: string, lane: Lane): Promise<Atom | null>;
     rate(objectId: string, confidence: number | null): Promise<Atom | null>;
     link(input: { fromObjectId: string; toObjectId: string; relation: string; note?: string }): Promise<void>;
+    /** Settle whether a cited passage bears on its claim. A person's answer; a model only proposed. */
+    reviewSupport(supportId: string, status: SupportStatus, note?: string): Promise<ClaimSupport | null>;
+    pendingCandidates(worldId: string): Promise<CandidateRecord[]>;
+    /** Returns null when the candidate is an assertion whose citations are unreviewed and the person did not say so. */
+    acceptCandidate(candidateId: string, edit?: { acceptUnreviewed?: boolean }): Promise<Atom | null>;
+    rejectCandidate(candidateId: string): Promise<void>;
+  };
+
+  /* The Brain, behind its gates — what it would see, then what it did */
+  brain: {
+    /**
+     * Compiles what the model would see for this focus and intent, routes it, and opens a
+     * trail row. Nothing is sent. The person reads the ContextReview and confirms the digest.
+     */
+    prepare(input: { worldId: string; objectId: string; intent: string; question: string }): Promise<{
+      trailId: string;
+      context: {
+        included: Array<{ kind: string; id: string; label: string; tokens: number }>;
+        excluded: Array<{ kind: string; id: string; label: string; why: string }>;
+        tokens: number; includesRestricted: boolean; contextDigest: string;
+        destination: "local" | "remote"; modelLabel: string | null; estimatedUsd: number;
+      };
+      planDigest: string;
+    }>;
+    /** Runs exactly the prepared call. Refused if the digest is not the one shown. */
+    ask(input: { trailId: string; contextDigest: string; planDigest: string }): Promise<{
+      status: "ok" | "gated" | "refused" | "over_budget";
+      reason: string | null;
+      /** For research_plan: what entered as candidates. Never atoms. */
+      proposed: { claims: number; steps: number; unsupported: number } | null;
+      trail: TrailRow | null;
+    }>;
+    trail(objectId: string): Promise<TrailRow[]>;
   };
 }
 

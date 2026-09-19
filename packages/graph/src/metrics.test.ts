@@ -121,3 +121,54 @@ describe("a metrics export cannot carry a credential", () => {
     expect(metrics.exportSummary()).not.toContain("sk-ant");
   });
 });
+
+/* M5 Stage 13 — new kinds, same gate: no row carries content, and no timing reads engagement. */
+describe("the M5 kinds pass through the same content-stripping gate", () => {
+  const CONTENT = {
+    title: "Rainwear 2027 — colour strategy for the Okafor account",
+    text: "Consumers prefer orange when price is under €80.",
+    path: "/Users/dev/Documents/secret-brief.pdf",
+    email: "ana@example.com",
+    prompt: "Summarise the attached interview and propose three steps",
+  };
+
+  it("keeps the kind, the enum-shaped detail and the counts, and drops every sentence, path and address", () => {
+    metrics.start();
+    const kinds = [
+      "model_routed", "context_reviewed", "context_excluded", "support_reviewed", "proposal_accepted", "proposal_rejected",
+      "steelman_recorded", "steelman_skipped", "mode_started", "mode_exited", "mode_emergency_exit",
+      "reward_offered", "reward_taken", "reward_skipped", "streak_day", "critique_received", "package_imported", "outreach_sent",
+    ] as const;
+    for (const kind of kinds) {
+      metrics.record(kind, { detail: { ...CONTENT, status: "supported", model: "gpt-4o-mini", escalation: 1, count: 3, ok: true } });
+    }
+    const rows = metrics.events().filter((r) => r.kind !== "session_started");
+    expect(rows.map((r) => r.kind)).toEqual([...kinds]);
+    const dump = JSON.stringify(rows);
+    for (const leak of Object.values(CONTENT)) expect(dump).not.toContain(leak);
+    expect(rows[0]!.detail).toEqual({ status: "supported", model: "gpt-4o-mini", escalation: 1, count: 3, ok: true });
+    // And the export, the only way any of this leaves the table, says the same.
+    const summary = metrics.exportSummary();
+    for (const leak of Object.values(CONTENT)) expect(summary).not.toContain(leak);
+  });
+
+  it("every kind has a meaning a person can read beside its count", async () => {
+    const { EVENT_MEANINGS, SESSION_EVENT_KINDS } = await import("@xeniur/core");
+    for (const kind of SESSION_EVENT_KINDS) expect(EVENT_MEANINGS[kind], kind).toMatch(/\w+ \w+/);
+  });
+});
+
+describe("the agent trail fills left to right and never out of order", () => {
+  it("cannot authorise what was not decided, nor execute what was not authorised", () => {
+    const worldId = g.createWorld({ title: "W", emoji: "W" }).id;
+    const row = g.trail.saw({ worldId, objectId: null, intent: "research_plan", digest: "d".repeat(64), included: 7, excluded: 2 });
+    expect(row.decided).toBeNull();
+    // Skipping the decision: nothing happens.
+    expect(g.trail.authorized(row.id, "p".repeat(64), "CREATE")!.authorized).toBeNull();
+    expect(g.trail.executed(row.id, "no-action", "ok")!.executed).toBeNull();
+    // In order: each fills once.
+    expect(g.trail.decided(row.id, "gated", null)!.decided).toEqual({ kind: "gated", model: null });
+    expect(g.trail.decided(row.id, "executable", "m")!.decided).toEqual({ kind: "gated", model: null });
+    expect(g.trail.authorized(row.id, "p".repeat(64), "CREATE")!.authorized).toEqual({ planDigest: "p".repeat(64), level: "CREATE" });
+  });
+});

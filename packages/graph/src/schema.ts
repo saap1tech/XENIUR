@@ -1046,6 +1046,35 @@ CREATE TABLE challenge_entries (
 );
 `;
 
+/**
+ * Migration 22 — the agent trail.
+ *
+ * One row per model call or consequential action: what the agent saw (a context digest),
+ * decided (the outcome kind), was authorised to do (a plan digest) and executed (a receipt).
+ * A row that stops early stops visibly — the later columns stay null and nothing is inferred
+ * to fill them. This is what a regulated reader exports.
+ */
+const AGENT_TRAIL = `
+CREATE TABLE agent_trail (
+  id                TEXT PRIMARY KEY,
+  world_id          TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+  object_id         TEXT REFERENCES objects(id) ON DELETE SET NULL,
+  intent            TEXT NOT NULL,
+  saw_digest        TEXT,                     -- contextDigest; NULL when nothing was compiled
+  saw_included      INTEGER NOT NULL DEFAULT 0,
+  saw_excluded      INTEGER NOT NULL DEFAULT 0,
+  decided           TEXT,                     -- outcome kind, or gated | refused | over_budget
+  decided_model     TEXT,
+  authorized_digest TEXT,                     -- planDigest of what the person approved
+  authorized_level  TEXT,
+  executed_action_id TEXT REFERENCES actions(id) ON DELETE SET NULL,
+  executed_outcome  TEXT,
+  at                INTEGER NOT NULL
+);
+CREATE INDEX idx_agent_trail_world ON agent_trail(world_id, at);
+CREATE INDEX idx_agent_trail_object ON agent_trail(object_id, at);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: INIT },
   { version: 2, name: "object_model", sql: OBJECT_MODEL },
@@ -1068,4 +1097,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 19, name: "shared_worlds", sql: SHARED_WORLDS },
   { version: 20, name: "outreach", sql: OUTREACH },
   { version: 21, name: "challenges", sql: CHALLENGES },
+  { version: 22, name: "agent_trail", sql: AGENT_TRAIL },
 ];

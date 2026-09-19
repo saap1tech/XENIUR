@@ -4,8 +4,13 @@ import { join } from "node:path";
 import { extractCandidates } from "@xeniur/sensemaking";
 import { z } from "zod";
 import { ChallengeRulesSchema, ExitReasonSchema, ModeEnvelopeSchema, ModeKindSchema, OutreachEnvelopeSchema, PublisherRefSchema, ReportReasonSchema, TrustLevelSchema, authorizeFor, campaignPlan, campaignScope, describeEnvelope, describeRecipients, needsCampaign, planDigest, sha256Hex, UuidSchema, type ActionPlan, type IntentResult, type WorldSnapshot } from "@xeniur/core";
-import { importPackage, inspectPackage, outcomeOf, renderProofPage, trustFactsFor } from "@xeniur/graph";
-import { InvalidPlanError } from "@xeniur/brain";
+import { contextMaterialFor, importPackage, inspectPackage, outcomeOf, renderProofPage, trustFactsFor } from "@xeniur/graph";
+import { compileContext } from "@xeniur/grammar";
+import { policyFrom } from "@xeniur/models";
+import { proposeFromBound } from "@xeniur/sensemaking";
+import { SupportStatusSchema, type Tool, type PlanShape } from "@xeniur/core";
+import { policyConstraints } from "./services.js";
+import { BrainIntentSchema, InvalidPlanError, bindProposal, type BrainIntent } from "@xeniur/brain";
 import { planForProposal, proposalsFor } from "@xeniur/grammar";
 import type { Services } from "./services.js";
 import { assertTrustedSender, UntrustedSenderError } from "./security.js";
@@ -143,6 +148,16 @@ const SCHEMAS = {
     note: z.string().max(500).optional(),
   }),
 
+  "sense:reviewSupport": z.object({ id: UuidSchema, status: SupportStatusSchema, note: z.string().max(500) }),
+  "sense:pendingCandidates": Uuid,
+  "sense:acceptCandidate": z.object({ id: UuidSchema, acceptUnreviewed: z.boolean() }),
+  "sense:rejectCandidate": Uuid,
+
+  /* The Brain — what it would see is compiled and shown; what it did is one trail row */
+  "brain:prepare": z.object({ worldId: UuidSchema, objectId: UuidSchema, intent: BrainIntentSchema, question: z.string().min(1).max(2000) }),
+  "brain:ask": z.object({ trailId: UuidSchema, contextDigest: z.string().min(1), planDigest: z.string().min(1) }),
+  "brain:trail": Uuid,
+
   /* Your models — the key is written once, read only in the main process, never echoed */
   "models:list": z.undefined(),
   "models:add": z.object({
@@ -211,6 +226,12 @@ function enqueuePlan(services: Services, worldId: string, plan: ActionPlan, comp
 }
 
 export function registerIpc(services: Services): void {
+  /** Prepared calls awaiting the person's confirmation, keyed by trail row. Never persisted. */
+  const pending = new Map<string, {
+    worldId: string; objectId: string; intent: BrainIntent; question: string;
+    compiled: ReturnType<typeof compileContext>; plan: PlanShape; planDigest: string;
+  }>();
+
   const handlers: { [K in Channel]: (args: z.infer<(typeof SCHEMAS)[K]>) => unknown } = {
     "worlds:list": () => services.graph.listWorlds(),
     "worlds:create": (a) => services.graph.createWorld(a),
@@ -519,7 +540,11 @@ export function registerIpc(services: Services): void {
     // no permission beyond being in the app.
     "decisions:accept": ({ id, steelman, reviewTrigger, skipSteelman }) => {
       try {
-        return services.graph.decisions.accept(id, "you", { steelman, reviewTrigger, skipSteelman });
+        const detail = services.graph.decisions.accept(id, "you", { steelman, reviewTrigger, skipSteelman });
+        // A skip is recorded as a skip, never as agreement; a reason is recorded as a reason.
+        services.metrics.record(steelman ? "steelman_recorded" : "steelman_skipped", { objectId: id });
+        services.metrics.record("decision_accepted", { objectId: id });
+        return detail;
       } catch (err) {
         // SteelmanRequired is an answer, not a crash: the renderer asks the question.
         if (err instanceof Error && "code" in err && (err as { code: string }).code === "steelman_required") {
@@ -588,6 +613,111 @@ export function registerIpc(services: Services): void {
         relation: input.relation, note: input.note ?? null,
       });
     },
+    "sense:reviewSupport": ({ id, status, note }) => {
+      const row = services.sense.reviewSupport(id, status, note);
+      if (row) services.metrics.record("support_reviewed", { objectId: row.claimObjectId, detail: { status } });
+      return row;
+    },
+    "sense:pendingCandidates": ({ id }) => services.sense.pendingCandidates(id),
+    "sense:acceptCandidate": ({ id, acceptUnreviewed }) => {
+      try {
+        const atom = services.sense.accept(id, { acceptUnreviewed });
+        if (atom) services.metrics.record("proposal_accepted", { objectId: atom.objectId, detail: { stance: atom.stance } });
+        return atom;
+      } catch (err) {
+        if (err instanceof Error && err.name === "UnreviewedCitations") return null;   // the renderer asks
+        throw err;
+      }
+    },
+    "sense:rejectCandidate": ({ id }) => {
+      services.sense.reject(id);
+      services.metrics.record("proposal_rejected");
+    },
+
+    /* --------------------------------------------------------- The Brain */
+
+    "brain:prepare": ({ worldId, objectId, intent, question }) => {
+      const material = contextMaterialFor(services.graph, objectId);
+      if (!material) throw new Error("no such Object to compile a context for");
+      const { strengthId, restrictedId } = policyConstraints(services.graph);
+      const policy = policyFrom(
+        services.graph.constraints.get(strengthId)?.value, services.graph.constraints.get(restrictedId)?.value,
+      );
+      // Route first, because the destination decides what may be included at all.
+      const probe = services.gatedBrain.resolverFor()?.resolve(intent, { escalation: 0, hasRestrictedSources: false }) ?? null;
+      const destination: "local" | "remote" = probe && /ollama|local/.test(probe.id) ? "local" : "remote";
+      const compiled = compileContext(material, { destination, maxTokens: 6000 });
+      const estimatedUsd = probe ? services.gatedBrain.estimateUsd(probe.pricing) : 0;
+      const plan = services.gatedBrain.planFor(intent, compiled.contextDigest, estimatedUsd);
+      const row = services.graph.trail.saw({
+        worldId, objectId, intent, digest: compiled.contextDigest,
+        included: compiled.included.length, excluded: compiled.excluded.length,
+      });
+      services.metrics.record("context_reviewed", { objectId, detail: { intent, included: compiled.included.length } });
+      if (compiled.excluded.length > 0) {
+        for (const why of new Set(compiled.excluded.map((e) => e.why))) {
+          services.metrics.record("context_excluded", { objectId, detail: { why, count: compiled.excluded.filter((e) => e.why === why).length } });
+        }
+      }
+      if (probe) services.metrics.record("model_routed", { objectId, detail: { intent, model: probe.id, escalation: probe.escalation, localOnly: policy.localOnlyForRestricted } });
+      pending.set(row.id, { worldId, objectId, intent, question, compiled, plan, planDigest: planDigest(plan) });
+      return {
+        trailId: row.id,
+        context: {
+          included: compiled.included.map((i) => ({ kind: i.kind, id: i.id, label: i.label, tokens: i.tokens })),
+          excluded: compiled.excluded.map((e) => ({ kind: e.kind, id: e.id, label: e.label, why: e.why })),
+          tokens: compiled.tokens, includesRestricted: compiled.includesRestricted, contextDigest: compiled.contextDigest,
+          destination, modelLabel: probe?.id ?? null, estimatedUsd,
+        },
+        planDigest: planDigest(plan),
+      };
+    },
+
+    "brain:ask": async ({ trailId, contextDigest, planDigest: approvedDigest }) => {
+      const prepared = pending.get(trailId);
+      if (!prepared) throw new Error("nothing was prepared under that trail row — prepare again");
+      if (prepared.compiled.contextDigest !== contextDigest || prepared.planDigest !== approvedDigest) {
+        throw new Error("what was shown is not what would be sent — review it again");
+      }
+      pending.delete(trailId);
+      const authorization = authorizeFor(prepared.plan, { scope: "brain.ask" });
+      services.graph.trail.decided(trailId, "pending", null);   // provisional; overwritten below via a fresh read
+      const world = services.graph.getWorld(prepared.worldId)!;
+      const state = services.graph.currentState(prepared.objectId);
+      const registry = {
+        worldId: prepared.worldId, objectIds: new Set(services.graph.listObjects(prepared.worldId).map((o) => o.id)),
+        representationIds: new Set<string>(), versionIds: new Set<string>(), formRoles: new Map<string, ReadonlySet<string>>(),
+        availableTools: new Set<Tool>(["knowledge.propose", "doc.write"]),
+        sourceTexts: sourceTextsFor(services, prepared.worldId),
+      };
+      const result = await services.gatedBrain.ask(prepared.intent, prepared.question, {
+        world: { id: world.id, title: world.title, emoji: world.emoji },
+        selected: state ? [{ state, representations: services.graph.listRepresentations(state.object.id) }] : [], activeTasks: [],
+      }, registry, { compiled: prepared.compiled, authorization, hasRestrictedSources: prepared.compiled.includesRestricted });
+
+      // The row fills as far as the truth goes and no further.
+      services.graph.db.prepare(`UPDATE agent_trail SET decided = NULL, decided_model = NULL WHERE id = ?`).run(trailId);
+      let proposed: { claims: number; steps: number; unsupported: number } | null = null;
+      if (result.status === "ok") {
+        services.graph.trail.decided(trailId, result.outcome.kind, result.model);
+        services.graph.trail.authorized(trailId, approvedDigest, "CREATE");
+        if (result.outcome.kind === "executable" && result.outcome.plan.tool === "knowledge.propose") {
+          const bound = bindProposal(result.outcome.plan.args, registry.sourceTexts);
+          const out = proposeFromBound(services.sense, prepared.worldId, bound, { sourceTexts: registry.sourceTexts });
+          proposed = { claims: out.claimCandidates.length, steps: out.stepCandidates.length, unsupported: out.unsupportedClaimIds.length };
+        }
+        for (const r of result.routed) {
+          services.metrics.record("model_routed", { objectId: prepared.objectId, detail: { intent: prepared.intent, model: r.model, escalation: r.escalation } });
+        }
+      } else {
+        services.graph.trail.decided(trailId, result.status, null);
+      }
+      return {
+        status: result.status, reason: result.status === "ok" ? null : result.reason,
+        proposed, trail: services.graph.trail.get(trailId),
+      };
+    },
+    "brain:trail": ({ id }) => services.graph.trail.forObject(id),
   };
 
   for (const channel of CHANNELS) {
@@ -611,4 +741,18 @@ export function registerIpc(services: Services): void {
       }
     });
   }
+}
+
+
+/** Stored source text by source version, for binding a proposal's citations word by word. */
+function sourceTextsFor(services: Services, worldId: string): Map<string, string> {
+  const out = new Map<string, string>();
+  const rows = services.graph.db.prepare(
+    `SELECT v.id, v.text_blob_hash FROM source_versions v JOIN sources s ON s.id = v.source_id WHERE s.world_id = ?`,
+  ).all(worldId) as Array<{ id: string; text_blob_hash: string | null }>;
+  for (const r of rows) {
+    if (!r.text_blob_hash) continue;
+    try { out.set(r.id, services.graph.readBlob(r.text_blob_hash).toString("utf8")); } catch { /* a copy that did not travel */ }
+  }
+  return out;
 }

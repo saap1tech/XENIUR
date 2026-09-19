@@ -136,7 +136,7 @@ function settingsWorldId(graph: ObjectGraph): string {
   return graph.createWorld({ title: "XENIUR settings", emoji: "⚙", summary: SETTINGS_WORLD }).id;
 }
 
-function policyConstraints(graph: ObjectGraph): { strengthId: string; restrictedId: string } {
+export function policyConstraints(graph: ObjectGraph): { strengthId: string; restrictedId: string } {
   const worldId = settingsWorldId(graph);
   const find = (tag: string) => graph.listStates(worldId).find((s) => s.properties.tags.includes(tag))?.object.id;
   let strengthId = find("routing.strength");

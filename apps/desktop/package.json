@@ -17,6 +17,7 @@
     "@xeniur/sessions": "*",
     "@xeniur/tasks": "*",
     "@xeniur/ui": "*",
-    "@xeniur/models": "*"
+    "@xeniur/models": "*",
+    "@xeniur/sensemaking": "*"
   }
 }

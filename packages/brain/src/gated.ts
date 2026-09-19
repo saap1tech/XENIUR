@@ -122,6 +122,9 @@ export class GatedBrain {
   get enabled(): boolean { return this.opts.liveCallsEnabled; }
 
   /** What one attempt would cost at a price, before it is made. */
+  /** The resolver, so a host can probe the route before compiling a context for its destination. */
+  resolverFor(): ModelResolver | null { return this.opts.resolver ?? null; }
+
   estimateUsd(pricing: Pricing = this.opts.pricing): number {
     // A generous ceiling on input rather than a guess at it: an estimate that turns out
     // to be low is a reservation that did not reserve enough.

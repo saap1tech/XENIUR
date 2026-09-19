@@ -206,5 +206,17 @@ contextBridge.exposeInMainWorld("xeniur", {
     rate: (objectId: string, confidence: number | null) =>
       call("sense:rate", { id: objectId, confidence }),
     link: (input: Record<string, unknown>) => call("sense:link", input),
+    reviewSupport: (supportId: string, status: string, note?: string) =>
+      call("sense:reviewSupport", { id: supportId, status, note: note ?? "" }),
+    pendingCandidates: (worldId: string) => call("sense:pendingCandidates", { id: worldId }),
+    acceptCandidate: (candidateId: string, edit?: { acceptUnreviewed?: boolean }) =>
+      call("sense:acceptCandidate", { id: candidateId, acceptUnreviewed: edit?.acceptUnreviewed ?? false }),
+    rejectCandidate: (candidateId: string) => call("sense:rejectCandidate", { id: candidateId }),
+  },
+
+  brain: {
+    prepare: (input: { worldId: string; objectId: string; intent: string; question: string }) => call("brain:prepare", input),
+    ask: (input: { trailId: string; contextDigest: string; planDigest: string }) => call("brain:ask", input),
+    trail: (objectId: string) => call("brain:trail", { id: objectId }),
   },
 });

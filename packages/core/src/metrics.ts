@@ -25,6 +25,15 @@ export const SESSION_EVENT_KINDS = [
   "gesture_used",            // completed through a direct visual path
   "typed_instead",           // typed where a visual path existed; concept only, never words
   "delivery_mistake",         // a release later superseded or withdrawn
+  // The model layer, made inspectable
+  "model_routed",             // which model an intent went to, and whether it escalated
+  "context_reviewed",         // a person confirmed what the model would see
+  "context_excluded",         // how many items were left out, and why (by kind, never by content)
+  "support_reviewed",         // a citation's support state was settled by a person
+  "proposal_accepted",        // a model's proposed claim or step became the person's
+  "proposal_rejected",
+  "steelman_recorded",        // a reason the decision could be wrong was written down
+  "steelman_skipped",         // it was not — recorded as a skip, never as agreement
   // Modes and rhythm — written here, never read by the code that chooses timing
   "mode_started",
   "mode_exited",
@@ -116,6 +125,14 @@ export const EVENT_MEANINGS: Record<SessionEventKind, string> = {
   typed_instead: "you typed where a visual path was available",
   delivery_mistake: "a delivery was later replaced",
   reflection_dismissed: "you dismissed a reflection prompt",
+  model_routed: "an intent was routed to a model, cheap first",
+  context_reviewed: "you read what the model would see before it saw it",
+  context_excluded: "something was left out of a context, and why",
+  support_reviewed: "you settled whether a source bears on a claim",
+  proposal_accepted: "you accepted a model's proposed claim or step",
+  proposal_rejected: "you rejected one",
+  steelman_recorded: "you wrote down one way a decision could be wrong",
+  steelman_skipped: "you skipped that, and it was recorded as a skip",
   mode_started: "you started a mode you set the terms of",
   mode_exited: "you ended a mode",
   mode_emergency_exit: "you left a mode early — recorded, not judged",
