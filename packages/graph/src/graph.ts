@@ -19,6 +19,7 @@ import { PublisherStore } from "./publishers.js";
 import { CircleStore } from "./shared.js";
 import { OutreachStore } from "./outreach.js";
 import { ChallengeStore } from "./challenges.js";
+import { SealStore } from "./seal.js";
 import { TrailStore } from "./trail.js";
 import { GoalStore } from "./goals.js";
 import { EnvelopeStore } from "./envelopes.js";
@@ -83,6 +84,8 @@ export class ObjectGraph {
   readonly outreach: OutreachStore;
   /** Explicit Worlds with signed rules and an AI policy the record can be checked against. */
   readonly challenges: ChallengeStore;
+  /** The Sealed Session: heartbeats and the record density read from them. */
+  readonly seal: SealStore;
   /** Saw · decided · authorised · executed, one row per model call or consequential action. */
   readonly trail: TrailStore;
   /** What the person is trying to accomplish, per World, in their words. */
@@ -101,6 +104,7 @@ export class ObjectGraph {
     this.process = new ProcessStore(db);
     this.actionReceipts = new ActionReceiptStore(db, this);
     this.modes = new ModeStore(db);
+    this.seal = new SealStore(db, this.modes);
     this.publishers = new PublisherStore(db, signingKeys);
     this.circles = new CircleStore(db, this);
     this.outreach = new OutreachStore(db, this);

@@ -4,6 +4,7 @@ import type { PackageSignature, PublisherRef } from "./publisher.js";
 import type { ProcessActor, ProcessEventKind } from "./process.js";
 import type { Provenance } from "./enums.js";
 import type { Tool } from "./tools.js";
+import { recordDensity, type RecordDensity, type SealFacts } from "./seal.js";
 
 /**
  * Challenges — explicit Worlds with rules, dates, a deliverable, judging, and an AI policy.
@@ -75,6 +76,8 @@ export interface Compliance {
   because: string[];
   /** Counts the check was made over, so a reader can see how much record there was. */
   over: { events: number; modelEvents: number; representations: number; generated: number };
+  /** When a Sealed Session covered the making: how dense the record is, in words and counts. */
+  density?: RecordDensity;
 }
 
 export interface EntryRecord {
@@ -100,7 +103,34 @@ const GENERATIVE_TOOLS: ReadonlySet<string> = new Set<Tool>([
 const GEOMETRY_TOOLS: ReadonlySet<string> = new Set<Tool>(["3d.generate"]);
 const GEOMETRY_MODALITIES: ReadonlySet<string> = new Set(["mesh", "model", "3d"]);
 
-export function checkAiPolicy(entry: EntryRecordForCheck, policy: AiPolicy): Compliance {
+export function checkAiPolicy(entry: EntryRecordForCheck, policy: AiPolicy, seal?: SealFacts | null): Compliance {
+  const verdict = checkRecord(entry, policy);
+  if (!seal) return verdict;
+  return withSeal(verdict, seal);
+}
+
+/**
+ * The seal can only lower. A gap across a version change or an unexplained paste means the
+ * record does not say how that span's material was made, so `complies` becomes
+ * `insufficient_record` with the span named. `violates` stays `violates`, from the model
+ * event or generated form that earned it — a paste is never that event.
+ */
+function withSeal(c: Compliance, seal: SealFacts): Compliance {
+  const density = recordDensity(seal);
+  if (c.verdict === "violates") return { ...c, density };
+  const because: string[] = [];
+  for (const g of seal.gaps) {
+    if (!g.versionChanged) continue;
+    because.push(`the record does not say: ${g.minutes} min with no heartbeat (${new Date(g.from).toISOString().slice(11, 16)}–${new Date(g.to).toISOString().slice(11, 16)}) across a version change`);
+  }
+  for (const p of seal.unexplainedPastes) {
+    because.push(`the record does not say: ${p.chars} characters pasted with no Source Object behind them`);
+  }
+  if (because.length === 0) return { ...c, density };
+  return { ...c, verdict: "insufficient_record", because: [...because, ...c.because], density };
+}
+
+function checkRecord(entry: EntryRecordForCheck, policy: AiPolicy): Compliance {
   const modelEvents = entry.events.filter((e) => e.actor === "model");
   // A mock stands in for a generator and is judged as one; the M1 rule that nothing mock may
   // pass for real holds in the other direction too.

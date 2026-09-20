@@ -510,7 +510,7 @@ describe("FocusContract", () => {
     id: MODE, kind: "focus_contract", worldId: null, startedAt: Date.now(), endedAt: null, exitReason: null,
     sheetDigest: sheet.digest,
     envelope: { durationMinutes: 25, restrictions: ["no task toasts"], windows: [], maxFrequencyPerDay: 0,
-      categories: [], exitPolicy: "always", resumeObjectId: null },
+      categories: [], exitPolicy: "always", resumeObjectId: null, remoteModels: true, entryObjectId: null, heartbeatSeconds: 60 },
   };
 
   it("renders the envelope before anything starts: duration, restrictions, exit, and a verb", () => {
@@ -597,6 +597,29 @@ describe("ChallengeBoard", () => {
     expect(html).toContain("◌");
     expect(html).toContain("violates");
     expect(html).toContain("3d.generate");
+  });
+
+  /* M6 B1 — the Sealed Session, offered from the board; density shown with the verdict, never as a score. */
+  it("offers to seal the session while open, and says so instead when one is running", () => {
+    const offered = render({ id: "c", component: "ChallengeBoard", worldId: CW },
+      bindings({ challenges: { [CW]: challenge }, challengeEntries: { [CW]: [] }, selfPublicKey: ME, focusObjectId: OBJ, onSealSession: () => {} }));
+    expect(offered).toContain("Seal the session");
+    const running = render({ id: "c", component: "ChallengeBoard", worldId: CW },
+      bindings({ challenges: { [CW]: challenge }, challengeEntries: { [CW]: [] }, selfPublicKey: ME, focusObjectId: OBJ, onSealSession: () => {},
+        sealRunning: { id: OBJ, kind: "sealed_session", worldId: CW, startedAt: 1, endedAt: null, exitReason: null, sheetDigest: "d",
+          envelope: { durationMinutes: 60, restrictions: [], windows: [], maxFrequencyPerDay: 0, categories: [], exitPolicy: "always", resumeObjectId: null, remoteModels: false, entryObjectId: OBJ, heartbeatSeconds: 60 } } }));
+    expect(running).toContain("A Sealed Session is running");
+    expect(running).not.toContain("Seal the session");
+  });
+
+  it("shows record density as a sentence with the limit stated, and no score", () => {
+    const dense = entry("insufficient_record");
+    dense.compliance.density = { sessionMinutes: 40, recordedMinutes: 20, gaps: 1, gapsAcrossVersionChange: 1, unexplainedPastes: 0, exitReason: "completed",
+      sentence: "20 of 40 minutes recorded · 1 gap (1 across a version change) · no unexplained pastes · ran to the end" };
+    const html = board([dense]);
+    expect(html).toContain("20 of 40 minutes recorded");
+    expect(html).toContain("Activity outside the recorded environment is not independently verified.");
+    expect(html).not.toMatch(/\d+%|score/i);
   });
 
   it("hides other entries while open and lists them in arrival order, unranked, after close", () => {

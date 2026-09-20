@@ -30,7 +30,7 @@ const withKeys = (...providers: Array<"anthropic" | "openai">) => {
   for (const p of providers) keys.write(p, "sk-test-000000000000000000000000000");
   return (p: "anthropic" | "openai" | "google" | "ollama") => keys.has(p);
 };
-const ctx = (over: Partial<{ hasRestrictedSources: boolean; escalation: number }> = {}) =>
+const ctx = (over: Partial<{ hasRestrictedSources: boolean; escalation: number; localOnly: boolean }> = {}) =>
   ({ hasRestrictedSources: false, escalation: 0, ...over });
 
 describe("which model is a policy the person can see, applied deterministically", () => {
@@ -94,6 +94,14 @@ describe("which model is a policy the person can see, applied deterministically"
     });
     const r = routeModel("draft_decision", DEFAULT_POLICY, noLocal, withKeys("anthropic"), ctx({ hasRestrictedSources: true }));
     expect(r).toBeNull();
+  });
+
+  /* M6 B1 — a Sealed Session forces local-or-refuse whatever the policy says. */
+  it("a Sealed Session routes local only, and refuses when nothing local exists — the relaxed policy does not help", () => {
+    const relaxed: RoutingPolicy = { ...DEFAULT_POLICY, localOnlyForRestricted: false };
+    expect(routeModel("draft_decision", relaxed, registry, withKeys("anthropic"), ctx({ localOnly: true }))!.model.id).toBe("local");
+    const noLocal = new ModelRegistry({ ...registry.config, models: registry.config.models.filter((m) => !m.tags.includes("local")) });
+    expect(routeModel("draft_decision", relaxed, noLocal, withKeys("anthropic"), ctx({ localOnly: true }))).toBeNull();
   });
 
   it("lets the person turn the restricted rule off, visibly, and then routes remote", () => {

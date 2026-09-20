@@ -118,9 +118,13 @@ export class ChallengeStore {
     return this.entry(challengeWorldId, objectId);
   }
 
-  /** The pure check over what the graph holds about this Object. Nothing is inferred to fill a gap. */
+  /**
+   * The pure check over what the graph holds about this Object. Nothing is inferred to fill a
+   * gap. When a Sealed Session covered the making, its facts go in too: they can lower the
+   * verdict to *the record does not say*, never raise it.
+   */
   check(objectId: string, policy: AiPolicy): Compliance {
-    return checkAiPolicy(this.recordFor(objectId), policy);
+    return checkAiPolicy(this.recordFor(objectId), policy, this.graph.seal.factsFor(objectId));
   }
 
   recordFor(objectId: string): EntryRecordForCheck {

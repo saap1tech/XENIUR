@@ -2,6 +2,7 @@ import type { ObjectState, Representation, World } from "./object.js";
 import type { DecisionDetail, InfluenceReport } from "./decisions.js";
 import type { ImpactReport, OutcomeLedger, TrustFacts } from "./impact.js";
 import type { EnvelopeSheet, ExitReason, ModeEnvelopeInput, ModeKind, ModeRecord, Reward, Streak } from "./modes.js";
+import type { SealFacts } from "./seal.js";
 import type { PublisherReport, PublisherView, ReportReason, TrustLevel } from "./publisher.js";
 import type { CampaignRecord, OutboundMessage, OutreachEnvelopeInput } from "./outreach.js";
 import type { ChallengeRecord, ChallengeRulesInput, EntryRecord } from "./challenges.js";
@@ -30,7 +31,7 @@ import type { Task, TaskEvent } from "./tasks.js";
 import type { ActionRecord } from "./action.js";
 import type { Scene } from "./scene.js";
 import type { ConstraintRecord, ConstraintValue } from "./constraints.js";
-import type { ProcessProof } from "./process.js";
+import type { ProcessEvent, ProcessProof } from "./process.js";
 import type { ComputeQuote, EconomySnapshot } from "./compute.js";
 import type { CapturedWebSource, LiveSiteState, WebSettings } from "./web.js";
 import type { WorkflowListing } from "./workflow.js";
@@ -265,6 +266,14 @@ export interface XeniurBridge {
     exit(modeId: string, reason: ExitReason): Promise<ModeRecord | null>;
     active(): Promise<ModeRecord[]>;
     restrictions(): Promise<string[]>;
+  };
+  /* The Sealed Session — heartbeats while it runs, facts read from them */
+  seal?: {
+    active(): Promise<ModeRecord | null>;
+    beat(modeId: string, focusObjectId: string | null, versionId: string | null): Promise<void>;
+    facts(entryObjectId: string): Promise<SealFacts | null>;
+    /** A paste, as the surface saw it. A fact about origin, never about a model. */
+    paste(objectId: string, versionId: string | null, chars: number, sourceObjectId?: string | null): Promise<ProcessEvent>;
   };
   rhythm: {
     /** One offer if one is due and the graph holds something matched to the focus; else null. */

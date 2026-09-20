@@ -1117,6 +1117,42 @@ CREATE TABLE context_envelopes (
 );
 `;
 
+/**
+ * Migration 25 — the Sealed Session, and entry tickets.
+ *
+ * `process_events.origin` says where an edit's material came from — typed, pasted, imported,
+ * generated — as the surface that saw it reported; NULL when it did not say. Heartbeats are
+ * one row a minute with what was in the centre and its version, so a gap is measurable and a
+ * gap across a version change is a span the record does not say about. Entry tickets are
+ * signed by an organizer on their own channel; XENIUR verifies one and marks it used — it
+ * never sees a price, a card or a payment status.
+ */
+const SEAL = `
+ALTER TABLE process_events ADD COLUMN origin TEXT;
+ALTER TABLE process_events ADD COLUMN origin_size INTEGER;
+ALTER TABLE process_events ADD COLUMN origin_source_id TEXT;
+
+CREATE TABLE seal_heartbeats (
+  id              TEXT PRIMARY KEY,
+  mode_id         TEXT NOT NULL REFERENCES modes(id) ON DELETE CASCADE,
+  at              INTEGER NOT NULL,
+  focus_object_id TEXT,
+  version_id      TEXT
+);
+CREATE INDEX idx_seal_heartbeats_mode ON seal_heartbeats(mode_id, at);
+
+CREATE TABLE entry_tickets (
+  id                     TEXT PRIMARY KEY,
+  challenge_world_id     TEXT NOT NULL REFERENCES challenges(world_id) ON DELETE CASCADE,
+  participant_public_key TEXT NOT NULL,
+  issued_at              INTEGER NOT NULL,
+  expires_at             INTEGER NOT NULL,
+  signature              TEXT NOT NULL,      -- JSON PackageSignature by the challenge's publisher
+  used_at                INTEGER,
+  UNIQUE(challenge_world_id, participant_public_key)
+);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: INIT },
   { version: 2, name: "object_model", sql: OBJECT_MODEL },
@@ -1142,4 +1178,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 22, name: "agent_trail", sql: AGENT_TRAIL },
   { version: 23, name: "goals", sql: GOALS },
   { version: 24, name: "context_envelopes", sql: CONTEXT_ENVELOPES },
+  { version: 25, name: "seal", sql: SEAL },
 ];

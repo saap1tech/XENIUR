@@ -6,7 +6,7 @@ import { json } from "./db.js";
 interface ProcessRow {
   id: string; object_id: string; version_id: string | null; kind: ProcessEventKind; actor: ProcessActor;
   label: string; tool: string | null; model: string | null; input_hashes: string; output_hashes: string;
-  duration_ms: number; at: number;
+  duration_ms: number; at: number; origin: ProcessEvent["origin"] | null; origin_size: number | null; origin_source_id: string | null;
 }
 
 const toEvent = (row: ProcessRow): ProcessEvent => ({
@@ -14,20 +14,40 @@ const toEvent = (row: ProcessRow): ProcessEvent => ({
   label: row.label, tool: row.tool, model: row.model,
   inputHashes: json.parse(row.input_hashes, []), outputHashes: json.parse(row.output_hashes, []),
   durationMs: row.duration_ms, at: row.at,
+  origin: row.origin ?? null, originSize: row.origin_size ?? null, originSourceId: row.origin_source_id ?? null,
 });
 
 export class ProcessStore {
   constructor(private readonly db: Db) {}
 
-  record(input: Omit<ProcessEvent, "id" | "at"> & { at?: number }): ProcessEvent {
-    const event: ProcessEvent = { ...input, id: newId(), at: input.at ?? now() };
+  record(input: Omit<ProcessEvent, "id" | "at" | "origin" | "originSize" | "originSourceId">
+    & { at?: number; origin?: ProcessEvent["origin"]; originSize?: number | null; originSourceId?: string | null }): ProcessEvent {
+    const event: ProcessEvent = {
+      ...input, id: newId(), at: input.at ?? now(),
+      origin: input.origin ?? null, originSize: input.originSize ?? null, originSourceId: input.originSourceId ?? null,
+    };
     this.db.prepare(
       `INSERT INTO process_events (id, object_id, version_id, kind, actor, label, tool, model,
-         input_hashes, output_hashes, duration_ms, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         input_hashes, output_hashes, duration_ms, at, origin, origin_size, origin_source_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(event.id, event.objectId, event.versionId, event.kind, event.actor, event.label,
       event.tool, event.model, json.stringify(event.inputHashes), json.stringify(event.outputHashes),
-      event.durationMs, event.at);
+      event.durationMs, event.at, event.origin, event.originSize, event.originSourceId);
     return event;
+  }
+
+  /**
+   * A paste, as the surface saw it: how much, into which Object, and the Source Object behind
+   * it if the person named one. Recorded as a human manual edit with origin `pasted` — a
+   * fact about where material came from, never a claim about a model.
+   */
+  recordPaste(input: { objectId: string; versionId: string | null; chars: number; sourceObjectId?: string | null; at?: number }): ProcessEvent {
+    return this.record({
+      objectId: input.objectId, versionId: input.versionId, kind: "manual_edit", actor: "human",
+      label: `pasted ${input.chars} characters${input.sourceObjectId ? " from a source" : ""}`,
+      tool: null, model: null, inputHashes: [], outputHashes: [], durationMs: 0,
+      at: input.at, origin: "pasted", originSize: input.chars, originSourceId: input.sourceObjectId ?? null,
+    });
   }
 
   events(objectId: string): ProcessEvent[] {

@@ -59,7 +59,7 @@ export interface ResolvedModel {
 }
 
 export interface ModelResolver {
-  resolve(intent: BrainIntent, ctx: { escalation: number; hasRestrictedSources: boolean }): ResolvedModel | null;
+  resolve(intent: BrainIntent, ctx: { escalation: number; hasRestrictedSources: boolean; localOnly?: boolean }): ResolvedModel | null;
 }
 
 export interface GatedBrainOptions {
@@ -153,6 +153,8 @@ export class GatedBrain {
     intent: BrainIntent, utterance: string, context: BrainContext, registry: RuntimeRegistry,
     opts: {
       taskId?: string | null; allowGeneration?: boolean; hasRestrictedSources?: boolean;
+      /** A Sealed Session forbids remote models: routing is local-or-refuse, and the refusal says why. */
+      sealed?: boolean;
       /** A compiled context: its rendered block is sent, its digest binds the approval. */
       compiled?: { rendered: string; contextDigest: string; includesRestricted: boolean };
       /** Consent for exactly this call — this intent, this context, this price. */
@@ -199,14 +201,16 @@ export class GatedBrain {
       let because = "the configured model";
       if (this.opts.resolver) {
         const r = this.opts.resolver.resolve(intent, {
-          escalation: attempt, hasRestrictedSources: opts.hasRestrictedSources ?? false,
+          escalation: attempt, hasRestrictedSources: opts.hasRestrictedSources ?? false, localOnly: opts.sealed ?? false,
         });
         if (!r) {
           return {
             status: "gated",
-            reason: opts.hasRestrictedSources
-              ? "A restricted source is in view and no local model is available, so nothing was sent."
-              : "No model with a verified price is available for this. Add a key, or verify a price.",
+            reason: opts.sealed
+              ? "A Sealed Session is running: remote models are not available and no local model is, so nothing was sent."
+              : opts.hasRestrictedSources
+                ? "A restricted source is in view and no local model is available, so nothing was sent."
+                : "No model with a verified price is available for this. Add a key, or verify a price.",
           };
         }
         if (!r.pricing.verified) {

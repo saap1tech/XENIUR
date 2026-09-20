@@ -176,6 +176,10 @@ export interface SceneBindings {
   onAddNextAction?(goalId: string, text: string): void;
   onStartMode?(kind: ModeKind, sheetDigest: string): void;
   onDeclineMode?(kind: ModeKind): void;
+  /** Ask for the Sealed Session sheet for this entry. Nothing starts until it is read. */
+  onSealSession?(challengeWorldId: string, entryObjectId: string): void;
+  /** The running Sealed Session, if any, so the board can say so instead of offering another. */
+  sealRunning?: ModeRecord | null;
   /** The same exit for every mode. "emergency" is Escape; it asks nothing. */
   onExitMode?(modeId: string, reason: ExitReason): void;
   onDeclineContext?(contextDigest: string): void;

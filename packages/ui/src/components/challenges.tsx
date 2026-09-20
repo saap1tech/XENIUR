@@ -1,5 +1,5 @@
 import type { ChallengeRecord, Compliance, EntryRecord, LeafSceneNode } from "@xeniur/core";
-import { AI_POLICY_WORDS, COMPLIANCE_GLYPHS } from "@xeniur/core";
+import { AI_POLICY_WORDS, COMPLIANCE_GLYPHS, CANNOT_ESTABLISH } from "@xeniur/core";
 import type { SceneBindings } from "../bindings.js";
 import { Button, Tag } from "./primitives.jsx";
 
@@ -54,6 +54,14 @@ export function ChallengeBoard({ node, bindings }: { node: Node<"ChallengeBoard"
 
       <div className="xr-challenge__entries">
         <h3>Your entry</h3>
+        {open && bindings.onSealSession && bindings.focusObjectId && (
+          <p className="xr-challenge__seal">
+            {bindings.sealRunning
+              ? <>A Sealed Session is running on this entry. Its record density will be shown with the verdict.</>
+              : <>Make the entry inside a Sealed Session and the record can say how it was made.{" "}
+                  <Button onClick={() => bindings.onSealSession?.(node.worldId, bindings.focusObjectId!)}>Seal the session</Button></>}
+          </p>
+        )}
         {mine.length === 0 ? (
           <p className="xr-challenge__none">
             Nothing entered yet.{open && bindings.onEnterChallenge && bindings.focusObjectId
@@ -87,6 +95,9 @@ function Entry({ entry, bindings }: { entry: EntryRecord; bindings: SceneBinding
       <ComplianceTag compliance={entry.compliance} />
       {entry.compliance.verdict !== "complies" && (
         <ul className="xr-entry__because">{entry.compliance.because.map((b) => <li key={b}>{b}</li>)}</ul>
+      )}
+      {entry.compliance.density && (
+        <p className="xr-entry__density"><span>Record</span> {entry.compliance.density.sentence}. <small>{CANNOT_ESTABLISH}</small></p>
       )}
     </article>
   );

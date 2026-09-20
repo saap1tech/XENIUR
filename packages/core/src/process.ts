@@ -11,6 +11,15 @@ export type ProcessEventKind = z.infer<typeof ProcessEventKindSchema>;
 export const ProcessActorSchema = z.enum(["human", "tool", "model"]);
 export type ProcessActor = z.infer<typeof ProcessActorSchema>;
 
+/**
+ * Where an edit's material came from. Recorded by the surface that saw it happen; null when
+ * the surface did not say. A paste is a fact about origin, not about a model — the record
+ * can name it as unexplained, never as generated.
+ */
+export const EVENT_ORIGINS = ["typed", "pasted", "imported", "generated"] as const;
+export const EventOriginSchema = z.enum(EVENT_ORIGINS);
+export type EventOrigin = z.infer<typeof EventOriginSchema>;
+
 export const ProcessEventSchema = z.object({
   id: UuidSchema,
   objectId: UuidSchema,
@@ -24,6 +33,10 @@ export const ProcessEventSchema = z.object({
   outputHashes: z.array(BlobHashSchema).default([]),
   durationMs: z.number().int().nonnegative().default(0),
   at: TimestampSchema,
+  origin: EventOriginSchema.nullable().default(null),
+  /** For a paste or an import: how much material, in characters, and the Source Object behind it if any. */
+  originSize: z.number().int().nonnegative().nullable().default(null),
+  originSourceId: UuidSchema.nullable().default(null),
 }).strict();
 export type ProcessEvent = z.infer<typeof ProcessEventSchema>;
 

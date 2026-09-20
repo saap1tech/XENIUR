@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ConstraintRecord, DecisionDetail, FrictionState, ImpactReport, Lane, ObjectState, ProcessProof,
-  CandidateRecord, ChallengeRecord, EntryRecord, GoalStatus, PackageInspectionView, Representation, Scene, Standing, SupportMap, Task,
+  CandidateRecord, ChallengeRecord, EntryRecord, EnvelopeSheet, GoalStatus, ModeEnvelopeInput, ModeRecord, PackageInspectionView, Representation, Scene, Standing, SupportMap, Task,
   ThinkingMap, TrailRow, TrustFacts, WorkGoal, WorldSnapshot,
 } from "@xeniur/core";
 import { SceneRenderer, presentBindings, t, type SceneBindings } from "@xeniur/ui";
@@ -72,6 +72,9 @@ export function World({
 }: WorldProps) {
   const [zone, setZone] = useState<Zone>(initialZone);
   const [showKeys, setShowKeys] = useState(false);
+  // The Sealed Session: the sheet being read, and the mode once it runs. Read from the store, never remembered.
+  const [sealSheet, setSealSheet] = useState<{ sheet: EnvelopeSheet; envelope: ModeEnvelopeInput } | null>(null);
+  const [sealMode, setSealMode] = useState<ModeRecord | null>(null);
   // Until the person clicks a zone, the goal's next question chooses the representation.
   const [zoneChosen, setZoneChosen] = useState<boolean>(initialZone !== "work");
   const [selectedId, setSelectedId] = useState<string | null>(
@@ -205,8 +208,31 @@ export function World({
     setChallenge((await bridge?.challenges?.get(worldId)) ?? null);
     setEntries((await bridge?.challenges?.entries(worldId)) ?? []);
     setSelfKey((await bridge?.publishers?.self())?.publicKey ?? null);
+    setSealMode((await bridge?.seal?.active()) ?? null);
   }, [bridge, worldId, snapshot.world.kind]);
   useEffect(() => { void refreshChallenge(); }, [refreshChallenge]);
+
+  // While a Sealed Session runs: one heartbeat per interval with what is in the centre and its
+  // version, and the size of every paste — the size only; the text itself is never stored.
+  useEffect(() => {
+    if (!sealMode || sealMode.endedAt !== null) return;
+    const entryId = sealMode.envelope.entryObjectId;
+    const beat = () => {
+      const focus = snapshot.states.find((st) => st.object.id === selectedId);
+      void bridge?.seal?.beat(sealMode.id, selectedId, focus?.versionId ?? null);
+    };
+    beat();
+    const timer = window.setInterval(beat, sealMode.envelope.heartbeatSeconds * 1000);
+    const onPaste = (e: ClipboardEvent) => {
+      if (!entryId) return;
+      const chars = e.clipboardData?.getData("text")?.length ?? 0;
+      if (chars === 0) return;
+      const entry = snapshot.states.find((st) => st.object.id === entryId);
+      void bridge?.seal?.paste(entryId, entry?.versionId ?? null, chars);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => { window.clearInterval(timer); window.removeEventListener("paste", onPaste); };
+  }, [bridge, sealMode, selectedId, snapshot.states]);
 
   // Impact is per-Object and only needed for the one in the centre.
   useEffect(() => {
@@ -293,6 +319,32 @@ export function World({
       await bridge?.challenges?.enter(challengeWorldId, objectId);
       await refreshChallenge();
     },
+    sealRunning: sealMode,
+    onSealSession: async (_challengeWorldId, entryObjectId) => {
+      // The envelope: until the challenge closes (capped at a day), remote models off, a
+      // heartbeat a minute. The sheet is shown first; nothing starts until it is read.
+      const minutesLeft = challenge ? Math.floor((challenge.rules.endsAt - Date.now()) / 60_000) : 120;
+      const envelope: ModeEnvelopeInput = {
+        durationMinutes: Math.max(1, Math.min(24 * 60, minutesLeft)), restrictions: ["remote models off"],
+        exitPolicy: "always", remoteModels: false, entryObjectId, heartbeatSeconds: 60, resumeObjectId: entryObjectId,
+      };
+      const sheet = await bridge?.modes?.describe("sealed_session", envelope);
+      if (sheet) setSealSheet({ sheet, envelope });
+    },
+    modeSheets: sealSheet ? { [sealSheet.sheet.digest]: sealSheet.sheet } : {},
+    modes: sealMode ? { [sealMode.id]: sealMode } : {},
+    onStartMode: async (kind, sheetDigest) => {
+      if (kind !== "sealed_session" || !sealSheet) return;
+      const started = await bridge?.modes?.start(kind, sealSheet.envelope, sheetDigest, worldId);
+      setSealSheet(null);
+      setSealMode(started ?? null);
+    },
+    onDeclineMode: () => setSealSheet(null),
+    onExitMode: async (modeId, reason) => {
+      await bridge?.modes?.exit(modeId, reason);
+      setSealMode(null);
+      await refreshChallenge();
+    },
     gestureProposals: Object.fromEntries(gestureProposals.map((proposal) => [proposal.id, proposal])),
     blobUrl: (hash) => bridge?.blobs.url(hash) ?? "",
     onSelect: (objectId) => setSelectedId(objectId),
@@ -355,7 +407,7 @@ export function World({
   }), [snapshot, byId, tasks, map, friction, decisions, impact, worldId, bridge,
        onApprove, onReject, onImported, refreshThinking, refreshChallenge, refreshStanding, refreshGoal, constraints, proof, trust, supportMap, trailRows,
        standing, candidates, refreshCandidates, connections, brainAvailable, challenge, entries, selfKey, selectedId,
-       gestureProposals, gesturePair, zone]);
+       gestureProposals, gesturePair, zone, sealSheet, sealMode]);
   bindingsRef.current = bindings;
 
   /** One thing at a time in the centre, chosen by the zone and what is selected. */
@@ -390,12 +442,16 @@ export function World({
     };
 
     // A challenge World: the board is the centre, whatever is selected. Rules before entry.
+    // A Sealed Session's sheet replaces the board until it is read; its rule sits above it while it runs.
     if (snapshot.world.kind === "challenge" && challenge) return {
-      worldId, title: snapshot.world.title, reason: "The rules, the dates, the deliverable, the policy — then your entry",
-      root: { id: "root", component: "Canvas", layout: "column", children: [
-        ...nodes,
-        { id: "board", component: "ChallengeBoard", worldId },
-      ] as never },
+      worldId, title: snapshot.world.title, reason: sealSheet ? "Read what a Sealed Session records before it starts" : "The rules, the dates, the deliverable, the policy — then your entry",
+      root: { id: "root", component: "Canvas", layout: "column", children: sealSheet
+        ? [{ id: "seal-sheet", component: "FocusContract", phase: "review", sheetDigest: sealSheet.sheet.digest, modeId: null }]
+        : [
+          ...(sealMode && sealMode.endedAt === null ? [{ id: "seal-rule", component: "FocusContract", phase: "running", sheetDigest: null, modeId: sealMode.id }] : []),
+          ...nodes,
+          { id: "board", component: "ChallengeBoard", worldId },
+        ] as never },
     };
 
     if (!selected) return {
@@ -463,7 +519,7 @@ export function World({
       root.children.push({ id: "support-map", component: "SupportMap", objectId: selected.object.id, lanes: [], disclosure: intent.layer } as never);
     }
     return compiled;
-  }, [zone, zoneChosen, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints, challenge, supportMap, goal, relevant, showStanding, standing, density]);
+  }, [zone, zoneChosen, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints, challenge, supportMap, goal, relevant, showStanding, standing, density, sealSheet, sealMode]);
 
   const inspector: Scene | null = useMemo(() => selected ? {
     worldId, title: "", reason: "",

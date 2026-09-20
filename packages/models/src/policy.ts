@@ -74,6 +74,8 @@ export interface RouteContext {
   hasRestrictedSources: boolean;
   /** 0 for the first attempt; each repair or refusal steps up by one. */
   escalation: number;
+  /** A Sealed Session with `remoteModels: false` is running: local models or nothing. */
+  localOnly?: boolean;
 }
 
 export interface Route {
@@ -99,7 +101,7 @@ export function routeModel(
   keyPresent: (p: ModelProvider) => boolean, ctx: RouteContext,
 ): Route | null {
   let candidates = registry.callable(keyPresent).filter(isPriceVerified);
-  if (ctx.hasRestrictedSources && policy.localOnlyForRestricted) {
+  if ((ctx.hasRestrictedSources && policy.localOnlyForRestricted) || ctx.localOnly) {
     candidates = candidates.filter((m) => m.tags.includes("local"));
   }
   if (candidates.length === 0) return null;

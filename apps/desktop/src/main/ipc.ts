@@ -89,6 +89,10 @@ const SCHEMAS = {
   "modes:exit": z.object({ id: UuidSchema, reason: ExitReasonSchema }),
   "modes:active": z.undefined(),
   "modes:restrictions": z.undefined(),
+  "seal:active": z.undefined(),
+  "seal:beat": z.object({ modeId: UuidSchema, focusObjectId: UuidSchema.nullable(), versionId: UuidSchema.nullable() }),
+  "seal:facts": Uuid,
+  "seal:paste": z.object({ objectId: UuidSchema, versionId: UuidSchema.nullable(), chars: z.number().int().nonnegative(), sourceObjectId: UuidSchema.nullable().default(null) }),
   "rhythm:offer": z.object({ worldId: UuidSchema, objectId: UuidSchema.nullable() }),
   "rhythm:resolve": z.object({ id: UuidSchema, outcome: z.enum(["taken", "skipped"]) }),
   "rhythm:streak": z.undefined(),
@@ -429,6 +433,10 @@ export function registerIpc(services: Services): void {
     },
     "modes:active": () => services.graph.modes.active(),
     "modes:restrictions": () => services.graph.modes.restrictions(),
+    "seal:active": () => services.graph.seal.active(),
+    "seal:beat": ({ modeId, focusObjectId, versionId }) => { services.graph.seal.beat({ modeId, focusObjectId, versionId }); },
+    "seal:facts": ({ id }) => services.graph.seal.factsFor(id),
+    "seal:paste": ({ objectId, versionId, chars, sourceObjectId }) => services.graph.process.recordPaste({ objectId, versionId, chars, sourceObjectId }),
     "rhythm:offer": ({ worldId, objectId }) => {
       const offer = services.rhythm.offer({ worldId, objectId });
       if (offer) services.metrics.record("reward_offered", { detail: { kind: offer.reward.kind } });
@@ -720,7 +728,8 @@ export function registerIpc(services: Services): void {
         services.graph.constraints.get(strengthId)?.value, services.graph.constraints.get(restrictedId)?.value,
       );
       // Route first, because the destination decides what may be included at all.
-      const probe = services.gatedBrain.resolverFor()?.resolve(intent, { escalation: 0, hasRestrictedSources: false }) ?? null;
+      const sealed = services.graph.seal.active()?.envelope.remoteModels === false;
+      const probe = services.gatedBrain.resolverFor()?.resolve(intent, { escalation: 0, hasRestrictedSources: false, localOnly: sealed }) ?? null;
       const destination: "local" | "remote" = probe && /ollama|local/.test(probe.id) ? "local" : "remote";
       const compiled = compileContext(material, { destination, maxTokens: 6000 });
       const estimatedUsd = probe ? services.gatedBrain.estimateUsd(probe.pricing) : 0;
@@ -774,7 +783,9 @@ export function registerIpc(services: Services): void {
       const result = await services.gatedBrain.ask(prepared.intent, prepared.question, {
         world: { id: world.id, title: world.title, emoji: world.emoji },
         selected: state ? [{ state, representations: services.graph.listRepresentations(state.object.id) }] : [], activeTasks: [],
-      }, registry, { compiled: prepared.compiled, authorization, hasRestrictedSources: prepared.compiled.includesRestricted });
+      }, registry, { compiled: prepared.compiled, authorization, hasRestrictedSources: prepared.compiled.includesRestricted,
+        // A running Sealed Session with remote models off is read here, at the call — never remembered.
+        sealed: services.graph.seal.active()?.envelope.remoteModels === false });
 
       // The row fills as far as the truth goes and no further.
       services.graph.db.prepare(`UPDATE agent_trail SET decided = NULL, decided_model = NULL WHERE id = ?`).run(trailId);

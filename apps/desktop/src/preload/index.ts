@@ -134,6 +134,13 @@ contextBridge.exposeInMainWorld("xeniur", {
     active: () => call("modes:active"),
     restrictions: () => call("modes:restrictions"),
   },
+  seal: {
+    active: () => call("seal:active"),
+    beat: (modeId: string, focusObjectId: string | null, versionId: string | null) => call("seal:beat", { modeId, focusObjectId, versionId }),
+    facts: (entryObjectId: string) => call("seal:facts", { id: entryObjectId }),
+    paste: (objectId: string, versionId: string | null, chars: number, sourceObjectId?: string | null) =>
+      call("seal:paste", { objectId, versionId, chars, sourceObjectId: sourceObjectId ?? null }),
+  },
   rhythm: {
     offer: (worldId: string, objectId: string | null) => call("rhythm:offer", { worldId, objectId }),
     resolve: (offerId: string, outcome: string) => call("rhythm:resolve", { id: offerId, outcome }),

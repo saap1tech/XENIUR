@@ -57,3 +57,4 @@ export type { Db } from "./db.js";
 export { MIGRATIONS } from "./schema.js";
 export type { Migration } from "./schema.js";
 export * as rows from "./rows.js";
+export { SealStore } from "./seal.js";

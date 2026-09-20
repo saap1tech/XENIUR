@@ -14,7 +14,7 @@ import { sha256Hex } from "./sha256.js";
  * of that sheet back. A mode therefore cannot begin from an envelope nobody saw — the same
  * discipline as `planDigest` binding authorisation to a plan.
  */
-export const MODE_KINDS = ["focus_contract", "serendipity", "recovery", "discovery"] as const;
+export const MODE_KINDS = ["focus_contract", "serendipity", "recovery", "discovery", "sealed_session"] as const;
 export const ModeKindSchema = z.enum(MODE_KINDS);
 export type ModeKind = z.infer<typeof ModeKindSchema>;
 
@@ -23,6 +23,7 @@ export const MODE_NAMES: Record<ModeKind, string> = {
   serendipity: "Serendipity",
   recovery: "Recovery",
   discovery: "Discovery",
+  sealed_session: "Sealed Session",
 };
 
 /** "HH:MM"–"HH:MM", local time. Windows say when a mode may offer anything at all. */
@@ -49,6 +50,15 @@ export const ModeEnvelopeSchema = z.object({
   exitPolicy: z.literal("always"),
   /** The Object that had the centre slot when the mode began; restored when it ends. */
   resumeObjectId: UuidSchema.nullable().default(null),
+  /**
+   * Sealed Session only. Whether a remote model may be routed to while the mode runs; false
+   * forces local-or-refuse. Stated on the sheet and enforced in routing, never by memory.
+   */
+  remoteModels: z.boolean().default(true),
+  /** Sealed Session only. The entry being made; heartbeats and the record density attach to it. */
+  entryObjectId: UuidSchema.nullable().default(null),
+  /** Sealed Session only. How often the renderer records a heartbeat; gaps are measured in these. */
+  heartbeatSeconds: z.number().int().positive().max(600).default(60),
 }).strict();
 export type ModeEnvelope = z.infer<typeof ModeEnvelopeSchema>;
 export type ModeEnvelopeInput = z.input<typeof ModeEnvelopeSchema>;
@@ -91,6 +101,7 @@ const VERBS: Record<ModeKind, string> = {
   serendipity: "Allow surprises",
   recovery: "Take the break",
   discovery: "Start exploring",
+  sealed_session: "Seal the session",
 };
 
 export function describeEnvelope(kind: ModeKind, input: ModeEnvelopeInput): EnvelopeSheet {
@@ -109,6 +120,13 @@ export function describeEnvelope(kind: ModeKind, input: ModeEnvelopeInput): Enve
   }
   if (e.categories.length > 0) {
     lines.push({ label: "Drawn from", value: e.categories.join(", ") });
+  }
+  if (kind === "sealed_session") {
+    // What is recorded is said before it is recorded; what is not is said too.
+    lines.push({ label: "Remote models", value: e.remoteModels ? "allowed" : "none — local models or nothing; a request that needs a remote model is refused, not sent" });
+    lines.push({ label: "Recorded", value: `a heartbeat every ${e.heartbeatSeconds} s with the Object in the centre and its version; every edit's origin (typed, pasted, imported, generated); every model call` });
+    lines.push({ label: "Not recorded", value: "your screen, other applications, other machines, the text you type — only that it was typed" });
+    lines.push({ label: "Shown to judges", value: "record density: recorded minutes, gaps, unexplained pastes — words and counts, never a score. Leaving early is shown as a fact." });
   }
   lines.push({ label: "Exit", value: "always — Escape, or the Exit control" });
   return {

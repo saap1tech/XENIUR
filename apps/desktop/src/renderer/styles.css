@@ -1702,6 +1702,10 @@ input[type="range"] { accent-color: var(--text); }
 .xr-entry__title { background: none; border: 0; padding: 0; color: var(--text); font: inherit; text-align: start; cursor: pointer; }
 .xr-entry__who { color: var(--dim); font-size: 12px; }
 .xr-entry__because { grid-column: 1 / -1; margin: 0; padding-inline-start: 16px; font-size: 12px; color: var(--dim); }
+.xr-entry__density { grid-column: 1 / -1; margin: 0; font-size: 12px; color: var(--dim); display: grid; gap: 2px; }
+.xr-entry__density span { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+.xr-entry__density small { color: var(--faint); }
+.xr-challenge__seal { margin: 0 0 var(--s-2); color: var(--dim); font-size: 13px; display: flex; gap: var(--s-2); align-items: center; flex-wrap: wrap; }
 /* Policy: blocked-grey outline. Compliance: ready green ● / review amber ◌ / blocked grey ○ —
    the semantic ramp, never the signal. */
 /* ---- Support Map: a report as its claims, laned by what was checked ---------------------- */
