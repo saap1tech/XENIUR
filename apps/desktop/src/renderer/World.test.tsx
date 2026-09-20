@@ -137,7 +137,7 @@ describe("the World shows what the loop produced", () => {
 
   it("offers language as a peer, attached to the situation rather than above it", () => {
     const html = render();
-    expect(html).toContain("Use language for this");
+    expect(html).toContain("xr-language-dock");
     // Language is a shortcut into the same actions, never the centre of the screen.
     expect(html.indexOf("xr-language-dock")).toBeGreaterThan(html.indexOf("xr-scene"));
   });
@@ -187,5 +187,41 @@ describe("the World organises around the goal", () => {
     for (const s of ["exploring", "understanding", "making", "reviewing", "ready", "finished"]) {
       expect(html).toContain(`<option value="${s}"`);
     }
+  });
+});
+
+/* M6 Studio — the World screen, redesigned for use. */
+describe("the Studio", () => {
+  const html = () => renderToStaticMarkup(
+    <World snapshot={snapshot} tasks={[]} busy={false} initialSelection={snapshot.states[0]!.object.id}
+      initialGoal={{ id: "77777777-7777-4777-8777-777777777777", worldId: snapshot.world.id, outcome: "Ship the rocket", status: "making",
+        focusObjectId: snapshot.states[0]!.object.id, requiredOutputs: [], openQuestionIds: [], nextActions: [], createdAt: 1, updatedAt: 1, lastActiveAt: 1 }}
+      onBack={() => {}} onOpenObject={() => {}} onSubmit={() => {}} onApprove={() => {}} onReject={() => {}} />,
+  );
+
+  it("names the question the centre answers, above the stage", () => {
+    const out = html();
+    expect(out).toContain("xr-stage__need");
+    expect(out).toContain("I need to make something");
+    expect(out.indexOf("xr-stage__need")).toBeLessThan(out.indexOf("xr-orbit"));
+  });
+
+  it("the stage is a row of form tiles with provenance, not a ring; the selected core carries the hairline", () => {
+    const out = html();
+    expect(out).toContain("xr-orbit__core is-selected");
+    expect(out).toContain("xr-orbit__satellite");
+    expect(out).toContain("MOCK");
+    expect(out).not.toContain("--orbit-index");
+  });
+
+  it("the language dock is always present as one bar, never a hidden trigger", () => {
+    const out = html();
+    expect(out).toContain("xr-language-dock");
+    expect(out).toContain('id="world-language"');
+    expect(out).not.toContain("xr-language-dock__trigger");
+  });
+
+  it("does not fill quiet: no empty constraint strip", () => {
+    expect(html()).not.toContain("No constraints are attached yet");
   });
 });

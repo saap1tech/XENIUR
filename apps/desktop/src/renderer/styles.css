@@ -1167,43 +1167,14 @@ button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px 
 .xr-centre { overflow-y: auto; padding: 8px 20px 78px; min-width: 0; }
 .xr-centre__solo { max-width: 1120px; margin: 0 auto; }
 .xr-inspector-zone { border-left: 1px solid var(--line-soft); overflow-y: auto; padding: 14px 18px; background: var(--surface); }
-.xr-language-dock {
-  position: fixed;
-  left: 188px;
-  right: 304px;
-  bottom: 0;
-  z-index: 20;
-  display: flex;
-  justify-content: center;
-  padding: 10px 20px;
-  background: color-mix(in srgb,var(--bg) 92%,transparent);
-  border-top: 1px solid var(--line);
-  backdrop-filter: blur(12px);
-}
-.xr-language-dock__trigger {
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--dim);
-  padding: 9px 13px;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  cursor: pointer;
-  font-size: 11px;
-}
-.xr-language-dock__trigger:hover { color: var(--text); border-color: var(--text); }
-.xr-language-dock__trigger span { color: var(--faint); font: 9px var(--font-mono); }
-.xr-language-dock.is-open { display: grid; grid-template-columns: auto minmax(180px,1fr) auto auto; align-items: center; gap: 9px; }
-.xr-language-dock label { color: var(--dim); font-size: 10px; white-space: nowrap; }
-.xr-language-dock input {
-  min-width: 0;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  color: var(--text);
-  padding: 10px 12px;
-  font: 12px var(--font-sans);
-}
-.xr-language-dock input:focus { outline: 2px solid var(--brand-lime); outline-offset: 1px; }
+/* The language dock: one bar, always there, at the foot of the centre. A question opens Ask;
+   a command goes to the planner; without a goal it asks the only question that matters. */
+.xr-language-dock { position: fixed; left: 188px; right: 304px; bottom: 0; display: grid; grid-template-columns: auto minmax(180px, 1fr) auto auto; align-items: center; gap: var(--s-2); padding: var(--s-2) var(--s-5); background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); border-top: 1px solid var(--line-soft); }
+.xr-language-dock label { color: var(--dim); font-size: 12px; white-space: nowrap; }
+.xr-language-dock input { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-control); color: var(--text); font: 14px var(--font-sans); padding: 8px 12px; }
+.xr-language-dock input::placeholder { color: var(--faint); }
+.xr-language-dock input:focus { outline: 2px solid var(--text); outline-offset: 1px; }
+.xr-language-dock__hint { color: var(--faint); font: 10px var(--font-mono); white-space: nowrap; }
 .xr-object__head {
   display: flex;
   align-items: center;
@@ -1217,86 +1188,38 @@ button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px 
 .xr-tabs { display: flex; gap: 4px; padding: 0 24px; border-bottom: 1px solid var(--line); }
 .xr-object > .xr-scene { max-width: 1180px; margin: 0 auto; }
 .xr-scene { padding: 18px 0 96px; }
-.xr-canvas--free { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(240px, .75fr); gap: 14px; }
+/* The centre: the focus across the top, then a bento of what answers the current question.
+   Regular columns and a hairline gap, so nothing floats and nothing overlaps. */
+.xr-canvas--free { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--s-3); align-items: start; }
 .xr-scene-slot--centre { grid-column: 1 / -1; }
-.xr-scene-slot--primary { grid-column: 1; }
-.xr-scene-slot--supporting { grid-column: 2; }
+.xr-scene-slot--primary { grid-column: span 2; }
+.xr-scene-slot--supporting { min-width: 0; }
 .xr-scene-slot:only-child { grid-column: 1 / -1; }
+@media (max-width: 1100px) { .xr-scene-slot--primary { grid-column: 1 / -1; } }
 /* The focus is fixed in the visual centre. Everything else explains or acts around it. */
-.xr-orbit {
-  position: relative;
-  min-height: 470px;
-  overflow: hidden;
-  isolation: isolate;
-  border: 1px solid var(--line-soft);
-  background: radial-gradient(circle at center, rgba(198, 249, 57, .045) 0 13%, transparent 13.2%),
-    radial-gradient(circle at center, transparent 0 34%, rgba(255, 255, 255, .055) 34.2%, transparent 34.5%),
-    var(--surface);
-}
-.xr-orbit::before {
-  content: "";
-  position: absolute;
-  inset: 50% auto auto 50%;
-  width: 1px;
-  height: 78%;
-  background: linear-gradient(transparent, var(--line), transparent);
-  transform: translate(-50%, -50%) rotate(36deg);
-}
-.xr-orbit__core {
-  position: absolute;
-  left: 50%;
-  top: 48%;
-  transform: translate(-50%, -50%);
-  display: grid;
-  place-items: center;
-  min-width: 174px;
-  min-height: 174px;
-  padding: 24px;
-  background: var(--raised);
-  border: 1px solid var(--line);
-  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
-}
-.xr-orbit__core.is-selected { border-color: var(--signal); box-shadow: inset 0 0 0 1px var(--signal-soft); }
-.xr-orbit__type { color: var(--faint); font: 10px/1 var(--font-mono); text-transform: uppercase; letter-spacing: .1em; }
-.xr-orbit__core h2 { margin: 9px 0 5px; font-size: 30px; text-align: center; line-height: 1; }
-.xr-orbit__version { color: var(--dim); font: 11px/1 var(--font-mono); }
-.xr-orbit__satellite {
-  position: absolute;
-  width: 118px;
-  min-height: 54px;
-  display: grid;
-  place-items: center;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  border-radius: var(--r-control);
-  cursor: pointer;
-}
+/* The stage — the focused Object and its forms, plainly. No ring: a ring said nothing a row of
+   tiles does not say, and it put the claims underneath it. The core keeps the selected hairline
+   (the first of the lime's three uses). */
+.xr-orbit { display: grid; gap: var(--s-4); padding: var(--s-5) var(--s-6); border: 1px solid var(--line); border-radius: var(--r-card); background: var(--surface); }
+.xr-orbit__core { display: grid; grid-template-columns: auto 1fr auto; align-items: baseline; gap: var(--s-2) var(--s-4); padding: 0 0 var(--s-4); border-bottom: 1px solid var(--line-soft); border-left: 3px solid transparent; padding-left: var(--s-3); margin-left: calc(var(--s-3) * -1); }
+.xr-orbit__core.is-selected { border-left-color: var(--signal); }
+.xr-orbit__type { color: var(--faint); font: 10px/1 var(--font-mono); text-transform: uppercase; letter-spacing: .1em; grid-column: 1 / -1; }
+.xr-orbit__core h2 { margin: 0; font: 600 clamp(24px, 2.6vw, 34px)/1 var(--font-display); letter-spacing: -.02em; grid-column: 1 / 3; }
+.xr-orbit__version { color: var(--dim); font: 11px/1 var(--font-mono); justify-self: end; }
+.xr-orbit__forms { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--s-2); }
+.xr-orbit__satellite { display: grid; gap: 6px; padding: var(--s-3); background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-card); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.xr-orbit__satellite:hover { border-color: var(--dim); }
+.xr-orbit__satellite > span { font-size: 13px; font-weight: 600; }
 .xr-orbit__satellite small { color: var(--rebuild); font: 9px/1 var(--font-mono); text-transform: uppercase; letter-spacing: .08em; }
 .xr-orbit__satellite.is-rebuild { border-color: var(--rebuild); }
-.xr-orbit__satellite:nth-child(1) { left: 8%; top: 16%; }
-.xr-orbit__satellite:nth-child(2) { right: 8%; top: 15%; }
-.xr-orbit__satellite:nth-child(3) { right: 6%; bottom: 18%; }
-.xr-orbit__satellite:nth-child(4) { left: 7%; bottom: 17%; }
-.xr-orbit__satellite:nth-child(5) { left: calc(50% - 59px); top: 7%; }
-.xr-orbit__review {
-  position: absolute;
-  left: 20px;
-  bottom: 18px;
-  max-width: 280px;
-  text-align: left;
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 3px 10px;
-  background: transparent;
-  border: 0;
-  border-left: 2px solid var(--review);
-  padding: 5px 10px;
-}
+.xr-orbit__review { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; background: transparent; border: 0; border-left: 2px solid var(--review); padding: 5px 10px; text-align: left; color: var(--text); font: inherit; cursor: pointer; }
 .xr-orbit__review strong { color: var(--review); text-transform: uppercase; font: 10px/1.3 var(--font-mono); }
 .xr-orbit__review span { font-size: 12px; }
 .xr-orbit__review small { grid-column: 1 / -1; color: var(--faint); }
-.xr-orbit__relations { position: absolute; right: 16px; bottom: 14px; display: flex; gap: 5px; }
-.xr-orbit__relation { background: transparent; border: 1px solid var(--line); border-radius: var(--r-control); color: var(--dim); font-size: 11px; padding: 5px 8px; }
+.xr-orbit__relations { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.xr-orbit__relations::before { content: "Related"; color: var(--faint); font: 10px/1 var(--font-mono); text-transform: uppercase; letter-spacing: .1em; margin-right: 4px; }
+.xr-orbit__relation { background: transparent; border: 1px solid var(--line); border-radius: var(--r-control); color: var(--dim); font-size: 11px; padding: 5px 8px; cursor: grab; }
+.xr-orbit__relation:hover { color: var(--text); border-color: var(--dim); }
 .xr-affordance-ring { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px; border: 1px solid var(--line-soft); }
 .xr-affordance-ring button { border: 1px solid var(--line); background: transparent; border-radius: var(--r-tag); padding: 7px 12px; cursor: pointer; }
 .xr-affordance-ring button:hover { border-color: var(--text); }
@@ -1518,8 +1441,10 @@ input[type="range"] { accent-color: var(--text); }
 .xr-trust__glyphs .is-unresolved { color: var(--faint); }
 .xr-trust__value .is-unknown { color: var(--review); }
 .xr-trust__note { grid-column: 1 / -1; padding: 6px 12px; border-top: 1px solid var(--line-soft); font-size: 12px; color: var(--review); }
-.xr-trust--compact .xr-trust__cell { padding: 5px 9px; }
-.xr-trust--compact .xr-trust__label { display: none; }
+.xr-trust--compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.xr-trust--compact .xr-trust__cell { padding: 7px 10px; border-bottom: 1px solid var(--line-soft); }
+.xr-trust--compact .xr-trust__cell:nth-child(2n) { border-right: 0; }
+.xr-trust--compact .xr-trust__cell:last-of-type { grid-column: 1 / -1; border-bottom: 0; }
 /* Settled: everything reviewed, current, receipted, nothing awaiting review. The second of
    the three lime uses, and the only place trust is lime. It does not animate; it settles. */
 .xr-trust.is-settled { border-color: var(--signal); }
@@ -2021,3 +1946,21 @@ input[type="range"] { accent-color: var(--text); }
   background: var(--bg); color: var(--text);
 }
 [data-paper] .xr-doc { font: 17px/1.7 ui-serif, Georgia, serif; max-width: 66ch; }
+
+/* ---- Studio: the need above the stage; one line of state under each zone ---------------- */
+.xr-stage__need { margin: var(--s-2) 0 var(--s-3); font: 11px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+.xr-stage__need em { font-style: normal; color: var(--faint); }
+.xr-rail__label { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s-2); }
+.xr-rail__state { display: block; margin-top: 2px; font: 10px/1.3 var(--font-mono); color: var(--dim); }
+.xr-rail__state.is-sources, .xr-rail__state.is-decisions { color: var(--review); }
+.xr-rail__state.is-work { color: var(--rebuild); }
+.xr-rail__state.is-deliveries { color: var(--blocked); }
+/* Every supporting answer is a card of the same frame, so the bento reads as one system. */
+.xr-scene-slot--supporting > *, .xr-scene-slot--primary > * { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-card); padding: var(--s-4); min-width: 0; }
+.xr-scene-slot--supporting > .xr-panel, .xr-scene-slot--primary > .xr-panel,
+.xr-scene-slot--supporting > .xr-trust, .xr-scene-slot--supporting > .xr-proposals, .xr-scene-slot--supporting > .xr-supportmap { padding: 0; }
+.xr-scene-slot--supporting > .xr-affordance-ring { background: transparent; border: 0; padding: 0; }
+/* A slot whose component rendered nothing takes no room: no holes in the bento. */
+.xr-scene-slot:empty { display: none; }
+/* Wide answers — the thinking table, the support map, the proposals, where you stand — take the row. */
+.xr-scene-slot:has(> .xr-table), .xr-scene-slot:has(> .xr-supportmap), .xr-scene-slot:has(> .xr-proposals), .xr-scene-slot:has(> .xr-standing) { grid-column: 1 / -1; }

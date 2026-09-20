@@ -51,12 +51,11 @@ export function ObjectOrbit({ node, bindings }: { node: Node<"ObjectOrbit">; bin
         {shown && <ProvenanceBadge provenance={shown.provenance} provider={shown.provider} />}
       </div>
       <div className="xr-orbit__forms" aria-label="Current forms">
-        {focus.forms.slice(0, 5).map((form, index) => {
+        {focus.forms.slice(0, 5).map((form) => {
           const rebuild = impact?.rebuild.some((item) => item.formRoles.includes(form.role));
           const rep = bindings.representations[form.representationId];
           return (
             <button key={form.role} type="button" className={`xr-orbit__satellite${rebuild ? " is-rebuild" : ""}`}
-              style={{ "--orbit-index": index } as React.CSSProperties}
               onClick={() => bindings.onSelectForm?.(node.focusId, form.role)}>
               <span>{formRoleName(form.role)}</span>
               {rep && <ProvenanceBadge provenance={rep.provenance} provider={rep.provider} />}
@@ -65,12 +64,12 @@ export function ObjectOrbit({ node, bindings }: { node: Node<"ObjectOrbit">; bin
           );
         })}
       </div>
-      {impact?.review.map((item) => (
-        <button key={`${item.objectId}-${item.causeObjectId}`} type="button" className="xr-orbit__review"
-          onClick={() => bindings.onShowHow?.(item.objectId, item.causeObjectId)}>
-          <strong>Review</strong><span>{item.title}</span><small>{item.because}</small>
+      {/* Review items live in the ImpactReview card beside the stage; the stage names only the count. */}
+      {impact && impact.review.length > 0 && (
+        <button type="button" className="xr-orbit__review" onClick={() => bindings.onShowHow?.(impact.review[0]!.objectId, impact.review[0]!.causeObjectId)}>
+          <strong>Review</strong><span>{impact.review.length === 1 ? "one decision this rests on changed" : `${impact.review.length} decisions this rests on changed`}</span>
         </button>
-      ))}
+      )}
       <div className="xr-orbit__relations" aria-label="Related objects">
         {node.relatedIds.slice(0, 6).map((id) => (
           <button key={id} type="button" draggable className="xr-orbit__relation"
@@ -145,7 +144,8 @@ const formatted = (constraint: ConstraintRecord): string => {
 
 export function ConstraintStrip({ node, bindings }: { node: Node<"ConstraintStrip">; bindings: SceneBindings }) {
   const constraints = node.constraintIds.map((id) => bindings.constraints?.[id]).filter(Boolean) as ConstraintRecord[];
-  if (constraints.length === 0) return <Empty>No constraints are attached yet.</Empty>;
+  // No constraints, no card: an empty strip is filler, and the interface does not fill quiet.
+  if (constraints.length === 0) return null;
   return (
     <section className="xr-constraints" aria-label="Current constraints">
       {constraints.map((constraint) => (

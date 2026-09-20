@@ -6,7 +6,7 @@ import type {
 } from "@xeniur/core";
 import { SceneRenderer, presentBindings, type SceneBindings } from "@xeniur/ui";
 import {
-  SituationSchema, compileSituation, layoutScene, proposalsFor,
+  NEED_WORDS, SituationSchema, compileSituation, layoutScene, proposalsFor,
   type GestureProposal,
 } from "@xeniur/grammar";
 import { GOAL_STATUSES, GOAL_STATUS_WORDS } from "@xeniur/core";
@@ -21,6 +21,9 @@ const ZONES = [
   { key: "work", label: "Work" },
   { key: "deliveries", label: "Deliveries" },
 ] as const;
+
+/** The four zones are four of the six needs: what the rail names is the question the centre answers. */
+const ZONE_NEED = { sources: "know_more", decisions: "decide", work: "make", deliveries: "finish" } as const;
 
 const ZONE_INTENT = {
   sources: { meaning: "relationship", interaction: "connect", layer: 2, goal: "understand" },
@@ -79,11 +82,11 @@ export function World({
   const [constraints, setConstraints] = useState<ConstraintRecord[]>([]);
   const [proof, setProof] = useState<ProcessProof | null>(null);
   const [trust, setTrust] = useState<Record<string, TrustFacts>>({});
+  const [worldTrust, setWorldTrust] = useState<TrustFacts | null>(null);
   const [gestureProposals, setGestureProposals] = useState<GestureProposal[]>([]);
   const [gesturePair, setGesturePair] = useState<{
     sourceId: string; targetId: string; targetKind: "claim" | "object" | "decision" | "work";
   } | null>(null);
-  const [languageOpen, setLanguageOpen] = useState(false);
   const [arrival, setArrival] = useState<{ path: string; inspection: PackageInspectionView } | null>(null);
   const [challenge, setChallenge] = useState<ChallengeRecord | null>(null);
   const [entries, setEntries] = useState<EntryRecord[]>([]);
@@ -197,6 +200,7 @@ export function World({
     void bridge?.trust?.facts(selectedId).then((facts) => {
       if (facts) setTrust((prev) => ({ ...prev, [selectedId]: facts }));
     });
+    void bridge?.trust?.world?.(worldId).then((facts) => setWorldTrust(facts ?? null));
     // The lenses: the claims behind it, and what any agent saw, decided, was allowed and did.
     void bridge?.trust?.supportMap(selectedId).then((m) => setSupportMap(m ?? null));
     void bridge?.brain?.trail(selectedId).then((rows) => setTrailRows(rows ?? []));
@@ -401,8 +405,9 @@ export function World({
       : snapshot.states.map((state) => state.object.id);
     const situation = SituationSchema.parse({
       worldId, title: snapshot.world.title,
-      // A clicked zone sets meaning and interaction; otherwise the need chosen from the goal does.
-      ...(zoneChosen || !goal ? { meaning: intent.meaning, interaction: intent.interaction } : {}),
+      // A clicked zone names the question; otherwise the goal's status chooses it. The zone's
+      // meaning and interaction still shape the centre when the person chose the zone.
+      ...(zoneChosen || !goal ? { meaning: intent.meaning, interaction: intent.interaction, need: ZONE_NEED[zone] } : {}),
       ...(standing ? { knowledge: {
         known: standing.knowledge.known.length, proposed: standing.knowledge.proposed.length,
         disputed: standing.knowledge.disputed.length, unknown: standing.knowledge.unknown.length,
@@ -430,6 +435,7 @@ export function World({
     });
     const semantic = compileSituation(situation);
     const compiled = layoutScene(semantic, { layoutId: semantic.layoutId });
+    compiled.reason = NEED_WORDS[semantic.need];
     const root = compiled.root.component === "Canvas" ? compiled.root : null;
     if (root && nodes.length > 0) root.children.unshift(...nodes as never[]);
     // The Sources zone asks "which claims are actually supported?" — the Support Map is that
@@ -463,7 +469,7 @@ export function World({
     if (text === "") return;
     if (askingForGoal) {
       void bridge?.goals?.create(worldId, text, selectedId).then(() => refreshGoal());
-      setUtterance(""); setLanguageOpen(false);
+      setUtterance("");
       return;
     }
     const selection = selectedId ? [selectedId] : [];
@@ -472,7 +478,6 @@ export function World({
       const read = await bridge?.brain?.resolve(text, selection);
       if (read && (read.by === "rule" || text.endsWith("?"))) {
         setAsk({ utterance: text, selection });
-        setLanguageOpen(false);
       } else {
         void bridge?.metrics?.record("typed_instead", ZONE_INTENT[zone].meaning);
         onSubmit(text, selection);
@@ -484,8 +489,18 @@ export function World({
   const counts: Record<Zone, number> = {
     sources: map?.counts.sources ?? 0,
     decisions: decisions.length,
-    work: snapshot.states.length,
-    deliveries: 0,
+    work: snapshot.states.filter((st) => !["claim", "question", "decision", "atom"].includes(st.properties.semanticType)).length,
+    deliveries: worldTrust?.actions.receipted ?? 0,
+  };
+  // One line of state under each zone: words, never an unread badge.
+  const zoneState: Record<Zone, string> = {
+    sources: worldTrust && worldTrust.support.unresolved + worldTrust.support.contradicted > 0
+      ? [worldTrust.support.unresolved ? `${worldTrust.support.unresolved} unresolved` : "", worldTrust.support.contradicted ? `${worldTrust.support.contradicted} contradicted` : ""].filter(Boolean).join(" · ")
+      : "",
+    decisions: decisions.some((d) => d.state === "needs_review") ? `${decisions.filter((d) => d.state === "needs_review").length} to review` : "",
+    work: worldTrust && worldTrust.evidence.total > 0 && worldTrust.evidence.current < worldTrust.evidence.total
+      ? `${worldTrust.evidence.total - worldTrust.evidence.current} measurement${worldTrust.evidence.total - worldTrust.evidence.current === 1 ? "" : "s"} stale` : "",
+    deliveries: worldTrust && worldTrust.actions.unknown > 0 ? `${worldTrust.actions.unknown} unknown` : "",
   };
 
   if (present) {
@@ -574,8 +589,8 @@ export function World({
               setZone(z.key); setZoneChosen(true); setShowHow(null); setGestureProposals([]);
               if (z.key === "decisions" && decisions[0]) setSelectedId(decisions[0].objectId);
             }}>
-            {z.label}
-            <span className="xr-rail__count">{counts[z.key] || ""}</span>
+            <span className="xr-rail__label">{z.label}<span className="xr-rail__count">{counts[z.key] || ""}</span></span>
+            {zoneState[z.key] && <span className={`xr-rail__state is-${z.key}`}>{zoneState[z.key]}</span>}
           </button>
         ))}
 
@@ -613,6 +628,9 @@ export function World({
         )}
         {notice && <p className="xr-centre__notice" role="status">{notice}<button type="button" className="xr-button" onClick={() => setNotice(null)}>Close</button></p>}
         <div className="xr-centre__solo">
+          {scene.reason && snapshot.world.kind === "work" && !showStanding && (
+            <p className="xr-stage__need"><span>{scene.reason}</span>{selected && <em> · {selected.properties.title}</em>}</p>
+          )}
           <SceneRenderer scene={scene} bindings={bindings} />
         </div>
         {candidates.length > 0 && snapshot.world.kind === "work" && (
@@ -622,21 +640,15 @@ export function World({
           </div>
         )}
 
-        <footer className={`xr-language-dock${languageOpen || askingForGoal ? " is-open" : ""}`}>
-          {!languageOpen && !askingForGoal ? <button type="button" className="xr-language-dock__trigger" onClick={() => setLanguageOpen(true)}>
-            Use language for this <span>⌘K also works</span>
-          </button> : <>
-            <label htmlFor="world-language">{askingForGoal
-              ? "What are you trying to accomplish?"
-              : `Describe a shortcut for ${selected?.properties.title ?? "this World"}`}</label>
-            <input id="world-language" autoFocus value={utterance}
-              placeholder={askingForGoal ? "One sentence, in your words" : "For example: make a delivery preview"}
-              onChange={(e) => setUtterance(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") setLanguageOpen(false); }} />
-            <button type="button" className={`xr-button ${busy ? "xr-button--running" : "xr-button--primary"}`}
-              onClick={submit} disabled={busy}>{busy ? "Working…" : askingForGoal ? "Set it" : "Go"}</button>
-            {!askingForGoal && <button type="button" className="xr-button" onClick={() => setLanguageOpen(false)}>Close</button>}
-          </>}
+        <footer className="xr-language-dock">
+          <label htmlFor="world-language">{askingForGoal ? "What are you trying to accomplish?" : "Use language for this"}</label>
+          <input id="world-language" value={utterance}
+            placeholder={askingForGoal ? "One sentence, in your words" : `Ask about ${selected?.properties.title ?? "this World"}, or say what to do — “compare these two”, “make a delivery preview”`}
+            onChange={(e) => setUtterance(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") setUtterance(""); }} />
+          <button type="button" className={`xr-button ${busy ? "xr-button--running" : "xr-button--primary"}`}
+            onClick={submit} disabled={busy || utterance.trim() === ""}>{busy ? "Working…" : askingForGoal ? "Set it" : "Go"}</button>
+          <span className="xr-language-dock__hint">⌘K palette</span>
         </footer>
       </main>
 

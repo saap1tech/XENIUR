@@ -66,7 +66,9 @@ export const primitiveFor = (meaning: Meaning, interaction: Interaction): readon
 /** Traits compose existing human concepts; they never add components or a new dimension. */
 export const TRAIT_MEANINGS: Readonly<Record<SemanticTrait, readonly Meaning[]>> = {
   locatable: ["where"], temporal: ["when"], priced: ["cost"], personLike: ["who"],
-  versioned: ["sequence"], composable: ["relationship"], deliverable: ["relationship"],
+  // Every Object is versioned; a timeline of unrelated Objects is not a sequence. History asks
+  // for `sequence` explicitly (the ObjectView History tab does); the trait no longer implies it.
+  versioned: ["relationship"], composable: ["relationship"], deliverable: ["relationship"],
   printable: ["relationship"], bookable: ["where", "when", "who", "cost"],
   spatial: ["relationship"], renderable: ["relationship"], external: ["relationship"],
   consequential: ["relationship"],

@@ -83,8 +83,9 @@ function propsFor(component: SceneComponentName, situation: Resolved): Record<st
       };
     }
     case "EvidenceMeter": return { objectId: focusId, disclosure: situation.layer };
-    case "EmptySlot": return { meaning: situation.meaning, label: situation.knowledge && situation.knowledge.unknown > 0
-      ? `${situation.knowledge.unknown} still unknown — a source or a question goes here` : `Add ${situation.meaning}` };
+    case "EmptySlot": return situation.knowledge && situation.knowledge.unknown > 0
+      ? { meaning: "still unknown", label: `${situation.knowledge.unknown} ${situation.knowledge.unknown === 1 ? "thing" : "things"} not yet known — a source or a question goes here` }
+      : { meaning: situation.meaning, label: `Add ${situation.meaning}` };
     case "ThinkingTable": return { worldId: situation.worldId, selectedId: situation.focus.kind === "object" ? focusId : null };
     case "SupportMap": return { objectId: focusId, lanes: [], disclosure: situation.layer };
     case "FormStrip": return { objectId: focusId, selectedRole: null, showFileNames: false };

@@ -66,6 +66,14 @@ export function App() {
     if (snapshot) setView({ kind: "world", snapshot });
   }, [bridge]);
 
+  // The world preview lands in the Studio, not on Home.
+  useEffect(() => {
+    if (window.location.hostname === "localhost" && new URLSearchParams(window.location.search).get("visual-preview") === "world") {
+      void bridge?.worlds.list().then((ws) => { if (ws[0]) void openWorld(ws[0].id); });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const openObject = useCallback(async (objectId: string, snapshot?: WorldSnapshot) => {
     const detail = await bridge?.living.detail(objectId);
     const world = snapshot ?? (view.kind === "world" ? view.snapshot
@@ -164,7 +172,8 @@ export function App() {
   }
 
   if (!bridge) {
-    if (window.location.hostname === "localhost" && new URLSearchParams(window.location.search).has("visual-preview")) {
+    const preview = window.location.hostname === "localhost" ? new URLSearchParams(window.location.search).get("visual-preview") : null;
+    if (preview !== null) {
       const now = Date.now();
       const sampleWorlds: WorldRow[] = [
         { id: "11111111-1111-4111-8111-111111111111", title: "Rainwear 2027", emoji: "◒", summary: "Interview → decision → jacket → delivery", createdAt: now, lastOpenedAt: now, kind: "work", publisherId: null },
