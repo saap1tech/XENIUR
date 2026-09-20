@@ -1153,6 +1153,44 @@ CREATE TABLE entry_tickets (
 );
 `;
 
+/**
+ * Migration 26 — judging.
+ *
+ * Judges are publishers the challenge's publisher invited. Each assessment is one judge's
+ * signed document over one entry; results are the publisher's placings as written, signed.
+ * Nothing here holds a sum, an average or a rank, and no column could.
+ */
+const JUDGING = `
+ALTER TABLE challenges ADD COLUMN judging_opened_at INTEGER;
+ALTER TABLE challenges ADD COLUMN results_published_at INTEGER;
+
+CREATE TABLE challenge_judges (
+  challenge_world_id TEXT NOT NULL REFERENCES challenges(world_id) ON DELETE CASCADE,
+  judge_public_key   TEXT NOT NULL,
+  display_name       TEXT NOT NULL,
+  invited_at         INTEGER NOT NULL,
+  PRIMARY KEY (challenge_world_id, judge_public_key)
+);
+
+CREATE TABLE assessments (
+  id                 TEXT PRIMARY KEY,
+  challenge_world_id TEXT NOT NULL REFERENCES challenges(world_id) ON DELETE CASCADE,
+  entry_id           TEXT NOT NULL REFERENCES challenge_entries(id) ON DELETE CASCADE,
+  judge_public_key   TEXT NOT NULL,
+  body               TEXT NOT NULL,      -- JSON Assessment, as signed
+  signature          TEXT NOT NULL,      -- JSON PackageSignature over the body's digest
+  recorded_at        INTEGER NOT NULL,
+  UNIQUE(entry_id, judge_public_key)
+);
+
+CREATE TABLE challenge_results (
+  challenge_world_id TEXT PRIMARY KEY REFERENCES challenges(world_id) ON DELETE CASCADE,
+  body               TEXT NOT NULL,      -- JSON Results, as signed
+  signature          TEXT NOT NULL,
+  published_at       INTEGER NOT NULL
+);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: INIT },
   { version: 2, name: "object_model", sql: OBJECT_MODEL },
@@ -1179,4 +1217,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 23, name: "goals", sql: GOALS },
   { version: 24, name: "context_envelopes", sql: CONTEXT_ENVELOPES },
   { version: 25, name: "seal", sql: SEAL },
+  { version: 26, name: "judging", sql: JUDGING },
 ];

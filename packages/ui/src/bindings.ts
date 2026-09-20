@@ -5,7 +5,7 @@ import type {
   ObjectState, PlanShape, ProcessProof, ReadinessReport, RebuildPlan, Representation, ResolvedPassage,
   SourceVersion, StepStatus, Task, ThinkingMap, ConstraintRecord, ConstraintValue,
 } from "@xeniur/core";
-import type { ChallengeRecord, EntryRecord, EnvelopeSheet, Standing as StandingData, SupportMap as SupportMapData, TrailRow, ExitReason, ModeKind, ModelProviderView, ModeRecord, TrustFacts } from "@xeniur/core";
+import type { ChallengeRecord, EntryRecord, EnvelopeSheet, Standing as StandingData, SupportMap as SupportMapData, TrailRow, ExitReason, ModeKind, ModelProviderView, ModeRecord, TrustFacts, JudgingSheetData, CriterionMark } from "@xeniur/core";
 import { formOf } from "@xeniur/core";
 
 export interface LineageView {
@@ -180,6 +180,12 @@ export interface SceneBindings {
   onSealSession?(challengeWorldId: string, entryObjectId: string): void;
   /** The running Sealed Session, if any, so the board can say so instead of offering another. */
   sealRunning?: ModeRecord | null;
+  /** What a judge sees for one entry, by entry id. */
+  judgingSheets?: Readonly<Record<string, JudgingSheetData>>;
+  /** The judge marks each criterion and writes a note; the host signs and stores it. */
+  onRecordAssessment?(challengeWorldId: string, entryId: string, criteria: CriterionMark[], note: string): void;
+  /** Move to the next entry in arrival order. */
+  onNextEntry?(challengeWorldId: string, entryId: string): void;
   /** The same exit for every mode. "emergency" is Escape; it asks nothing. */
   onExitMode?(modeId: string, reason: ExitReason): void;
   onDeclineContext?(contextDigest: string): void;

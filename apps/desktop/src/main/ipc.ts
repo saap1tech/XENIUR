@@ -1,5 +1,5 @@
 import { app, ipcMain, type IpcMainInvokeEvent } from "electron";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { extractCandidates } from "@xeniur/sensemaking";
 import { z } from "zod";
@@ -9,6 +9,7 @@ import { compileContext } from "@xeniur/grammar";
 import { policyFrom } from "@xeniur/models";
 import { proposeFromBound } from "@xeniur/sensemaking";
 import { SupportStatusSchema, type Tool, type PlanShape } from "@xeniur/core";
+import { CriterionMarkSchema, PlacingSchema, SignedDocumentEnvelopeSchema } from "@xeniur/core";
 import { policyConstraints } from "./services.js";
 import { BrainIntentSchema, InvalidPlanError, bindProposal, resolveAsk, type BrainIntent } from "@xeniur/brain";
 import { planForProposal, proposalsFor } from "@xeniur/grammar";
@@ -107,6 +108,19 @@ const SCHEMAS = {
   "challenges:enter": z.object({ worldId: UuidSchema, objectId: UuidSchema }),
   "challenges:entries": Uuid,
   "challenges:evaluate": z.object({ worldId: UuidSchema, objectId: UuidSchema }),
+  "judging:status": Uuid,
+  "judging:judges": Uuid,
+  "judging:isJudge": Uuid,
+  "judging:invite": z.object({ worldId: UuidSchema, judge: PublisherRefSchema }),
+  "judging:open": Uuid,
+  "judging:sheet": z.object({ worldId: UuidSchema, entryId: UuidSchema }),
+  "judging:assess": z.object({ worldId: UuidSchema, entryId: UuidSchema, criteria: z.array(CriterionMarkSchema).min(1).max(8), note: z.string().max(4000).default("") }),
+  "judging:assessments": Uuid,
+  "judging:exportAssessment": Uuid,
+  "judging:adoptFile": z.object({ path: z.string().min(1) }),
+  "judging:publishResults": z.object({ worldId: UuidSchema, placings: z.array(PlacingSchema).max(50), note: z.string().max(4000).default("") }),
+  "judging:results": Uuid,
+  "judging:exportResults": Uuid,
   "outreach:describe": z.object({ envelope: OutreachEnvelopeSchema }),
   "outreach:create": z.object({ worldId: UuidSchema, envelope: OutreachEnvelopeSchema, digest: z.string().min(1) }),
   "outreach:send": z.object({ id: UuidSchema, message: z.object({
@@ -471,6 +485,37 @@ export function registerIpc(services: Services): void {
     "challenges:entries": ({ id }) =>
       services.graph.challenges.entries(id, { self: services.graph.publishers.self().publicKey }),
     "challenges:evaluate": ({ worldId, objectId }) => services.graph.challenges.evaluate(worldId, objectId),
+    "judging:status": ({ id }) => services.graph.judging.status(id),
+    "judging:judges": ({ id }) => services.graph.judging.judges(id),
+    "judging:isJudge": ({ id }) => services.graph.judging.isJudge(id, services.graph.publishers.self().publicKey),
+    "judging:invite": ({ worldId, judge }) => { services.graph.judging.invite(worldId, judge); return services.graph.judging.judges(worldId); },
+    "judging:open": ({ id }) => { services.graph.judging.open(id); return services.graph.judging.status(id); },
+    "judging:sheet": ({ worldId, entryId }) => services.graph.judging.sheetFor(worldId, entryId),
+    "judging:assess": ({ worldId, entryId, criteria, note }) => services.graph.judging.assess(worldId, entryId, criteria, note).body,
+    "judging:assessments": ({ id }) => services.graph.judging.assessments(id),
+    "judging:exportAssessment": ({ id }) => {
+      const doc = services.graph.judging.exportAssessment(id);
+      if (!doc) throw new Error("no such assessment");
+      const path = join(app.getPath("downloads"), `assessment-${id.slice(0, 8)}.xeniur-judging.json`);
+      writeFileSync(path, JSON.stringify(doc, null, 2), { encoding: "utf8", mode: 0o600 });
+      return { path };
+    },
+    "judging:adoptFile": ({ path }) => {
+      // A signed document from elsewhere: parsed as data, verified before anything is written.
+      const doc = SignedDocumentEnvelopeSchema.parse(JSON.parse(readFileSync(path, "utf8")));
+      if (doc.kind === "xeniur.judging/1") return { kind: doc.kind, adopted: services.graph.judging.adopt(doc).id };
+      if (doc.kind === "xeniur.results/1") return { kind: doc.kind, adopted: services.graph.judging.adoptResults(doc).challengeWorldId };
+      throw new Error(`${doc.kind} is not adopted here`);
+    },
+    "judging:publishResults": ({ worldId, placings, note }) => services.graph.judging.publishResults(worldId, placings, note),
+    "judging:results": ({ id }) => services.graph.judging.results(id),
+    "judging:exportResults": ({ id }) => {
+      const doc = services.graph.judging.results(id);
+      if (!doc) throw new Error("no results have been published");
+      const path = join(app.getPath("downloads"), `results-${id.slice(0, 8)}.xeniur-results.json`);
+      writeFileSync(path, JSON.stringify(doc, null, 2), { encoding: "utf8", mode: 0o600 });
+      return { path };
+    },
     "outreach:describe": ({ envelope }) => {
       const plan = campaignPlan(envelope);
       const r = envelope.recipients;

@@ -3,7 +3,8 @@ import type { DecisionDetail, InfluenceReport } from "./decisions.js";
 import type { ImpactReport, OutcomeLedger, TrustFacts } from "./impact.js";
 import type { EnvelopeSheet, ExitReason, ModeEnvelopeInput, ModeKind, ModeRecord, Reward, Streak } from "./modes.js";
 import type { SealFacts } from "./seal.js";
-import type { PublisherReport, PublisherView, ReportReason, TrustLevel } from "./publisher.js";
+import type { Assessment, CriterionMark, JudgingSheetData, Placing, Results, SignedDocument } from "./judging.js";
+import type { PublisherRef, PublisherReport, PublisherView, ReportReason, TrustLevel } from "./publisher.js";
 import type { CampaignRecord, OutboundMessage, OutreachEnvelopeInput } from "./outreach.js";
 import type { ChallengeRecord, ChallengeRulesInput, EntryRecord } from "./challenges.js";
 import type { TrailRow } from "./trail.js";
@@ -266,6 +267,23 @@ export interface XeniurBridge {
     exit(modeId: string, reason: ExitReason): Promise<ModeRecord | null>;
     active(): Promise<ModeRecord[]>;
     restrictions(): Promise<string[]>;
+  };
+  /* Judging — invited judges, signed assessments, the publisher's placings as written */
+  judging?: {
+    status(worldId: string): Promise<{ judgingOpenedAt: number | null; resultsPublishedAt: number | null }>;
+    judges(worldId: string): Promise<Array<PublisherRef & { invitedAt: number }>>;
+    isJudge(worldId: string): Promise<boolean>;
+    invite(worldId: string, judge: PublisherRef): Promise<Array<PublisherRef & { invitedAt: number }>>;
+    open(worldId: string): Promise<{ judgingOpenedAt: number | null; resultsPublishedAt: number | null }>;
+    sheet(worldId: string, entryId: string): Promise<JudgingSheetData | null>;
+    assess(worldId: string, entryId: string, criteria: CriterionMark[], note: string): Promise<Assessment>;
+    assessments(worldId: string): Promise<Assessment[]>;
+    exportAssessment(assessmentId: string): Promise<{ path: string }>;
+    /** A signed judging or results document from elsewhere; verified before anything is written. */
+    adoptFile(path: string): Promise<{ kind: string; adopted: string }>;
+    publishResults(worldId: string, placings: Placing[], note: string): Promise<SignedDocument<Results>>;
+    results(worldId: string): Promise<SignedDocument<Results> | null>;
+    exportResults(worldId: string): Promise<{ path: string }>;
   };
   /* The Sealed Session — heartbeats while it runs, facts read from them */
   seal?: {

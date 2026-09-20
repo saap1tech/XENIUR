@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type {
   DecisionDetail, ImpactReport, ObjectState, Representation, Scene,
 } from "@xeniur/core";
-import { describeEnvelope, planDigest, type CandidateRecord, type ChallengeRecord, type Compliance, type EntryRecord, type ModeRecord, type Standing as StandingData, type SupportMap as SupportMapData, type TrailRow } from "@xeniur/core";
+import { describeEnvelope, planDigest, type CandidateRecord, type ChallengeRecord, type Compliance, type EntryRecord, type JudgingSheetData, type ModeRecord, type Standing as StandingData, type SupportMap as SupportMapData, type TrailRow } from "@xeniur/core";
 import { SceneRenderer, emptyBindings, presentBindings, type SceneBindings } from "./index.js";
 
 const OBJ = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -559,7 +559,7 @@ describe("ChallengeBoard", () => {
     rules: { title: "Desk accessory", brief: "A printable desk object under 60 mm.", rules: ["one entry per person"],
       startsAt: Date.now() - 86_400_000, endsAt: Date.now() + 4 * 86_400_000,
       deliverable: { formRoles: ["print.stl"], description: "an STL that prints without supports" },
-      judging: { criteria: ["prints cleanly"], by: "publisher" }, aiPolicy: "no_generative_geometry" },
+      judging: { criteria: ["prints cleanly"], by: "publisher", scale: "one_to_five" }, aiPolicy: "no_generative_geometry" },
     signature: { publicKey: "P".repeat(43), displayName: "Blender Club", signedAt: 1, rootHash: "a".repeat(64), signature: "s".repeat(86) },
     deadlineConstraintId: OBJ, policyConstraintId: OBJ, createdAt: 1, dismissedAt: null,
   };
@@ -861,5 +861,65 @@ describe("the signal colour under Paper", () => {
     const block = css.slice(css.indexOf("[data-paper] {"), css.indexOf("}", css.indexOf("[data-paper] {")));
     expect(block).not.toMatch(/--signal|--brand-lime|--review|--rebuild|--ok|--blocked|--danger/);
     expect(block).toContain("--bg: #fbfaf7");
+  });
+});
+
+/* M6 B2 — judging as a Scene: one surface, the record's limits on every entry, no rank. */
+describe("JudgingSheet", () => {
+  const CW = "5c5c5c5c-5c5c-4c5c-8c5c-5c5c5c5c5c5c";
+  const E1 = "e1e1e1e1-e1e1-4e1e-8e1e-e1e1e1e1e1e1";
+  const sheet = (over: Partial<JudgingSheetData> = {}): JudgingSheetData => ({
+    challengeWorldId: CW, entryId: E1, entryObjectId: OBJ, entryNumber: 7, entryCount: 12,
+    title: "Leak finder", participant: { publicKey: "P".repeat(43), displayName: "Team Adrar" },
+    criteria: ["works on the stated problem", "the making is inspectable"], scale: "one_to_five",
+    forms: [{ role: "doc.proposal", provenance: "human", modality: "text" }],
+    research: { sources: 4, claims: 6, supported: 3, contradicted: 1, unresolved: 2 },
+    decisions: { accepted: 2, withSteelman: 1, chosenDespite: 1 },
+    build: { versions: 9, human: 14, tool: 3, model: 1 },
+    delivery: { released: true, verdict: "insufficient_record", because: ["the record does not say: 20 min with no heartbeat across a version change"] },
+    aiActivity: [{ at: 1_700_000_000_000, kind: "model_step", tool: "knowledge.propose", model: "llama", label: "proposed three claims" }],
+    observation: { verdict: "insufficient_record", density: "20 of 40 minutes recorded · 1 gap (1 across a version change) · no unexplained pastes · ran to the end", gaps: 1, unexplainedPastes: 0, exitReason: "completed" },
+    proofRoot: "a".repeat(64), own: null, ...over,
+  });
+  const html = (over: Partial<JudgingSheetData> = {}) => render(
+    { id: "j", component: "JudgingSheet", challengeWorldId: CW, entryId: E1 },
+    bindings({ judgingSheets: { [E1]: sheet(over) }, onRecordAssessment: () => {}, onNextEntry: () => {} }),
+  );
+
+  it("is one surface: the entry, how it came together, recorded AI activity, observation status, the limits, the marks, three verbs", () => {
+    const out = html();
+    expect(out).toContain("ARENA · ENTRY 07 of 12 · Process review");
+    for (const h of ["How this came together", "Recorded AI activity", "Observation status", "What the record cannot establish", "Your assessment"]) expect(out).toContain(h);
+    for (const slot of ["Research", "Decisions", "Build", "Delivery"]) expect(out).toContain(`<h4>${slot}</h4>`);
+    expect(out).toContain("knowledge.propose");
+    expect(out).toContain("20 of 40 minutes recorded");
+    for (const verb of ["Inspect evidence", "Record assessment", "Next entry"]) expect(out).toContain(verb);
+  });
+
+  it("carries the cannot-establish line and the three-row table on every entry, whatever the verdict", () => {
+    for (const verdict of ["complies", "violates", "insufficient_record"] as const) {
+      const out = html({ delivery: { released: true, verdict, because: [] }, observation: { verdict, density: null, gaps: 0, unexplainedPastes: 0, exitReason: null } });
+      expect(out).toContain("Activity outside the recorded environment is not independently verified.");
+      for (const row of ["Recorded provenance", "Record integrity", "Independent human contribution"]) expect(out).toContain(row);
+      expect(out).toContain("No Sealed Session covered this entry.");
+    }
+  });
+
+  it("marks on the publisher's scale, and the entry number is arrival order — no rank, score or leaderboard", () => {
+    const five = html();
+    expect(five.match(/role="radio"/g)?.length).toBe(10);                    // 2 criteria × 5 marks
+    const check = html({ scale: "check" });
+    expect(check.match(/role="radio"/g)?.length).toBe(4);
+    expect(check).toContain("met or not");
+    expect(five).not.toMatch(/\brank|score|leaderboard|winner|#\d/i);
+  });
+
+  it("shows the judge's own recorded assessment as recorded and signed, and offers to record again", () => {
+    const out = html({ own: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", challengeWorldId: CW, entryId: E1, entryObjectId: OBJ,
+      judge: { publicKey: "J".repeat(43), displayName: "You" }, criteria: [{ criterion: "works on the stated problem", mark: 4, note: "" }], note: "",
+      inspected: { proofRoot: null, verdict: "complies", density: null, modelEvents: 0 }, recordedAt: 1_700_000_000_000 } });
+    expect(out).toContain("signed by you");
+    expect(out).toContain("Record again");
+    expect(out).toContain('aria-checked="true"');
   });
 });

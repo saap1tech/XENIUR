@@ -40,6 +40,8 @@ export const SCENE_COMPONENTS = [
   "ProposalsTray", "ContextIndicator",
   // Four moves beside a selected idea, each making something persistent
   "ThinkingMoves",
+  // Judging as a Scene: one entry, its making, the recorded AI activity, and what the record cannot establish
+  "JudgingSheet",
 ] as const;
 export const SceneComponentSchema = z.enum(SCENE_COMPONENTS);
 export type SceneComponentName = z.infer<typeof SceneComponentSchema>;
@@ -415,6 +417,11 @@ const ContextIndicatorNode = z.object({ ...base, component: z.literal("ContextIn
 /** Find the basis · Challenge it · Connect it · Test it, beside a claim, question or decision. */
 const ThinkingMovesNode = z.object({ ...base, component: z.literal("ThinkingMoves"), objectId: UuidSchema }).strict();
 
+/** The judge's surface for one entry. Read-only over the entry; the marks are the judge's own. */
+const JudgingSheetNode = z.object({
+  ...base, component: z.literal("JudgingSheet"), challengeWorldId: UuidSchema, entryId: UuidSchema,
+}).strict();
+
 const LeafNodeSchema = z.discriminatedUnion("component", [
   ObjectCardNode, InspectorNode, DocumentNode, TimelineNode, TaskProgressNode,
   ComparisonNode, BrowserNode, CodePreviewNode, Viewport3DNode, ApprovalDialogNode,
@@ -429,7 +436,7 @@ const LeafNodeSchema = z.discriminatedUnion("component", [
   ChoiceCardsNode, StepperNode, EvidenceMeterNode, EmptySlotNode, ReviewSheetNode,
   ClaimPairNode, TrustStripNode, ModelSetupNode, ContextReviewNode,
   FocusContractNode, ChallengeBoardNode, SupportMapNode, AgentTrailNode, StandingNode,
-  ProposalsTrayNode, ContextIndicatorNode, ThinkingMovesNode,
+  ProposalsTrayNode, ContextIndicatorNode, ThinkingMovesNode, JudgingSheetNode,
 ]);
 export type LeafSceneNode = z.infer<typeof LeafNodeSchema>;
 

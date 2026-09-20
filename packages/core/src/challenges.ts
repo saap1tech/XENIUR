@@ -42,6 +42,8 @@ export const ChallengeRulesSchema = z.object({
     criteria: z.array(z.string().min(1).max(200)).min(1).max(8),
     /** Who judges. Never a vote count, never a platform score. */
     by: z.enum(["publisher", "panel"]),
+    /** The scale each criterion is marked on. The publisher's choice; XENIUR never sums it. */
+    scale: z.enum(["one_to_five", "check"]).default("one_to_five"),
   }).strict(),
   aiPolicy: AiPolicySchema,
 }).strict().refine((r) => r.endsAt > r.startsAt, { message: "a challenge ends after it starts" });

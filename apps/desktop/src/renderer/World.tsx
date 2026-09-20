@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ConstraintRecord, DecisionDetail, FrictionState, ImpactReport, Lane, ObjectState, ProcessProof,
-  CandidateRecord, ChallengeRecord, EntryRecord, EnvelopeSheet, GoalStatus, ModeEnvelopeInput, ModeRecord, PackageInspectionView, Representation, Scene, Standing, SupportMap, Task,
+  CandidateRecord, ChallengeRecord, EntryRecord, EnvelopeSheet, GoalStatus, JudgingSheetData, ModeEnvelopeInput, ModeRecord, PackageInspectionView, Representation, Scene, Standing, SupportMap, Task,
   ThinkingMap, TrailRow, TrustFacts, WorkGoal, WorldSnapshot,
 } from "@xeniur/core";
 import { SceneRenderer, presentBindings, t, type SceneBindings } from "@xeniur/ui";
@@ -14,6 +14,7 @@ import { BrandMark } from "./BrandMark.js";
 import { Arrival } from "./Arrival.js";
 import { Ask } from "./Ask.js";
 import { KeyboardMap } from "./KeyboardMap.js";
+import { Organizer } from "./Organizer.js";
 
 /** The project's meaningful things, not XENIUR's subsystems. */
 const ZONES = [
@@ -75,6 +76,10 @@ export function World({
   // The Sealed Session: the sheet being read, and the mode once it runs. Read from the store, never remembered.
   const [sealSheet, setSealSheet] = useState<{ sheet: EnvelopeSheet; envelope: ModeEnvelopeInput } | null>(null);
   const [sealMode, setSealMode] = useState<ModeRecord | null>(null);
+  // Judging: whether this machine judges here, and the sheet for the entry in front of it.
+  const [judging, setJudging] = useState<{ isJudge: boolean; openedAt: number | null }>({ isJudge: false, openedAt: null });
+  const [judgeEntry, setJudgeEntry] = useState<string | null>(null);      // entry id; null = the board
+  const [judgingSheet, setJudgingSheet] = useState<JudgingSheetData | null>(null);
   // Until the person clicks a zone, the goal's next question chooses the representation.
   const [zoneChosen, setZoneChosen] = useState<boolean>(initialZone !== "work");
   const [selectedId, setSelectedId] = useState<string | null>(
@@ -209,8 +214,16 @@ export function World({
     setEntries((await bridge?.challenges?.entries(worldId)) ?? []);
     setSelfKey((await bridge?.publishers?.self())?.publicKey ?? null);
     setSealMode((await bridge?.seal?.active()) ?? null);
+    const status = await bridge?.judging?.status(worldId);
+    setJudging({ isJudge: (await bridge?.judging?.isJudge(worldId)) ?? false, openedAt: status?.judgingOpenedAt ?? null });
   }, [bridge, worldId, snapshot.world.kind]);
   useEffect(() => { void refreshChallenge(); }, [refreshChallenge]);
+
+  // The judge's sheet for the entry in front of them, re-read whenever it changes.
+  useEffect(() => {
+    if (!judgeEntry) { setJudgingSheet(null); return; }
+    void bridge?.judging?.sheet(worldId, judgeEntry).then((sheet) => setJudgingSheet(sheet ?? null));
+  }, [bridge, worldId, judgeEntry, entries]);
 
   // While a Sealed Session runs: one heartbeat per interval with what is in the centre and its
   // version, and the size of every paste — the size only; the text itself is never stored.
@@ -319,6 +332,18 @@ export function World({
       await bridge?.challenges?.enter(challengeWorldId, objectId);
       await refreshChallenge();
     },
+    judgingSheets: judgingSheet ? { [judgingSheet.entryId]: judgingSheet } : {},
+    onRecordAssessment: async (challengeWorldId, entryId, criteria, note) => {
+      try { await bridge?.judging?.assess(challengeWorldId, entryId, criteria, note); setNotice(null); }
+      catch (cause) { setNotice(cause instanceof Error ? cause.message : String(cause)); }
+      const sheet = await bridge?.judging?.sheet(challengeWorldId, entryId);
+      setJudgingSheet(sheet ?? null);
+    },
+    onNextEntry: (_challengeWorldId, entryId) => {
+      const at = entries.findIndex((e) => e.id === entryId);
+      const next = entries[at + 1];
+      if (next) setJudgeEntry(next.id);
+    },
     sealRunning: sealMode,
     onSealSession: async (_challengeWorldId, entryObjectId) => {
       // The envelope: until the challenge closes (capped at a day), remote models off, a
@@ -352,7 +377,14 @@ export function World({
     onImport: async (paths, objectId) => {
       // A .xeniur is inspected and shown, never opened on drop. Anything else is a file.
       const packages = paths.filter((p) => p.endsWith(".xeniur"));
-      const files = paths.filter((p) => !p.endsWith(".xeniur"));
+      const signed = paths.filter((p) => p.endsWith(".xeniur-judging.json") || p.endsWith(".xeniur-results.json"));
+      const files = paths.filter((p) => !p.endsWith(".xeniur") && !signed.includes(p));
+      for (const doc of signed) {
+        // A judge's assessment or a publisher's results: verified before anything is written.
+        try { const r = await bridge?.judging?.adoptFile(doc); if (r) setNotice(`${r.kind === "xeniur.judging/1" ? "An assessment" : "Results"} arrived and verified.`); }
+        catch (cause) { setNotice(cause instanceof Error ? cause.message : String(cause)); }
+        await refreshChallenge();
+      }
       if (files.length > 0) {
         await bridge?.living.importFiles(files, { worldId, objectId });
         onImported?.({ objectId: objectId ?? "", worldId });
@@ -407,7 +439,7 @@ export function World({
   }), [snapshot, byId, tasks, map, friction, decisions, impact, worldId, bridge,
        onApprove, onReject, onImported, refreshThinking, refreshChallenge, refreshStanding, refreshGoal, constraints, proof, trust, supportMap, trailRows,
        standing, candidates, refreshCandidates, connections, brainAvailable, challenge, entries, selfKey, selectedId,
-       gestureProposals, gesturePair, zone, sealSheet, sealMode]);
+       gestureProposals, gesturePair, zone, sealSheet, sealMode, judgingSheet, entries]);
   bindingsRef.current = bindings;
 
   /** One thing at a time in the centre, chosen by the zone and what is selected. */
@@ -444,9 +476,12 @@ export function World({
     // A challenge World: the board is the centre, whatever is selected. Rules before entry.
     // A Sealed Session's sheet replaces the board until it is read; its rule sits above it while it runs.
     if (snapshot.world.kind === "challenge" && challenge) return {
-      worldId, title: snapshot.world.title, reason: sealSheet ? "Read what a Sealed Session records before it starts" : "The rules, the dates, the deliverable, the policy — then your entry",
+      worldId, title: snapshot.world.title, reason: sealSheet ? "Read what a Sealed Session records before it starts"
+        : judgeEntry ? "One entry: what was made, how, what the record says, and what it cannot" : "The rules, the dates, the deliverable, the policy — then your entry",
       root: { id: "root", component: "Canvas", layout: "column", children: sealSheet
         ? [{ id: "seal-sheet", component: "FocusContract", phase: "review", sheetDigest: sealSheet.sheet.digest, modeId: null }]
+        : judgeEntry && judgingSheet
+        ? [{ id: "judging", component: "JudgingSheet", challengeWorldId: worldId, entryId: judgeEntry }]
         : [
           ...(sealMode && sealMode.endedAt === null ? [{ id: "seal-rule", component: "FocusContract", phase: "running", sheetDigest: null, modeId: sealMode.id }] : []),
           ...nodes,
@@ -519,7 +554,7 @@ export function World({
       root.children.push({ id: "support-map", component: "SupportMap", objectId: selected.object.id, lanes: [], disclosure: intent.layer } as never);
     }
     return compiled;
-  }, [zone, zoneChosen, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints, challenge, supportMap, goal, relevant, showStanding, standing, density, sealSheet, sealMode]);
+  }, [zone, zoneChosen, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints, challenge, supportMap, goal, relevant, showStanding, standing, density, sealSheet, sealMode, judgeEntry, judgingSheet]);
 
   const inspector: Scene | null = useMemo(() => selected ? {
     worldId, title: "", reason: "",
@@ -728,7 +763,29 @@ export function World({
         </footer>
       </main>
 
-      {inspector && selected && (
+      {snapshot.world.kind === "challenge" && challenge && (judging.isJudge || selfKey === challenge.publisher.publicKey) && (
+        <aside className="xr-inspector-zone">
+          {judging.isJudge && judging.openedAt && entries.length > 0 && (
+            <div className="xr-judge-nav">
+              <small className="xr-mono">JUDGE</small>
+              <div className="xr-judge-nav__entries">
+                <button type="button" className={`xr-rail__item${judgeEntry === null ? " is-active" : ""}`} onClick={() => setJudgeEntry(null)}>The board</button>
+                {entries.map((e, i) => (
+                  <button key={e.id} type="button" className={`xr-rail__item${judgeEntry === e.id ? " is-active" : ""}`} onClick={() => setJudgeEntry(e.id)}>
+                    {String(i + 1).padStart(2, "0")} · {snapshot.states.find((st) => st.object.id === e.objectId)?.properties.title ?? "an entry"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {selfKey === challenge.publisher.publicKey && (
+            <Organizer challenge={challenge} entries={entries}
+              titles={Object.fromEntries(snapshot.states.map((st) => [st.object.id, st.properties.title]))}
+              onChanged={() => { void refreshChallenge(); }} />
+          )}
+        </aside>
+      )}
+      {inspector && selected && snapshot.world.kind !== "challenge" && (
         <aside className="xr-inspector-zone">
           <SceneRenderer scene={inspector} bindings={bindings} />
           {/* A processing permission, versioned on the Object. Never a rights change, never a deletion. */}

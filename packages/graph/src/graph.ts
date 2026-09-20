@@ -20,6 +20,7 @@ import { CircleStore } from "./shared.js";
 import { OutreachStore } from "./outreach.js";
 import { ChallengeStore } from "./challenges.js";
 import { SealStore } from "./seal.js";
+import { JudgingStore } from "./judging.js";
 import { TrailStore } from "./trail.js";
 import { GoalStore } from "./goals.js";
 import { EnvelopeStore } from "./envelopes.js";
@@ -86,6 +87,8 @@ export class ObjectGraph {
   readonly challenges: ChallengeStore;
   /** The Sealed Session: heartbeats and the record density read from them. */
   readonly seal: SealStore;
+  /** Judging: invited judges, signed assessments, the publisher's placings as written. */
+  readonly judging: JudgingStore;
   /** Saw · decided · authorised · executed, one row per model call or consequential action. */
   readonly trail: TrailStore;
   /** What the person is trying to accomplish, per World, in their words. */
@@ -109,6 +112,7 @@ export class ObjectGraph {
     this.circles = new CircleStore(db, this);
     this.outreach = new OutreachStore(db, this);
     this.challenges = new ChallengeStore(db, this);
+    this.judging = new JudgingStore(db, this);
     this.trail = new TrailStore(db);
     this.goals = new GoalStore(db, this);
     this.envelopes = new EnvelopeStore(db);
