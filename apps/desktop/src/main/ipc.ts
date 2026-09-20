@@ -16,6 +16,7 @@ import { planForProposal, proposalsFor } from "@xeniur/grammar";
 import type { Services } from "./services.js";
 import { assertTrustedSender, UntrustedSenderError } from "./security.js";
 import { captureWeb } from "./web/capture.js";
+import { fetchArenaFeed } from "./web/arena.js";
 import { generationFingerprint, verifiedGenerationPrice } from "./economy.js";
 
 const Uuid = z.object({ id: UuidSchema });
@@ -108,6 +109,15 @@ const SCHEMAS = {
   "challenges:enter": z.object({ worldId: UuidSchema, objectId: UuidSchema }),
   "challenges:entries": Uuid,
   "challenges:evaluate": z.object({ worldId: UuidSchema, objectId: UuidSchema }),
+  "arena:feeds": z.undefined(),
+  "arena:addFeed": z.object({ url: z.string().url().max(4000), label: z.string().max(120).default("") }),
+  "arena:removeFeed": z.object({ url: z.string().url().max(4000) }),
+  "arena:refresh": z.undefined(),
+  "challenges:export": Uuid,
+  "challenges:adoptFile": z.object({ path: z.string().min(1) }),
+  "tickets:issue": z.object({ worldId: UuidSchema, participant: PublisherRefSchema, expiresAt: z.number().int().positive() }),
+  "tickets:adoptFile": z.object({ path: z.string().min(1) }),
+  "tickets:held": Uuid,
   "judging:status": Uuid,
   "judging:judges": Uuid,
   "judging:isJudge": Uuid,
@@ -485,6 +495,50 @@ export function registerIpc(services: Services): void {
     "challenges:entries": ({ id }) =>
       services.graph.challenges.entries(id, { self: services.graph.publishers.self().publicKey }),
     "challenges:evaluate": ({ worldId, objectId }) => services.graph.challenges.evaluate(worldId, objectId),
+    "arena:feeds": () => services.arena.feeds(),
+    "arena:addFeed": ({ url, label }) => services.arena.addFeed(url, label),
+    "arena:removeFeed": ({ url }) => services.arena.removeFeed(url),
+    "arena:refresh": async () => {
+      // Every feed, through the same protected path a captured page takes; every document
+      // verified against its publisher and quarantined by that publisher's trust here.
+      const report: { feeds: number; adopted: string[]; alreadyHere: number; refused: Array<{ feed: string; title: string; why: string }>; failed: Array<{ feed: string; why: string }> } =
+        { feeds: 0, adopted: [], alreadyHere: 0, refused: [], failed: [] };
+      for (const f of services.arena.feeds()) {
+        report.feeds += 1;
+        let feed;
+        try { feed = (await fetchArenaFeed(f.url, services.webRisk)).feed; }
+        catch (cause) { report.failed.push({ feed: f.url, why: cause instanceof Error ? cause.message : String(cause) }); continue; }
+        for (const doc of feed.challenges) {
+          const title = ((doc.body as { rules?: { title?: string } })?.rules?.title) ?? "a challenge";
+          try {
+            const adopted = services.graph.challenges.adoptDocument(doc);
+            if (adopted) report.adopted.push(adopted.rules.title); else report.alreadyHere += 1;
+          } catch (cause) { report.refused.push({ feed: f.url, title, why: cause instanceof Error ? cause.message : String(cause) }); }
+        }
+      }
+      return report;
+    },
+    "challenges:export": ({ id }) => {
+      const doc = services.graph.challenges.exportDocument(id);
+      if (!doc) throw new Error("no such challenge");
+      const safe = doc.body.rules.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "challenge";
+      const path = join(app.getPath("downloads"), `${safe}.xeniur-challenge.json`);
+      writeFileSync(path, JSON.stringify(doc, null, 2), { encoding: "utf8", mode: 0o600 });
+      return { path };
+    },
+    "challenges:adoptFile": ({ path }) => {
+      const doc = SignedDocumentEnvelopeSchema.parse(JSON.parse(readFileSync(path, "utf8")));
+      const adopted = services.graph.challenges.adoptDocument(doc);
+      return adopted ? { worldId: adopted.worldId, title: adopted.rules.title, alreadyHere: false } : { worldId: null, title: null, alreadyHere: true };
+    },
+    "tickets:issue": ({ worldId, participant, expiresAt }) => {
+      const doc = services.graph.tickets.issue(worldId, participant, expiresAt);
+      const path = join(app.getPath("downloads"), `ticket-${participant.publicKey.slice(0, 8)}.xeniur-ticket.json`);
+      writeFileSync(path, JSON.stringify(doc, null, 2), { encoding: "utf8", mode: 0o600 });
+      return { path, ticket: doc.body };
+    },
+    "tickets:adoptFile": ({ path }) => services.graph.tickets.adopt(SignedDocumentEnvelopeSchema.parse(JSON.parse(readFileSync(path, "utf8")))),
+    "tickets:held": ({ id }) => services.graph.tickets.held(id),
     "judging:status": ({ id }) => services.graph.judging.status(id),
     "judging:judges": ({ id }) => services.graph.judging.judges(id),
     "judging:isJudge": ({ id }) => services.graph.judging.isJudge(id, services.graph.publishers.self().publicKey),
@@ -504,7 +558,7 @@ export function registerIpc(services: Services): void {
       // A signed document from elsewhere: parsed as data, verified before anything is written.
       const doc = SignedDocumentEnvelopeSchema.parse(JSON.parse(readFileSync(path, "utf8")));
       if (doc.kind === "xeniur.judging/1") return { kind: doc.kind, adopted: services.graph.judging.adopt(doc).id };
-      if (doc.kind === "xeniur.results/1") return { kind: doc.kind, adopted: services.graph.judging.adoptResults(doc).challengeWorldId };
+      if (doc.kind === "xeniur.results/1") return { kind: doc.kind, adopted: services.graph.judging.adoptResults(doc).challengeDigest };
       throw new Error(`${doc.kind} is not adopted here`);
     },
     "judging:publishResults": ({ worldId, placings, note }) => services.graph.judging.publishResults(worldId, placings, note),

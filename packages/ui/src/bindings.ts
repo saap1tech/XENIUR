@@ -180,6 +180,8 @@ export interface SceneBindings {
   onSealSession?(challengeWorldId: string, entryObjectId: string): void;
   /** The running Sealed Session, if any, so the board can say so instead of offering another. */
   sealRunning?: ModeRecord | null;
+  /** The entry ticket held here for the challenge on screen, when its rules need one. */
+  ticketHeld?: { valid: boolean; usedAt: number | null; expiresAt: number } | null;
   /** What a judge sees for one entry, by entry id. */
   judgingSheets?: Readonly<Record<string, JudgingSheetData>>;
   /** The judge marks each criterion and writes a note; the host signs and stores it. */

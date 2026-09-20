@@ -26,6 +26,8 @@ export function Organizer({ challenge, entries, titles, onChanged }: {
   const [results, setResults] = useState<SignedDocument<Results> | null>(null);
   const [judgeKey, setJudgeKey] = useState("");
   const [judgeName, setJudgeName] = useState("");
+  const [ticketKey, setTicketKey] = useState("");
+  const [ticketName, setTicketName] = useState("");
   const [placings, setPlacings] = useState<Array<{ place: string; entryId: string; reason: string }>>([{ place: "", entryId: "", reason: "" }]);
   const [note, setNote] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
@@ -55,6 +57,26 @@ export function Organizer({ challenge, entries, titles, onChanged }: {
         </span>
       </header>
       {notice && <p className="xr-organizer__notice" role="status">{notice}</p>}
+
+      <h3>Distribution <small>the challenge as a signed file, and tickets</small></h3>
+      <p className="xr-organizer__quiet">
+        <button type="button" className="xr-button" onClick={() => void act(async () => { const r = await bridge?.arena?.exportChallenge(worldId); if (r) setNotice(`Challenge document written to ${r.path}. Send it, or list it in a feed.`); })}>Export challenge document</button>
+      </p>
+      {challenge.rules.entry === "ticket" && (
+        <form className="xr-organizer__invite" onSubmit={(e) => {
+          e.preventDefault();
+          if (!ticketKey.trim() || !ticketName.trim()) return;
+          void act(async () => {
+            const r = await bridge?.arena?.issueTicket(worldId, { publicKey: ticketKey.trim(), displayName: ticketName.trim() }, challenge.rules.endsAt);
+            if (r) setNotice(`Ticket for ${ticketName.trim()} written to ${r.path}. Send it on your own channel; XENIUR records no fee.`);
+            setTicketKey(""); setTicketName("");
+          });
+        }}>
+          <input value={ticketName} onChange={(e) => setTicketName(e.target.value)} placeholder="Participant's name" aria-label="Participant's name" />
+          <input value={ticketKey} onChange={(e) => setTicketKey(e.target.value)} placeholder="Their public key" aria-label="Participant's public key" className="xr-mono" />
+          <button type="submit" className="xr-button">Issue a ticket</button>
+        </form>
+      )}
 
       <h3>Judges <small>{judges.length} invited · trusted on this machine</small></h3>
       <ul className="xr-organizer__judges">

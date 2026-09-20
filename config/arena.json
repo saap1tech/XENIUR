@@ -1,0 +1,4 @@
+{
+  "_about": "Arena feeds: URLs of signed challenge lists (kind xeniur.arena-feed/1). Add a feed here or from the app. Each challenge is verified against its publisher's signature before it is shown, and quarantined by that publisher's trust on this machine — unknown publishers three a day. Nothing is fetched until you ask.",
+  "feeds": []
+}

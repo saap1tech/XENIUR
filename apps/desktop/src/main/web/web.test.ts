@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { captureWeb, extractReading } from "./capture.js";
+import { fetchArenaFeed } from "./arena.js";
 import { checkedDestination, localUrlPolicy } from "./policy.js";
 import { WebRiskChecker } from "./risk.js";
 
@@ -33,5 +34,28 @@ describe("the protected web boundary", () => {
     await expect(checker.allow("https://example.com")).resolves.toMatchObject({ label: "No listed threat detected" });
     const offline = new WebRiskChecker(() => ({ mode: "google_lookup", key: "test" }), vi.fn(async () => { throw new Error("offline"); }) as typeof fetch);
     await expect(offline.allow("https://example.com")).rejects.toThrow(/unavailable/i);
+  });
+});
+
+/* M6 B3 — an Arena feed is fetched like a page and parsed as data. */
+describe("Arena feeds", () => {
+  const risk = { allow: vi.fn(async () => ({ status: "not_checked", provider: "none", checkedAt: null, label: "Local policy" } as const)) };
+  const sig = { publicKey: "P".repeat(43), displayName: "Org", signedAt: 1, rootHash: "a".repeat(64), signature: "s".repeat(86) };
+
+  it("returns the documents of a valid feed, through the address policy and the risk check", async () => {
+    const body = JSON.stringify({ kind: "xeniur.arena-feed/1", label: "Algeria", challenges: [{ kind: "xeniur.challenge/1", body: { rules: {}, publisher: sig }, signature: sig }] });
+    const get = vi.fn(async () => ({ status: 200, type: "application/json", body }));
+    const r = await fetchArenaFeed("https://arena.example.org/feed.json", risk, async () => [{ address: "93.184.216.34", family: 4 }], get);
+    expect(r.feed.challenges).toHaveLength(1);
+    expect(risk.allow).toHaveBeenCalledWith("https://arena.example.org/feed.json");
+  });
+
+  it("refuses HTTP, private addresses, non-JSON and a feed of the wrong kind", async () => {
+    await expect(fetchArenaFeed("http://arena.example.org/feed.json", risk)).rejects.toThrow(/HTTPS/);
+    await expect(fetchArenaFeed("https://10.0.0.1/feed.json", risk)).rejects.toThrow(/blocked/);
+    const html = vi.fn(async () => ({ status: 200, type: "text/html", body: "<html/>" }));
+    await expect(fetchArenaFeed("https://arena.example.org/f", risk, async () => [{ address: "93.184.216.34", family: 4 }], html)).rejects.toThrow(/JSON file/);
+    const wrong = vi.fn(async () => ({ status: 200, type: "application/json", body: JSON.stringify({ kind: "xeniur.something/1", challenges: [] }) }));
+    await expect(fetchArenaFeed("https://arena.example.org/f", risk, async () => [{ address: "93.184.216.34", family: 4 }], wrong)).rejects.toThrow();
   });
 });

@@ -112,7 +112,7 @@ describe("a judge sees one sheet and records one signed assessment", () => {
     g.judging.open(c.worldId);
     const judge = PublisherIdentity.load(new MemorySigningKeyStore(), "Designer");
     const body = {
-      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", challengeWorldId: c.worldId, entryId: e1.id, entryObjectId: e1.objectId,
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", challengeDigest: c.signature.rootHash, entryId: e1.id, entryObjectId: e1.objectId,
       judge: judge.ref(), criteria: [{ criterion: "works on the stated problem", mark: 3, note: "" }], note: "",
       inspected: { proofRoot: null, verdict: "complies" as const, density: null, modelEvents: 0 }, recordedAt: Date.now(),
     };
@@ -152,7 +152,7 @@ describe("results are the publisher's placings, as written", () => {
     g.judging.open(c.worldId);
     expect(() => g.judging.publishResults(c.worldId, [{ place: "First", entryId: e1.id, objectId: "00000000-0000-4000-8000-000000000000", reason: "x" }])).toThrow(/does not have/);
     const other = PublisherIdentity.load(new MemorySigningKeyStore(), "Not the organizer");
-    const body = { challengeWorldId: c.worldId, placings: [], finalists: [], note: "", assessmentsRead: 0, publishedAt: Date.now() };
+    const body = { challengeDigest: c.signature.rootHash, placings: [], finalists: [], note: "", assessmentsRead: 0, publishedAt: Date.now() };
     expect(() => g.judging.adoptResults({ kind: "xeniur.results/1", body, signature: other.sign(documentDigest(body)) })).toThrow(/do not verify/);
   });
 

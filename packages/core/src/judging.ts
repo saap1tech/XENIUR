@@ -39,9 +39,12 @@ export const InspectedSchema = z.object({
   modelEvents: z.number().int().nonnegative(),
 }).strict();
 
+/** The challenge's identity across machines: the digest of its signed rules, never a local World id. */
+const ChallengeDigestSchema = z.string().regex(/^[0-9a-f]{64}$/);
+
 export const AssessmentSchema = z.object({
   id: UuidSchema,
-  challengeWorldId: UuidSchema,
+  challengeDigest: ChallengeDigestSchema,
   entryId: UuidSchema,
   entryObjectId: UuidSchema,
   judge: PublisherRefSchema,
@@ -74,7 +77,7 @@ export const FinalistSchema = z.object({
 export type Finalist = z.infer<typeof FinalistSchema>;
 
 export const ResultsSchema = z.object({
-  challengeWorldId: UuidSchema,
+  challengeDigest: ChallengeDigestSchema,
   /** As written. XENIUR never sorts, sums or ranks these. */
   placings: z.array(PlacingSchema).max(50),
   /** Every placed entry's process proof link and verdict, so the results are inspectable. */
@@ -141,3 +144,31 @@ export interface JudgingSheetData {
   /** This judge's own assessment of this entry, if recorded. */
   own: Assessment | null;
 }
+
+/* ------------------------------------------------------------------------------------------ */
+/* Distribution — the challenge as a signed document, and entry tickets                        */
+/* ------------------------------------------------------------------------------------------ */
+
+/**
+ * An entry ticket: the organizer signs that one participant may enter one challenge until a
+ * date. Issued on the organizer's own channel after whatever they require — a fee, a waiver,
+ * an invitation — and single-use here. No amount, no payment status, no card: XENIUR sees
+ * that a ticket verifies, and nothing about how it was earned.
+ */
+export const TicketSchema = z.object({
+  id: UuidSchema,
+  challengeDigest: ChallengeDigestSchema,
+  participantPublicKey: z.string().min(1),
+  issuedAt: TimestampSchema,
+  expiresAt: TimestampSchema,
+}).strict().refine((t) => t.expiresAt > t.issuedAt, { message: "a ticket expires after it is issued" });
+export type Ticket = z.infer<typeof TicketSchema>;
+
+/** An Arena feed: signed challenge documents, fetched from a URL the person added. */
+export const ARENA_FEED_KIND = "xeniur.arena-feed/1" as const;
+export const ArenaFeedSchema = z.object({
+  kind: z.literal(ARENA_FEED_KIND),
+  label: z.string().max(120).default(""),
+  challenges: z.array(SignedDocumentEnvelopeSchema).max(100),
+}).strict();
+export type ArenaFeed = z.infer<typeof ArenaFeedSchema>;

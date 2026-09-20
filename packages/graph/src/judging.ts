@@ -128,13 +128,13 @@ export class JudgingStore {
     const named = new Set(sheet.criteria);
     for (const m of criteria) if (!named.has(m.criterion)) throw new Error(`"${m.criterion}" is not one of this challenge's criteria`);
     const body = AssessmentSchema.parse({
-      id: newId(), challengeWorldId: worldId, entryId, entryObjectId: sheet.entryObjectId, judge: self.ref(),
+      id: newId(), challengeDigest: this.#challenge(worldId).signature.rootHash, entryId, entryObjectId: sheet.entryObjectId, judge: self.ref(),
       criteria, note,
       inspected: { proofRoot: sheet.proofRoot, verdict: sheet.observation.verdict, density: sheet.observation.density, modelEvents: sheet.aiActivity.length },
       recordedAt: now(),
     });
     const signature = self.sign(documentDigest(body));
-    this.#store(body, signature);
+    this.#store(worldId, body, signature);
     return { kind: "xeniur.judging/1", body, signature };
   }
 
@@ -145,20 +145,22 @@ export class JudgingStore {
     if (!verifySignature(doc.signature) || doc.signature.rootHash !== documentDigest(body) || doc.signature.publicKey !== body.judge.publicKey) {
       throw new Error("the assessment does not verify against its judge's signature");
     }
-    if (!this.isJudge(body.challengeWorldId, body.judge.publicKey)) throw new Error("this judge was not invited to this challenge");
-    if (!this.db.prepare(`SELECT 1 FROM challenge_entries WHERE id = ? AND challenge_world_id = ?`).get(body.entryId, body.challengeWorldId)) {
+    const c = this.graph.challenges.known(body.challengeDigest);
+    if (!c) throw new Error("the assessment names a challenge that is not here");
+    if (!this.isJudge(c.worldId, body.judge.publicKey)) throw new Error("this judge was not invited to this challenge");
+    if (!this.db.prepare(`SELECT 1 FROM challenge_entries WHERE id = ? AND challenge_world_id = ?`).get(body.entryId, c.worldId)) {
       throw new Error("the assessment names an entry this challenge does not have");
     }
-    this.#store(body, doc.signature);
+    this.#store(c.worldId, body, doc.signature);
     return body;
   }
 
-  #store(body: Assessment, signature: SignedDocument<Assessment>["signature"]): void {
+  #store(worldId: string, body: Assessment, signature: SignedDocument<Assessment>["signature"]): void {
     this.db.prepare(
       `INSERT INTO assessments (id, challenge_world_id, entry_id, judge_public_key, body, signature, recorded_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(entry_id, judge_public_key) DO UPDATE SET id = excluded.id, body = excluded.body, signature = excluded.signature, recorded_at = excluded.recorded_at`,
-    ).run(body.id, body.challengeWorldId, body.entryId, body.judge.publicKey, JSON.stringify(body), JSON.stringify(signature), body.recordedAt);
+    ).run(body.id, worldId, body.entryId, body.judge.publicKey, JSON.stringify(body), JSON.stringify(signature), body.recordedAt);
   }
 
   #assessment(entryId: string, judgePublicKey: string): Assessment | null {
@@ -213,7 +215,7 @@ export class JudgingStore {
       };
     });
     const body = ResultsSchema.parse({
-      challengeWorldId: worldId, placings, finalists, note,
+      challengeDigest: c.signature.rootHash, placings, finalists, note,
       assessmentsRead: this.assessments(worldId).length, publishedAt: now(),
     });
     const signature = self.sign(documentDigest(body));
@@ -229,14 +231,15 @@ export class JudgingStore {
   adoptResults(doc: SignedDocument<unknown>): Results {
     if (doc.kind !== "xeniur.results/1") throw new Error("not a results document");
     const body = ResultsSchema.parse(doc.body);
-    const c = this.#challenge(body.challengeWorldId);
+    const c = this.graph.challenges.known(body.challengeDigest);
+    if (!c) throw new Error("the results name a challenge that is not here");
     if (!verifySignature(doc.signature) || doc.signature.rootHash !== documentDigest(body) || doc.signature.publicKey !== c.publisher.publicKey) {
       throw new Error("the results do not verify against the challenge's publisher");
     }
     this.db.transaction(() => {
       this.db.prepare(`INSERT OR REPLACE INTO challenge_results (challenge_world_id, body, signature, published_at) VALUES (?, ?, ?, ?)`)
-        .run(body.challengeWorldId, JSON.stringify(body), JSON.stringify(doc.signature), body.publishedAt);
-      this.db.prepare(`UPDATE challenges SET results_published_at = ? WHERE world_id = ?`).run(body.publishedAt, body.challengeWorldId);
+        .run(c.worldId, JSON.stringify(body), JSON.stringify(doc.signature), body.publishedAt);
+      this.db.prepare(`UPDATE challenges SET results_published_at = ? WHERE world_id = ?`).run(body.publishedAt, c.worldId);
     })();
     return body;
   }

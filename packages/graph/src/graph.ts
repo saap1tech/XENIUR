@@ -21,6 +21,7 @@ import { OutreachStore } from "./outreach.js";
 import { ChallengeStore } from "./challenges.js";
 import { SealStore } from "./seal.js";
 import { JudgingStore } from "./judging.js";
+import { TicketStore } from "./tickets.js";
 import { TrailStore } from "./trail.js";
 import { GoalStore } from "./goals.js";
 import { EnvelopeStore } from "./envelopes.js";
@@ -89,6 +90,8 @@ export class ObjectGraph {
   readonly seal: SealStore;
   /** Judging: invited judges, signed assessments, the publisher's placings as written. */
   readonly judging: JudgingStore;
+  /** Entry tickets: signed by the organizer elsewhere, verified and spent once here. */
+  readonly tickets: TicketStore;
   /** Saw · decided · authorised · executed, one row per model call or consequential action. */
   readonly trail: TrailStore;
   /** What the person is trying to accomplish, per World, in their words. */
@@ -113,6 +116,7 @@ export class ObjectGraph {
     this.outreach = new OutreachStore(db, this);
     this.challenges = new ChallengeStore(db, this);
     this.judging = new JudgingStore(db, this);
+    this.tickets = new TicketStore(db, this);
     this.trail = new TrailStore(db);
     this.goals = new GoalStore(db, this);
     this.envelopes = new EnvelopeStore(db);

@@ -70,6 +70,12 @@ export interface Services {
   compute: ComputeLedger;
   workflows: WorkflowLibrary;
   webRisk: WebRiskChecker;
+  /** Arena feeds: URLs the person added (config/arena.json plus this machine's preferences). */
+  arena: {
+    feeds(): Array<{ url: string; label: string }>;
+    addFeed(url: string, label: string): Array<{ url: string; label: string }>;
+    removeFeed(url: string): Array<{ url: string; label: string }>;
+  };
   /** Outreach transport. Disabled with an empty key: the mechanism is complete, nothing is reachable. */
   mail: OutreachTransport;
   router: CapabilityRouter;
@@ -451,8 +457,31 @@ export function createServices(window: BrowserWindow): Services {
   const thinkingMap = (worldId: string) =>
     graph.getWorld(worldId) ? buildThinkingMap(graph, sense, worldId) : null;
 
+  // Feeds come from the shipped config and from what the person adds here; both are just URLs.
+  const arena: Services["arena"] = {
+    feeds() {
+      const shipped = (() => {
+        try { return (JSON.parse(readFileSync(join(paths.projectRoot, "config/arena.json"), "utf8")) as { feeds?: Array<{ url: string; label?: string }> }).feeds ?? []; }
+        catch { return []; }
+      })();
+      const added = JSON.parse(compute.preference("arena.feeds", "[]")) as Array<{ url: string; label?: string }>;
+      const seen = new Set<string>();
+      return [...shipped, ...added].filter((f) => f.url && !seen.has(f.url) && seen.add(f.url)).map((f) => ({ url: f.url, label: f.label ?? "" }));
+    },
+    addFeed(url, label) {
+      const added = JSON.parse(compute.preference("arena.feeds", "[]")) as Array<{ url: string; label: string }>;
+      if (!added.some((f) => f.url === url)) compute.setPreference("arena.feeds", JSON.stringify([...added, { url, label }]));
+      return arena.feeds();
+    },
+    removeFeed(url) {
+      const added = JSON.parse(compute.preference("arena.feeds", "[]")) as Array<{ url: string; label: string }>;
+      compute.setPreference("arena.feeds", JSON.stringify(added.filter((f) => f.url !== url)));
+      return arena.feeds();
+    },
+  };
+
   return {
-    graph, models, queue, broker, sessions, metrics, compute, workflows, webRisk, mail: new DisabledTransport(), router, brain, gatedBrain, spend, config, env, browser, preview,
+    graph, models, queue, broker, sessions, metrics, compute, workflows, webRisk, arena, mail: new DisabledTransport(), router, brain, gatedBrain, spend, config, env, browser, preview,
     rebuild, validation, readiness, rhythm, sense,
     detailOf, historyOf, thinkingMap,
     impactOf: impactOfObject, passageOf,

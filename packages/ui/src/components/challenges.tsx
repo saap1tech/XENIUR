@@ -50,6 +50,17 @@ export function ChallengeBoard({ node, bindings }: { node: Node<"ChallengeBoard"
         <Block label="AI policy">
           <p>{AI_POLICY_WORDS[c.rules.aiPolicy].means}</p>
         </Block>
+        {c.rules.entry === "ticket" && (
+          <Block label="Entry">
+            <p>By ticket from the organizer{c.rules.entryNote ? ` — ${c.rules.entryNote}` : ""}. XENIUR verifies the ticket; it sees nothing of how it was obtained.</p>
+            <p className="xr-challenge__ticket">
+              {bindings.ticketHeld === undefined || bindings.ticketHeld === null ? "No ticket is held here yet. Drop the organizer's ticket file on this World."
+                : bindings.ticketHeld.usedAt !== null ? "Your ticket was used to enter."
+                : bindings.ticketHeld.valid ? `Your ticket verifies, good until ${date(bindings.ticketHeld.expiresAt)}.`
+                : "Your ticket has expired."}
+            </p>
+          </Block>
+        )}
       </div>
 
       <div className="xr-challenge__entries">
@@ -65,7 +76,7 @@ export function ChallengeBoard({ node, bindings }: { node: Node<"ChallengeBoard"
         {mine.length === 0 ? (
           <p className="xr-challenge__none">
             Nothing entered yet.{open && bindings.onEnterChallenge && bindings.focusObjectId
-              ? <> <Button onClick={() => bindings.onEnterChallenge?.(node.worldId, bindings.focusObjectId!)}>Enter what is in the centre</Button></>
+              ? <> <Button disabled={c.rules.entry === "ticket" && !bindings.ticketHeld?.valid} onClick={() => bindings.onEnterChallenge?.(node.worldId, bindings.focusObjectId!)}>Enter what is in the centre</Button></>
               : null}
           </p>
         ) : mine.map((e) => <Entry key={e.id} entry={e} bindings={bindings} />)}

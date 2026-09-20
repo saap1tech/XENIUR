@@ -559,7 +559,7 @@ describe("ChallengeBoard", () => {
     rules: { title: "Desk accessory", brief: "A printable desk object under 60 mm.", rules: ["one entry per person"],
       startsAt: Date.now() - 86_400_000, endsAt: Date.now() + 4 * 86_400_000,
       deliverable: { formRoles: ["print.stl"], description: "an STL that prints without supports" },
-      judging: { criteria: ["prints cleanly"], by: "publisher", scale: "one_to_five" }, aiPolicy: "no_generative_geometry" },
+      judging: { criteria: ["prints cleanly"], by: "publisher", scale: "one_to_five" }, aiPolicy: "no_generative_geometry", entry: "open", entryNote: "" },
     signature: { publicKey: "P".repeat(43), displayName: "Blender Club", signedAt: 1, rootHash: "a".repeat(64), signature: "s".repeat(86) },
     deadlineConstraintId: OBJ, policyConstraintId: OBJ, createdAt: 1, dismissedAt: null,
   };
@@ -915,7 +915,7 @@ describe("JudgingSheet", () => {
   });
 
   it("shows the judge's own recorded assessment as recorded and signed, and offers to record again", () => {
-    const out = html({ own: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", challengeWorldId: CW, entryId: E1, entryObjectId: OBJ,
+    const out = html({ own: { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", challengeDigest: "a".repeat(64), entryId: E1, entryObjectId: OBJ,
       judge: { publicKey: "J".repeat(43), displayName: "You" }, criteria: [{ criterion: "works on the stated problem", mark: 4, note: "" }], note: "",
       inspected: { proofRoot: null, verdict: "complies", density: null, modelEvents: 0 }, recordedAt: 1_700_000_000_000 } });
     expect(out).toContain("signed by you");

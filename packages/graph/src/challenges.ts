@@ -1,6 +1,6 @@
 import type {
   AiPolicy, ChallengeRecord, ChallengeRules, ChallengeRulesInput, Compliance, EntryRecord, EntryRecordForCheck,
-  PackageSignature, PublisherRef,
+  PackageSignature, PublisherRef, SignedDocument,
 } from "@xeniur/core";
 import {
   AI_POLICIES, AI_POLICY_WORDS, ChallengeRulesSchema, canonicalJson, checkAiPolicy, newId, now, sha256Hex,
@@ -92,11 +92,51 @@ export class ChallengeStore {
     this.db.prepare(`UPDATE challenges SET dismissed_at = ? WHERE world_id = ? AND dismissed_at IS NULL`).run(now(), worldId);
   }
 
-  /** Enter an Object. The verdict is computed now and again whenever `evaluate` is called. */
+  /**
+   * The challenge as a signed document, to send or to publish in a feed. The signature is the
+   * publisher's over the rules digest — the same one the World was created with.
+   */
+  exportDocument(worldId: string): SignedDocument<{ rules: ChallengeRules; publisher: PublisherRef }> | null {
+    const c = this.get(worldId);
+    return c ? { kind: "xeniur.challenge/1", body: { rules: c.rules, publisher: c.publisher }, signature: c.signature } : null;
+  }
+
+  /** Whether a challenge with these signed rules is already here. */
+  known(rulesDigestHex: string): ChallengeRecord | null {
+    const r = this.db.prepare(
+      `SELECT c.*, p.display_name FROM challenges c JOIN publishers p ON p.id = c.publisher_id WHERE c.rules_digest = ?`,
+    ).get(rulesDigestHex) as Row | undefined;
+    return r ? fromRow(r) : null;
+  }
+
+  /**
+   * A challenge document from elsewhere — a file, or one row of an Arena feed. Verified
+   * against its publisher, quarantined by that publisher's trust here (unknown: three a day,
+   * blocked: none), and never adopted twice. Returns null when it was already here.
+   */
+  adoptDocument(doc: SignedDocument<unknown>): ChallengeRecord | null {
+    if (doc.kind !== "xeniur.challenge/1") throw new Error("not a challenge document");
+    const body = doc.body as { rules?: unknown; publisher?: PublisherRef };
+    if (!body || typeof body !== "object" || !body.rules || !body.publisher) throw new Error("a challenge document carries rules and a publisher");
+    const rules = ChallengeRulesSchema.parse(body.rules);
+    if (this.known(rulesDigest(rules))) return null;
+    this.graph.publishers.assertNotBlocked(body.publisher);
+    this.graph.publishers.assertUnderRate(body.publisher);
+    const record = this.adopt(rules, body.publisher, doc.signature);
+    this.graph.publishers.recordImport(body.publisher);
+    return record;
+  }
+
+  /**
+   * Enter an Object. The verdict is computed now and again whenever `evaluate` is called.
+   * A challenge whose rules say `entry: ticket` spends the participant's ticket here: one
+   * ticket, one entry, and nothing about how the ticket was earned.
+   */
   enter(challengeWorldId: string, objectId: string, publisher: PublisherRef): EntryRecord {
     const challenge = this.get(challengeWorldId);
     if (!challenge) throw new Error(`no such challenge: ${challengeWorldId}`);
     if (now() >= challenge.rules.endsAt) throw new Error("this challenge has closed");
+    if (challenge.rules.entry === "ticket" && !this.entry(challengeWorldId, objectId)) this.graph.tickets.use(challengeWorldId, publisher.publicKey);
     this.graph.publishers.seen(publisher);
     const compliance = this.check(objectId, challenge.rules.aiPolicy);
     const id = newId();

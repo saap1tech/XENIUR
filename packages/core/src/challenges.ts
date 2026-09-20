@@ -46,6 +46,14 @@ export const ChallengeRulesSchema = z.object({
     scale: z.enum(["one_to_five", "check"]).default("one_to_five"),
   }).strict(),
   aiPolicy: AiPolicySchema,
+  /**
+   * How one enters. `ticket`: a signed entry ticket from the organizer, collected on their
+   * own channel — a fee, a waiver, an invitation. XENIUR verifies the ticket and marks it
+   * used; it never sees a price, a card or a payment status.
+   */
+  entry: z.enum(["open", "ticket"]).default("open"),
+  /** The organizer's words about entering — where to get a ticket, who is waived. Text, never a field XENIUR reads. */
+  entryNote: z.string().max(500).default(""),
 }).strict().refine((r) => r.endsAt > r.startsAt, { message: "a challenge ends after it starts" });
 export type ChallengeRules = z.infer<typeof ChallengeRulesSchema>;
 export type ChallengeRulesInput = z.input<typeof ChallengeRulesSchema>;

@@ -3,7 +3,7 @@ import type { DecisionDetail, InfluenceReport } from "./decisions.js";
 import type { ImpactReport, OutcomeLedger, TrustFacts } from "./impact.js";
 import type { EnvelopeSheet, ExitReason, ModeEnvelopeInput, ModeKind, ModeRecord, Reward, Streak } from "./modes.js";
 import type { SealFacts } from "./seal.js";
-import type { Assessment, CriterionMark, JudgingSheetData, Placing, Results, SignedDocument } from "./judging.js";
+import type { Assessment, CriterionMark, JudgingSheetData, Placing, Results, SignedDocument, Ticket } from "./judging.js";
 import type { PublisherRef, PublisherReport, PublisherView, ReportReason, TrustLevel } from "./publisher.js";
 import type { CampaignRecord, OutboundMessage, OutreachEnvelopeInput } from "./outreach.js";
 import type { ChallengeRecord, ChallengeRulesInput, EntryRecord } from "./challenges.js";
@@ -267,6 +267,20 @@ export interface XeniurBridge {
     exit(modeId: string, reason: ExitReason): Promise<ModeRecord | null>;
     active(): Promise<ModeRecord[]>;
     restrictions(): Promise<string[]>;
+  };
+  /* The Arena — signed challenge documents, feeds, entry tickets */
+  arena?: {
+    feeds(): Promise<Array<{ url: string; label: string }>>;
+    addFeed(url: string, label: string): Promise<Array<{ url: string; label: string }>>;
+    removeFeed(url: string): Promise<Array<{ url: string; label: string }>>;
+    /** Fetch every feed through the protected path; verify and quarantine each document. Nothing runs until asked. */
+    refresh(): Promise<{ feeds: number; adopted: string[]; alreadyHere: number; refused: Array<{ feed: string; title: string; why: string }>; failed: Array<{ feed: string; why: string }> }>;
+    exportChallenge(worldId: string): Promise<{ path: string }>;
+    adoptChallengeFile(path: string): Promise<{ worldId: string | null; title: string | null; alreadyHere: boolean }>;
+    /** The organizer signs a ticket for one participant; written to a file to send on their own channel. */
+    issueTicket(worldId: string, participant: PublisherRef, expiresAt: number): Promise<{ path: string; ticket: Ticket }>;
+    adoptTicketFile(path: string): Promise<Ticket>;
+    ticketHeld(worldId: string): Promise<{ ticket: Ticket; usedAt: number | null; valid: boolean } | null>;
   };
   /* Judging — invited judges, signed assessments, the publisher's placings as written */
   judging?: {

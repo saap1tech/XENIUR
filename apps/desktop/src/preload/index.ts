@@ -134,6 +134,17 @@ contextBridge.exposeInMainWorld("xeniur", {
     active: () => call("modes:active"),
     restrictions: () => call("modes:restrictions"),
   },
+  arena: {
+    feeds: () => call("arena:feeds"),
+    addFeed: (url: string, label: string) => call("arena:addFeed", { url, label }),
+    removeFeed: (url: string) => call("arena:removeFeed", { url }),
+    refresh: () => call("arena:refresh"),
+    exportChallenge: (worldId: string) => call("challenges:export", { id: worldId }),
+    adoptChallengeFile: (path: string) => call("challenges:adoptFile", { path }),
+    issueTicket: (worldId: string, participant: { publicKey: string; displayName: string }, expiresAt: number) => call("tickets:issue", { worldId, participant, expiresAt }),
+    adoptTicketFile: (path: string) => call("tickets:adoptFile", { path }),
+    ticketHeld: (worldId: string) => call("tickets:held", { id: worldId }),
+  },
   judging: {
     status: (worldId: string) => call("judging:status", { id: worldId }),
     judges: (worldId: string) => call("judging:judges", { id: worldId }),

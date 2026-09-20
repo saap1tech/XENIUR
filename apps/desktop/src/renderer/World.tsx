@@ -80,6 +80,7 @@ export function World({
   const [judging, setJudging] = useState<{ isJudge: boolean; openedAt: number | null }>({ isJudge: false, openedAt: null });
   const [judgeEntry, setJudgeEntry] = useState<string | null>(null);      // entry id; null = the board
   const [judgingSheet, setJudgingSheet] = useState<JudgingSheetData | null>(null);
+  const [ticket, setTicket] = useState<{ valid: boolean; usedAt: number | null; expiresAt: number } | null>(null);
   // Until the person clicks a zone, the goal's next question chooses the representation.
   const [zoneChosen, setZoneChosen] = useState<boolean>(initialZone !== "work");
   const [selectedId, setSelectedId] = useState<string | null>(
@@ -216,6 +217,8 @@ export function World({
     setSealMode((await bridge?.seal?.active()) ?? null);
     const status = await bridge?.judging?.status(worldId);
     setJudging({ isJudge: (await bridge?.judging?.isJudge(worldId)) ?? false, openedAt: status?.judgingOpenedAt ?? null });
+    const held = await bridge?.arena?.ticketHeld(worldId);
+    setTicket(held ? { valid: held.valid, usedAt: held.usedAt, expiresAt: held.ticket.expiresAt } : null);
   }, [bridge, worldId, snapshot.world.kind]);
   useEffect(() => { void refreshChallenge(); }, [refreshChallenge]);
 
@@ -344,6 +347,7 @@ export function World({
       const next = entries[at + 1];
       if (next) setJudgeEntry(next.id);
     },
+    ticketHeld: ticket,
     sealRunning: sealMode,
     onSealSession: async (_challengeWorldId, entryObjectId) => {
       // The envelope: until the challenge closes (capped at a day), remote models off, a
@@ -377,12 +381,24 @@ export function World({
     onImport: async (paths, objectId) => {
       // A .xeniur is inspected and shown, never opened on drop. Anything else is a file.
       const packages = paths.filter((p) => p.endsWith(".xeniur"));
-      const signed = paths.filter((p) => p.endsWith(".xeniur-judging.json") || p.endsWith(".xeniur-results.json"));
+      const signed = paths.filter((p) => /\.xeniur-(judging|results|challenge|ticket)\.json$/.test(p));
       const files = paths.filter((p) => !p.endsWith(".xeniur") && !signed.includes(p));
       for (const doc of signed) {
-        // A judge's assessment or a publisher's results: verified before anything is written.
-        try { const r = await bridge?.judging?.adoptFile(doc); if (r) setNotice(`${r.kind === "xeniur.judging/1" ? "An assessment" : "Results"} arrived and verified.`); }
-        catch (cause) { setNotice(cause instanceof Error ? cause.message : String(cause)); }
+        // A signed document — a judge's assessment, a publisher's results, a challenge, a ticket:
+        // verified against its signer before anything is written; refused in words otherwise.
+        try {
+          if (doc.endsWith(".xeniur-challenge.json")) {
+            const r = await bridge?.arena?.adoptChallengeFile(doc);
+            setNotice(r?.alreadyHere ? "That challenge is already here." : `“${r?.title}” arrived and verified. It is a World now.`);
+            if (r?.worldId) onImported?.({ objectId: "", worldId: r.worldId });
+          } else if (doc.endsWith(".xeniur-ticket.json")) {
+            const t = await bridge?.arena?.adoptTicketFile(doc);
+            if (t) setNotice(`Your entry ticket verified. It is good until ${new Date(t.expiresAt).toISOString().slice(0, 10)}.`);
+          } else {
+            const r = await bridge?.judging?.adoptFile(doc);
+            if (r) setNotice(`${r.kind === "xeniur.judging/1" ? "An assessment" : "Results"} arrived and verified.`);
+          }
+        } catch (cause) { setNotice(cause instanceof Error ? cause.message : String(cause)); }
         await refreshChallenge();
       }
       if (files.length > 0) {
@@ -439,7 +455,7 @@ export function World({
   }), [snapshot, byId, tasks, map, friction, decisions, impact, worldId, bridge,
        onApprove, onReject, onImported, refreshThinking, refreshChallenge, refreshStanding, refreshGoal, constraints, proof, trust, supportMap, trailRows,
        standing, candidates, refreshCandidates, connections, brainAvailable, challenge, entries, selfKey, selectedId,
-       gestureProposals, gesturePair, zone, sealSheet, sealMode, judgingSheet, entries]);
+       gestureProposals, gesturePair, zone, sealSheet, sealMode, judgingSheet, entries, ticket]);
   bindingsRef.current = bindings;
 
   /** One thing at a time in the centre, chosen by the zone and what is selected. */
