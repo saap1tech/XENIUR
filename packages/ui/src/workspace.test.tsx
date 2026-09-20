@@ -792,8 +792,10 @@ describe("ContextIndicator", () => {
 
 /* M6 A5 — thinking moves make something persistent; none makes "a longer answer". */
 describe("ThinkingMoves", () => {
+  const claim: ObjectState = { ...state(ATOM, "Consumers prefer orange.", ["atom.text"]),
+    properties: { ...state(ATOM, "Consumers prefer orange.", ["atom.text"]).properties, semanticType: "claim", traits: [] } };
   const moves = (over: Partial<SceneBindings> = {}) => render({ id: "m", component: "ThinkingMoves", objectId: ATOM },
-    bindings({ brainAvailable: false, onThinkingMove: () => {}, onProposeConnection: () => {}, ...over }));
+    bindings({ states: { ...bindings().states, [ATOM]: claim }, brainAvailable: false, onThinkingMove: () => {}, onProposeConnection: () => {}, ...over }));
 
   it("shows the four moves beside a claim and disables the two that need a model, with the reason", () => {
     const html = moves();

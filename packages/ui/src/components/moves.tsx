@@ -57,7 +57,7 @@ export function ThinkingMoves({ node, bindings }: { node: Node<"ThinkingMoves">;
 
 function Move({ label, means, disabled = false, why, onClick }: { label: string; means: string; disabled?: boolean; why?: string; onClick(): void }) {
   return (
-    <button type="button" className="xr-move" disabled={disabled} title={disabled ? why : means} onClick={onClick}
+    <button type="button" className="xr-tmove" disabled={disabled} title={disabled ? why : means} onClick={onClick}
       aria-describedby={undefined}>
       <strong>{label}</strong>
       <span>{disabled ? why : means}</span>
