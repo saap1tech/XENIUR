@@ -231,3 +231,23 @@ export function currentForms(
     .map((f) => ({ role: f.role, representation: bindings.representations[f.representationId] }))
     .filter((f): f is { role: string; representation: Representation } => f.representation !== undefined);
 }
+
+/**
+ * Present: the same Scene, read-only. Every binding that could change the graph is dropped;
+ * what remains is looking and pointing. A test holds this to "no on* but onSelect".
+ */
+export function presentBindings(b: SceneBindings): SceneBindings {
+  const kept: SceneBindings = { ...emptyBindings(),
+    states: b.states, representations: b.representations, tasks: b.tasks, blobUrl: b.blobUrl,
+    thinkingMap: b.thinkingMap, decisions: b.decisions, impact: b.impact, constraints: b.constraints,
+    processProof: b.processProof, support: b.support, trust: b.trust, passages: b.passages,
+    supportMaps: b.supportMaps, agentTrail: b.agentTrail, standings: b.standings, challenges: b.challenges,
+    challengeEntries: b.challengeEntries, selfPublicKey: b.selfPublicKey, focusObjectId: b.focusObjectId,
+    importedFrom: b.importedFrom, sourceVersions: b.sourceVersions,
+    onSelect: b.onSelect,
+  };
+  for (const key of Object.keys(kept) as Array<keyof SceneBindings>) {
+    if (key !== "onSelect" && key.startsWith("on") && typeof kept[key] === "function") delete kept[key];
+  }
+  return kept;
+}

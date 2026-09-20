@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describeStanding, resumeText } from "@xeniur/core";
-import { ObjectGraph, lastActiveWorld, resumeCard, standingFor, todayFor } from "./index.js";
+import { NotFinishable, ObjectGraph, ReadinessEvaluator, deliveryReport, finishGoal, lastActiveWorld, loadProfiles, resumeCard, standingFor, todayFor } from "./index.js";
 
 const DAY = 86_400_000;
 let dir: string, g: ObjectGraph, worldId: string;
@@ -79,5 +79,32 @@ describe("where you stand is read from rows", () => {
     for (const forbidden of ["brain", "Brain", "llm", "Llm", "ask(", "complete(", "session_events", "MetricsStore", "fetch("]) {
       expect(src, `standing.ts must not mention ${forbidden}`).not.toContain(forbidden);
     }
+  });
+});
+
+/* M6 A6 — finishing with incomplete knowledge is a decision, never a badge. */
+describe("Finish", () => {
+  it("refuses while a required output is unmade, and finish-anyway records a decision the report names", async () => {
+    const { goal, jacket } = threeDaysAgo();
+    expect(() => finishGoal(g, goal.id)).toThrow(NotFinishable);
+    expect(g.goals.get(goal.id)!.status).not.toBe("finished");
+
+    const finished = finishGoal(g, goal.id, { anyway: { because: "cost and time: the client needs a decision this week" } });
+    expect(finished.status).toBe("finished");
+    const decision = g.decisions.list(worldId).find((d) => d.question.startsWith("Finish"))!;
+    expect(decision.chosenOption).toBe("finish_anyway");
+    const detail = g.decisions.detail(decision.objectId)!;
+    expect(detail.assumptions.some((a) => a.kind === "accepted_uncertainty" && a.text.includes("print.stl"))).toBe(true);
+    expect(detail.steelman).not.toBe("skipped");
+    // The standing now counts it as chosen despite uncertainty…
+    expect(standingFor(g, goal.id)!.knowledge.chosenDespite.map((r) => r.id)).toContain(decision.objectId);
+    // …and the delivery report for the focus says so in a sentence.
+    const rep = g.addRepresentation({ objectId: jacket, modality: "text", format: "md", blobHash: g.putBlob(Buffer.from("j"), "text/markdown", "md"), provenance: "human" });
+    g.commitVersion({ objectId: jacket, forms: [{ role: "doc.primary", representationId: rep.id }] });
+    const release = new ReadinessEvaluator(g, loadProfiles(process.cwd())).approve({ objectId: jacket, profileId: "client", force: true });
+    const html = deliveryReport(g, jacket, release.id);
+    expect(html).toContain("Chosen despite uncertainty");
+    expect(html).toMatch(/unresolved assumption(s)? (was|were) explicitly accepted for this delivery/);
+    expect(html).not.toContain("✓");
   });
 });

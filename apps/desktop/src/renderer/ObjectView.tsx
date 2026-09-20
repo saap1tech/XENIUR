@@ -48,6 +48,8 @@ export function ObjectView({ detail, busy, onRefresh, onBack }: ObjectViewProps)
   const [constraints, setConstraints] = useState<ConstraintRecord[]>([]);
   const [proof, setProof] = useState<ProcessProof | null>(null);
   const [sharing, setSharing] = useState(false);
+  // Paper: opt-in, for reading at length. Remembered for this viewer only.
+  const [paper, setPaper] = useState<boolean>(() => { try { return window.localStorage?.getItem("xeniur.paper") === "1"; } catch { return false; } });
 
   const bridge = window.xeniur;
   const objectId = detail.state.object.id;
@@ -124,8 +126,9 @@ export function ObjectView({ detail, busy, onRefresh, onBack }: ObjectViewProps)
     return layoutScene(semantic, { layoutId: semantic.layoutId });
   }, [tab, objectId, selectedRole, detail, impact, constraints]);
 
+  const hasText = detail.representations.some((r) => r.modality === "text");
   return (
-    <main className="xr-object">
+    <main className="xr-object" data-paper={paper && hasText ? "" : undefined}>
       <header className="xr-object__head">
         <button type="button" className="xr-back" onClick={onBack}>← World</button>
         <BrandMark compact />
@@ -140,6 +143,12 @@ export function ObjectView({ detail, busy, onRefresh, onBack }: ObjectViewProps)
           </span>
         )}
         <div className="xr-object__actions">
+          {hasText && (
+            <button type="button" className="xr-button" aria-pressed={paper} title="Off-white for long reading. Same identity, inverted surfaces."
+              onClick={() => { const next = !paper; setPaper(next); try { window.localStorage?.setItem("xeniur.paper", next ? "1" : "0"); } catch { /* per-viewer */ } }}>
+              {paper ? "Graphite" : "Paper"}
+            </button>
+          )}
           <button type="button" className="xr-button" disabled={!proof} onClick={() => setSharing(true)}>
             View / share process
           </button>

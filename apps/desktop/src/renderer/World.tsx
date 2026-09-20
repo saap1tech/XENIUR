@@ -4,7 +4,7 @@ import type {
   CandidateRecord, ChallengeRecord, EntryRecord, GoalStatus, PackageInspectionView, Representation, Scene, Standing, SupportMap, Task,
   ThinkingMap, TrailRow, TrustFacts, WorkGoal, WorldSnapshot,
 } from "@xeniur/core";
-import { SceneRenderer, type SceneBindings } from "@xeniur/ui";
+import { SceneRenderer, presentBindings, type SceneBindings } from "@xeniur/ui";
 import {
   SituationSchema, compileSituation, layoutScene, proposalsFor,
   type GestureProposal,
@@ -97,6 +97,17 @@ export function World({
   const [connections, setConnections] = useState<Record<string, Array<{ objectId: string; title: string; because: string; by: string }>>>({});
   const [brainAvailable, setBrainAvailable] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // Density: Compact / Comfortable / Detailed = disclosure 1 / 2 / 3, the person's, remembered per World.
+  const [density, setDensity] = useState<1 | 2 | 3 | null>(() => {
+    try { const v = window.localStorage?.getItem(`xeniur.density.${snapshot.world.id}`); return v ? (Number(v) as 1 | 2 | 3) : null; } catch { return null; }
+  });
+  const chooseDensity = useCallback((d: 1 | 2 | 3) => {
+    setDensity(d);
+    try { window.localStorage?.setItem(`xeniur.density.${snapshot.world.id}`, String(d)); } catch { /* per-viewer convenience only */ }
+  }, [snapshot.world.id]);
+  // Present: the same Scene, full-window, read-only. P toggles; Esc leaves.
+  const [present, setPresent] = useState(false);
+  const [presentSlot, setPresentSlot] = useState(0);
   const [candidates, setCandidates] = useState<CandidateRecord[]>([]);
   const [showStanding, setShowStanding] = useState(false);
   const [goalDraft, setGoalDraft] = useState("");
@@ -136,17 +147,21 @@ export function World({
   }, [bridge, goal]);
   // The standing feeds the compiler's knowledge counts, so it is read whenever the goal is.
   useEffect(() => { void refreshStanding(); }, [refreshStanding, showStanding, decisions, map]);
-  // W: where do I stand. Esc closes it.
+  // Keys: W where do I stand · P present · ⌘1/2/3 density · Esc leaves any mode.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if ((e.metaKey || e.ctrlKey) && ["1", "2", "3"].includes(e.key)) { e.preventDefault(); chooseDensity(Number(e.key) as 1 | 2 | 3); return; }
       if (e.key === "w" || e.key === "W") { if (goal) setShowStanding((v) => !v); }
-      if (e.key === "Escape") setShowStanding(false);
+      if (e.key === "p" || e.key === "P") { setPresent((v) => !v); setPresentSlot(0); }
+      if (present && e.key === "ArrowRight") setPresentSlot((i) => i + 1);
+      if (present && e.key === "ArrowLeft") setPresentSlot((i) => Math.max(0, i - 1));
+      if (e.key === "Escape") { setShowStanding(false); setPresent(false); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [goal]);
+  }, [goal, present, chooseDensity]);
 
   // The centre follows the goal's focus on open; afterwards the goal follows the centre.
   useEffect(() => {
@@ -393,7 +408,7 @@ export function World({
         disputed: standing.knowledge.disputed.length, unknown: standing.knowledge.unknown.length,
         chosenDespite: standing.knowledge.chosenDespite.length,
       } } : {}),
-      layer: intent.layer, taskStates,
+      layer: density ?? intent.layer, taskStates,
       goal: goal
         ? { id: goal.id, outcome: goal.outcome, status: goal.status, requiredOutputs: goal.requiredOutputs,
             openQuestions: goal.openQuestionIds,
@@ -423,7 +438,7 @@ export function World({
       root.children.push({ id: "support-map", component: "SupportMap", objectId: selected.object.id, lanes: [], disclosure: intent.layer } as never);
     }
     return compiled;
-  }, [zone, zoneChosen, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints, challenge, supportMap, goal, relevant, showStanding, standing]);
+  }, [zone, zoneChosen, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints, challenge, supportMap, goal, relevant, showStanding, standing, density]);
 
   const inspector: Scene | null = useMemo(() => selected ? {
     worldId, title: "", reason: "",
@@ -473,6 +488,29 @@ export function World({
     deliveries: 0,
   };
 
+  if (present) {
+    // The centre's slot order is the walk; ←/→ move the focus; nothing here can change the graph.
+    const slots = scene.root.component === "Canvas" ? scene.root.children : [];
+    const idx = Math.min(presentSlot, Math.max(0, slots.length - 1));
+    const focusNode = slots[idx];
+    const shown: Scene = focusNode
+      ? { ...scene, root: { id: "present", component: "Canvas", layout: "column", children: [focusNode] as never } }
+      : scene;
+    return (
+      <div className="xr-present" role="region" aria-label={`Presenting ${snapshot.world.title} — ${idx + 1} of ${slots.length}. Escape leaves.`}>
+        <SceneRenderer scene={shown} bindings={presentBindings(bindings)} />
+        <footer className="xr-present__foot">
+          <span className="xr-mono">{idx + 1} / {slots.length}</span>
+          {selected && trust[selected.object.id] && (
+            <SceneRenderer scene={{ worldId, title: "", reason: "", root: { id: "t", component: "Canvas", layout: "column",
+              children: [{ id: "trust", component: "TrustStrip", objectId: selected.object.id, compact: true } as never] } }} bindings={presentBindings(bindings)} />
+          )}
+          <span className="xr-present__hint">← → walk · Esc leaves</span>
+        </footer>
+      </div>
+    );
+  }
+
   return (
     <div className={`xr-shell${inspector ? "" : " xr-shell--no-inspector"}`}>
       <header className="xr-shell__head">
@@ -503,6 +541,15 @@ export function World({
         )}
         <div className="xr-focusbar" aria-live="polite">
           <span>Focus</span><strong>{selected?.properties.title ?? "Nothing selected"}</strong>
+        </div>
+        <div className="xr-density" role="radiogroup" aria-label="How much to show">
+          {([1, 2, 3] as const).map((d) => (
+            <button key={d} type="button" role="radio" aria-checked={(density ?? ZONE_INTENT[zone].layer) === d}
+              className={`xr-density__dot${(density ?? ZONE_INTENT[zone].layer) === d ? " is-on" : ""}`}
+              title={`${["Compact", "Comfortable", "Detailed"][d - 1]} (⌘${d})`} onClick={() => chooseDensity(d)}>
+              <span aria-hidden="true">{"·".repeat(d)}</span><span className="xr-density__word">{["Compact", "Comfortable", "Detailed"][d - 1]}</span>
+            </button>
+          ))}
         </div>
       </header>
 

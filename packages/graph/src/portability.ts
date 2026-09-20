@@ -1099,6 +1099,15 @@ against the exact file delivered. A profile states what it checks and what it do
     `${d.changedSince ? "; this decision has changed since" : ""}</span>`;
 }))}</ul>
 
+${(() => {
+  const accepted = influence.decisions.flatMap((d) => (graph.decisions.detail(d.objectId)?.assumptions ?? [])
+    .filter((a) => a.kind === "accepted_uncertainty").map((a) => ({ decision: d.question, text: a.text, because: a.reviewTrigger })));
+  if (accepted.length === 0) return "";
+  return `<h2>Chosen despite uncertainty</h2>
+<p class=meta>${accepted.length === 1 ? "One unresolved assumption was" : `${accepted.length} unresolved assumptions were`} explicitly accepted for this delivery.</p>
+<ul>${accepted.map((a) => `<li>${esc(a.text)} <span class=meta>— ${esc(a.decision)}${a.because ? `; proceeding because ${esc(a.because)}` : ""}</span></li>`).join("")}</ul>
+`;
+})()}
 <h2>Read from</h2>
 <ul>${rowsHtml(sourceLines)}</ul>
 

@@ -26,7 +26,7 @@ export const ContextDecisionSchema = z.object({
   acceptedVersionId: UuidSchema.nullable().default(null),
   assumptions: z.array(z.object({
     text: z.string(), reviewTrigger: z.string().default(""),
-    kind: z.enum(["assumption", "steelman"]).default("assumption"),
+    kind: z.enum(["assumption", "steelman", "accepted_uncertainty"]).default("assumption"),
   })).default([]),
   rejectedOptions: z.array(z.string()).default([]),
   relatedToFocus: z.boolean().default(true),

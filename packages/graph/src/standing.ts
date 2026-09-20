@@ -155,3 +155,44 @@ export function lastActiveWorld(graph: ObjectGraph): string | null {
 }
 
 const lower = (s: string) => (s.length > 0 ? s[0]!.toLowerCase() + s.slice(1) : s).replace(/\.$/, "");
+
+export class NotFinishable extends Error {
+  readonly code = "not_finishable" as const;
+  constructor(readonly missing: string[]) {
+    super(`not finished: ${missing.join("; ")}. Finish anyway to record that as a decision.`);
+    this.name = "NotFinishable";
+  }
+}
+
+/**
+ * Finish: the goal's `ready → finished` transition.
+ *
+ * Requires every required output to have a current form and a release. Otherwise it is
+ * refused — unless the person finishes anyway, which is a Decision with the uncertainty
+ * named and the reason for proceeding, so the delivery report can say so.
+ */
+export function finishGoal(graph: ObjectGraph, goalId: string, opts: { anyway?: { because: string } } = {}): import("@xeniur/core").WorkGoal {
+  const standing = standingFor(graph, goalId);
+  if (!standing) throw new Error(`no such goal: ${goalId}`);
+  const missing: string[] = [];
+  for (const n of standing.needed) {
+    if (!n.satisfied) { missing.push(`${n.output} has not been made`); continue; }
+    if (n.objectId) {
+      const released = (graph.db.prepare(`SELECT COUNT(*) c FROM releases WHERE object_id = ?`).get(n.objectId) as { c: number }).c;
+      if (released === 0) missing.push(`${n.output} has no release`);
+    }
+  }
+  if (standing.knowledge.disputed.length > 0) missing.push(`${standing.knowledge.disputed.length} claim${standing.knowledge.disputed.length === 1 ? "" : "s"} still disputed`);
+  if (missing.length > 0) {
+    if (!opts.anyway) throw new NotFinishable(missing);
+    const decision = graph.decisions.create({
+      worldId: standing.worldId, question: `Finish "${standing.goal.outcome}" with unresolved requirements?`,
+      options: [{ key: "finish_anyway", label: "Finish anyway", note: opts.anyway.because }, { key: "wait", label: "Wait", note: "" }],
+      chosenOption: "finish_anyway", rationale: opts.anyway.because,
+    });
+    for (const m of missing) graph.decisions.acceptUncertainty(decision.objectId, m, opts.anyway.because);
+    graph.decisions.accept(decision.objectId, "you", { steelman: `Finishing now may mean ${missing[0]} is never resolved.` });
+    if (standing.focus) graph.decisions.link({ fromObjectId: standing.focus.id, toObjectId: decision.objectId, relation: "satisfies" });
+  }
+  return graph.goals.setStatus(goalId, "finished")!;
+}

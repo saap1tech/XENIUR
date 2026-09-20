@@ -6,7 +6,7 @@ import type {
   DecisionDetail, ImpactReport, ObjectState, Representation, Scene,
 } from "@xeniur/core";
 import { describeEnvelope, planDigest, type CandidateRecord, type ChallengeRecord, type Compliance, type EntryRecord, type ModeRecord, type Standing as StandingData, type SupportMap as SupportMapData, type TrailRow } from "@xeniur/core";
-import { SceneRenderer, emptyBindings, type SceneBindings } from "./index.js";
+import { SceneRenderer, emptyBindings, presentBindings, type SceneBindings } from "./index.js";
 
 const OBJ = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const DEC = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
@@ -818,5 +818,25 @@ describe("ThinkingMoves", () => {
 
   it("renders nothing beside an Object that is not an idea", () => {
     expect(render({ id: "m", component: "ThinkingMoves", objectId: OBJ }, bindings({ brainAvailable: true }))).not.toContain("xr-moves");
+  });
+});
+
+/* M6 A6 — Present cannot change anything; Paper keeps the lime rule. */
+describe("presentBindings", () => {
+  it("keeps looking and pointing and drops every mutating binding", () => {
+    const full = bindings({ onSort: () => {}, onAcceptPlan: () => {}, onRebuild: () => {}, onAcceptCandidate: () => {}, onStartMode: () => {}, onSelect: () => {} });
+    const p = presentBindings(full);
+    const handlers = Object.keys(p).filter((k) => k.startsWith("on") && typeof (p as unknown as Record<string, unknown>)[k] === "function");
+    expect(handlers).toEqual(["onSelect"]);
+    expect(p.states).toBe(full.states);
+  });
+});
+
+describe("the signal colour under Paper", () => {
+  it("[data-paper] redefines surfaces and ink only — never the signal, never the semantic ramp", () => {
+    const css = readFileSync(join(process.cwd(), "apps/desktop/src/renderer/styles.css"), "utf8");
+    const block = css.slice(css.indexOf("[data-paper] {"), css.indexOf("}", css.indexOf("[data-paper] {")));
+    expect(block).not.toMatch(/--signal|--brand-lime|--review|--rebuild|--ok|--blocked|--danger/);
+    expect(block).toContain("--bg: #fbfaf7");
   });
 });

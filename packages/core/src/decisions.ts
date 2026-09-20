@@ -58,7 +58,7 @@ export const AssumptionSchema = z.object({
   text: z.string().min(1),
   reviewTrigger: z.string().default(""),
   /** A steelman is the one reason this could be wrong, asked for before acceptance. */
-  kind: z.enum(["assumption", "steelman"]).default("assumption"),
+  kind: z.enum(["assumption", "steelman", "accepted_uncertainty"]).default("assumption"),
 });
 export type Assumption = z.infer<typeof AssumptionSchema>;
 /** What a caller writes: `kind` and `reviewTrigger` may be left to their defaults. */

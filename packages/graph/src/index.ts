@@ -25,7 +25,7 @@ export { TrailStore } from "./trail.js";
 export { GoalStore } from "./goals.js";
 export { EnvelopeStore } from "./envelopes.js";
 export type { DisclosureLevel } from "./envelopes.js";
-export { standingFor, resumeCard, lastActiveWorld } from "./standing.js";
+export { standingFor, resumeCard, lastActiveWorld, finishGoal, NotFinishable } from "./standing.js";
 export { connectionsFor } from "./connections.js";
 export type { Connection } from "./connections.js";
 export { supportMapFor } from "./support-map.js";

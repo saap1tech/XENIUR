@@ -110,6 +110,15 @@ export class DecisionStore {
     }
   }
 
+  /**
+   * "We know the evidence is incomplete, but we are proceeding because of cost and time."
+   * A real record on the decision — what is uncertain and why the person went ahead — that
+   * the delivery report names. It is a decision, not a verification badge.
+   */
+  acceptUncertainty(objectId: string, uncertainty: string, because: string): void {
+    this.assume(objectId, { text: uncertainty, reviewTrigger: because, kind: "accepted_uncertainty" });
+  }
+
   assume(objectId: string, assumption: AssumptionInput): void {
     this.graph.db.prepare(
       `INSERT INTO decision_assumptions (id, decision_id, text, review_trigger, kind) VALUES (?, ?, ?, ?, ?)`,
@@ -554,12 +563,21 @@ export function renderBrief(detail: DecisionDetail, graph: ObjectGraph): string 
     lines.push("");
   }
 
-  const assumed = detail.assumptions.filter((a) => a.kind !== "steelman");
+  const assumed = detail.assumptions.filter((a) => a.kind === "assumption");
   const steelmen = detail.assumptions.filter((a) => a.kind === "steelman");
+  const acceptedUncertainty = detail.assumptions.filter((a) => a.kind === "accepted_uncertainty");
   if (assumed.length > 0) {
     lines.push("## Assumed", "");
     for (const a of assumed) {
       lines.push(`- ${a.text}${a.reviewTrigger ? `\n  - Revisit if: ${a.reviewTrigger}` : ""}`);
+    }
+    lines.push("");
+  }
+  if (acceptedUncertainty.length > 0) {
+    // Chosen despite uncertainty: named, with the reason for proceeding. Never a green badge.
+    lines.push("## Chosen despite", "");
+    for (const a of acceptedUncertainty) {
+      lines.push(`- ${a.text}${a.reviewTrigger ? `\n  - Proceeding because: ${a.reviewTrigger}` : ""}`);
     }
     lines.push("");
   }

@@ -2,7 +2,7 @@ export { SceneRenderer, semanticDescription } from "./SceneRenderer.jsx";
 export type { SceneRendererProps } from "./SceneRenderer.jsx";
 export { COMPONENT_REGISTRY, planScene, validateScene } from "./registry.js";
 export type { ScenePlan, Refusal, SceneValidation } from "./registry.js";
-export { emptyBindings, displayForm, currentForms } from "./bindings.js";
+export { emptyBindings, presentBindings, displayForm, currentForms } from "./bindings.js";
 export type { SceneBindings, LineageView, HistoryView, VersionSummary } from "./bindings.js";
 export { Panel, ProvenanceBadge, Empty, Button } from "./components/primitives.jsx";
 export { ObjectCard, Gallery, Inspector, Comparison } from "./components/objects.jsx";

@@ -1999,3 +1999,25 @@ input[type="range"] { accent-color: var(--text); }
 .xr-moves__target { background: none; border: 0; padding: 0; color: var(--text); font: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); }
 .xr-moves__because { grid-column: 1; color: var(--dim); font-size: 11px; }
 .xr-moves__connections .xr-button { grid-column: 2; grid-row: 1 / span 2; }
+
+/* ---- Density: the person's, remembered per World --------------------------------------- */
+.xr-density { display: flex; gap: 2px; border: 1px solid var(--line); border-radius: var(--r-tag); padding: 2px; }
+.xr-density__dot { background: none; border: 0; border-radius: var(--r-tag); padding: 2px 8px; color: var(--dim); font: 12px/1 var(--font-mono); letter-spacing: .1em; cursor: pointer; }
+.xr-density__dot.is-on { background: var(--surface-2); color: var(--text); }
+.xr-density__word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+/* ---- Present: the same Scene, read-only, for a demo or a judging table ------------------ */
+.xr-present { position: fixed; inset: 0; background: var(--bg); display: grid; grid-template-rows: minmax(0, 1fr) auto; padding: var(--s-8) var(--s-8) var(--s-4); font-size: 140%; }
+.xr-present .xr-scene { padding: 0; }
+.xr-present__foot { display: flex; align-items: center; gap: var(--s-5); padding-top: var(--s-3); border-top: 1px solid var(--line); color: var(--dim); font-size: 12px; }
+.xr-present__hint { margin-left: auto; }
+
+/* ---- Paper: off-white for long reading; same identity, inverted surfaces ---------------- */
+[data-paper] {
+  --bg: #fbfaf7; --surface: #f3f1ea; --surface-2: #ebe8df; --raised: #e4e0d5;
+  --line: #e2ded4; --line-soft: #ece9e0;
+  --text: #1b1b19; --dim: #726f68; --faint: #9b978e;
+  color-scheme: light;
+  background: var(--bg); color: var(--text);
+}
+[data-paper] .xr-doc { font: 17px/1.7 ui-serif, Georgia, serif; max-width: 66ch; }
