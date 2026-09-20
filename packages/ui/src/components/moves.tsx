@@ -1,5 +1,6 @@
 import type { LeafSceneNode } from "@xeniur/core";
 import type { SceneBindings } from "../bindings.js";
+import { t } from "../i18n.js";
 import { Button } from "./primitives.jsx";
 
 type Node<T extends LeafSceneNode["component"]> = Extract<LeafSceneNode, { component: T }>;
@@ -28,7 +29,7 @@ export function ThinkingMoves({ node, bindings }: { node: Node<"ThinkingMoves">;
   const connections = bindings.connections?.[node.objectId] ?? [];
 
   return (
-    <section className="xr-moves" aria-label={`Thinking moves on ${state.properties.title}`}>
+    <section className="xr-moves" aria-label={t("sr.moves", { title: state.properties.title, unavailable: brain ? 0 : 2 })}>
       <h3>Thinking moves</h3>
       <div className="xr-moves__grid">
         <Move label="Find the basis" means="Show where this idea came from and what its sources actually say."

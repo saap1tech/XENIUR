@@ -7,7 +7,9 @@ import "./styles.css";
 
 const root = document.getElementById("root");
 // `?visual-preview=world` on localhost: the Studio against a realistic sample, without Electron.
-if (window.location.hostname === "localhost" && new URLSearchParams(window.location.search).get("visual-preview") === "world" && !window.xeniur) {
-  window.xeniur = sampleBridge();
+// `?visual-preview=firstrun`: the first run, the same way.
+const preview = window.location.hostname === "localhost" ? new URLSearchParams(window.location.search).get("visual-preview") : null;
+if ((preview === "world" || preview === "firstrun") && !window.xeniur) {
+  window.xeniur = sampleBridge({ firstRun: preview === "firstrun" });
 }
 if (root) createRoot(root).render(<StrictMode><App /></StrictMode>);

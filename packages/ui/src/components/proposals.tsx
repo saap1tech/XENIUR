@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { CandidateRecord, LeafSceneNode } from "@xeniur/core";
 import { SUPPORT_GLYPHS, compressForScene } from "@xeniur/core";
 import type { SceneBindings } from "../bindings.js";
+import { t } from "../i18n.js";
 import { Button, Tag } from "./primitives.jsx";
 
 type Node<T extends LeafSceneNode["component"]> = Extract<LeafSceneNode, { component: T }>;
@@ -25,6 +26,7 @@ export function ProposalsTray({ node, bindings }: { node: Node<"ProposalsTray">;
 
   return (
     <section className="xr-proposals" aria-label={`${all.length} proposal${all.length === 1 ? "" : "s"} awaiting review`}>
+      <p className="xr-sr">{all.length === 0 ? t("sr.proposals.none") : t("sr.proposals", { count: all.length })}</p>
       <header className="xr-proposals__head">
         <h2>Proposed</h2>
         <span className="xr-proposals__count xr-mono">{all.length}</span>
@@ -93,7 +95,10 @@ export function ContextIndicator({ node, bindings }: { node: Node<"ContextIndica
   const ctx = bindings.contexts?.[node.contextDigest];
   if (!ctx) return null;
   return (
-    <div className="xr-ctxind" role="status" aria-label={`Context: ${ctx.included.length} items, ${ctx.destination === "local" ? "stays on this machine" : `to ${ctx.modelLabel ?? "a remote model"}`}`}>
+    <div className="xr-ctxind" role="status" aria-label={t("sr.context", {
+      included: ctx.included.length, excluded: ctx.excluded.length,
+      destination: ctx.destination === "local" ? t("sr.context.local") : t("sr.context.remote", { model: ctx.modelLabel ?? "a remote model" }),
+    })}>
       <span className="xr-ctxind__scope">{ctx.included.length} item{ctx.included.length === 1 ? "" : "s"}</span>
       {ctx.excluded.length > 0 && <span className="xr-ctxind__excluded">· {ctx.excluded.length} left out</span>}
       <span className="xr-ctxind__dest">· {ctx.destination === "local" ? "stays on this machine" : `→ ${ctx.modelLabel ?? "remote model"}`}</span>

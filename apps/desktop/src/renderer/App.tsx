@@ -6,6 +6,7 @@ import { ObjectView } from "./ObjectView.js";
 import { CommandPalette, usePaletteShortcut, type Command } from "./CommandPalette.js";
 import { FocusMode } from "./FocusMode.js";
 import { FirstRun } from "./FirstRun.js";
+import { Models } from "./Models.js";
 import { BrandMark } from "./BrandMark.js";
 import { ComputeReview } from "./ComputeReview.js";
 import { WebLayer } from "./WebLayer.js";
@@ -25,7 +26,9 @@ type View =
   | { kind: "focus"; objectId: string; minutes: number; worldId: string }
   | { kind: "web" }
   | { kind: "workflows" }
-  | { kind: "firstrun" };
+  | { kind: "firstrun" }
+  /** Your models, with the sentence that brought the person here and the view to return to. */
+  | { kind: "models"; reason: string | null; back: View };
 
 export function App() {
   const [worlds, setWorlds] = useState<WorldRow[]>([]);
@@ -90,9 +93,30 @@ export function App() {
   useEffect(() => {
     void refreshWorlds();
     void refreshTasks();
-    void bridge?.system.info().then(setInfo);
+    void bridge?.system.info().then((value) => {
+      setInfo(value);
+      // The first run is one question, asked once. It is never re-entered from a route.
+      if (value?.firstRun) setView({ kind: "firstrun" });
+    });
     void bridge?.economy.snapshot().then(setEconomy);
   }, [bridge, refreshWorlds, refreshTasks]);
+
+  /** A new World opened on its drop target — the way in for material and for .xeniur packages alike. */
+  const startFromMaterial = useCallback(async () => {
+    const created = await bridge?.worlds.create(NEW_WORLD.import);
+    await refreshWorlds();
+    if (created) await openWorld(created.id);
+  }, [bridge, refreshWorlds, openWorld]);
+
+  /** A World named after the goal, with the goal set — no form, no category, no model. */
+  const startFromGoal = useCallback(async (outcome: string) => {
+    const title = outcome.length > 48 ? `${outcome.slice(0, 47)}…` : outcome;
+    const created = await bridge?.worlds.create({ title, emoji: "◻" });
+    if (!created) return;
+    await bridge?.goals?.create(created.id, outcome);
+    await refreshWorlds();
+    await openWorld(created.id);
+  }, [bridge, refreshWorlds, openWorld]);
 
   // Task events are pushed by the queue. Focus Mode deliberately ignores them.
   useEffect(() => {
@@ -140,6 +164,8 @@ export function App() {
       run: () => openWorld(w.id),
     })),
     { id: "home", group: "Go", label: "Back to Worlds", run: () => setView({ kind: "home" }) },
+    { id: "models", group: "Settings", label: "Your models", hint: "keys stay in your keychain",
+      run: () => setView((current) => ({ kind: "models", reason: null, back: current })) },
   ];
 
   if (view.kind === "object") {
@@ -201,8 +227,12 @@ export function App() {
   if (view.kind === "firstrun") {
     return (
       <FirstRun
+        worlds={worlds}
         onDone={() => { setView({ kind: "home" }); void bridge.system.info().then(setInfo); }}
-        onImport={() => setView({ kind: "home" })}
+        onImport={() => { void startFromMaterial(); }}
+        onImportPackage={() => { void startFromMaterial(); }}
+        onStart={(outcome) => { void startFromGoal(outcome); }}
+        onContinue={(worldId) => { void openWorld(worldId); }}
         onOpenExample={async () => {
           const created = await bridge.worlds.create({ title: "Rainwear 2027 (example)", emoji: "◒" });
           await refreshWorlds();
@@ -210,6 +240,10 @@ export function App() {
         }}
       />
     );
+  }
+
+  if (view.kind === "models") {
+    return <Models reason={view.reason} onBack={() => setView(view.back)} />;
   }
 
   // Focus Mode replaces everything, deliberately: chrome that is merely hidden is chrome
@@ -263,6 +297,7 @@ export function App() {
           onBack={() => setView({ kind: "home" })}
           onOpenObject={(id) => { void openObject(id, view.snapshot); }}
           onSubmit={submit} onApprove={approve} onReject={reject}
+          onNeedsKey={(reason) => setView((current) => ({ kind: "models", reason, back: current }))}
           onImported={(result) => {
             // Re-read whichever World it landed in — the same one, or a new critique World.
             void bridge?.worlds.list().then(setWorlds);
@@ -279,14 +314,7 @@ export function App() {
               if (snapshot) setView({ kind: "world", snapshot, selection: objectId ?? card.focusObjectId ?? null });
             });
           }}
-          onStart={async (outcome) => {
-            // A World named after the goal, with the goal set — no form, no category, no model.
-            const title = outcome.length > 48 ? `${outcome.slice(0, 47)}…` : outcome;
-            const created = await bridge.worlds.create({ title, emoji: "◻" });
-            await bridge.goals?.create(created.id, outcome);
-            await refreshWorlds();
-            await openWorld(created.id);
-          }}
+          onStart={(outcome) => { void startFromGoal(outcome); }}
           onOpenSituation={(row) => {
             if (row.kind === "rhythm") return;
             if (!row.worldId) return;

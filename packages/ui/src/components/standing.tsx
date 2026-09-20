@@ -3,6 +3,7 @@ import type { LeafSceneNode } from "@xeniur/core";
 import { GOAL_STATUS_WORDS, KNOWLEDGE_GLYPHS, KNOWLEDGE_STATES, describeStanding } from "@xeniur/core";
 import type { SceneBindings } from "../bindings.js";
 import { Button } from "./primitives.jsx";
+import { t } from "../i18n.js";
 
 type Node<T extends LeafSceneNode["component"]> = Extract<LeafSceneNode, { component: T }>;
 
@@ -25,6 +26,13 @@ export function Standing({ node, bindings }: { node: Node<"Standing">; bindings:
 
   return (
     <section className="xr-standing" aria-label={describeStanding(s)}>
+      <p className="xr-sr">{t("sr.standing", {
+        goal: s.goal.outcome, status: GOAL_STATUS_WORDS[s.goal.status].label,
+        known: s.knowledge.known.length, proposed: s.knowledge.proposed.length, disputed: s.knowledge.disputed.length,
+        unknown: s.knowledge.unknown.length, chosen: s.knowledge.chosenDespite.length,
+        changed: c.newSources.length + c.rebuild.length + c.review.length + c.critiques.length,
+        next: open.length, needed: missing.length,
+      })}</p>
       <header className="xr-standing__head">
         <h2>{s.goal.outcome}</h2>
         <span className="xr-standing__status" title={GOAL_STATUS_WORDS[s.goal.status].means}>{GOAL_STATUS_WORDS[s.goal.status].label}</span>

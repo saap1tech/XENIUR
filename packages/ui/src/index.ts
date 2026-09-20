@@ -25,3 +25,5 @@ export { AgentTrail, SupportMap } from "./components/lenses.jsx";
 export { Standing } from "./components/standing.jsx";
 export { ProposalsTray, ContextIndicator } from "./components/proposals.jsx";
 export { ThinkingMoves } from "./components/moves.jsx";
+export { t, EN, MESSAGE_KEYS } from "./i18n.js";
+export type { MessageKey } from "./i18n.js";

@@ -74,4 +74,36 @@ describe("the stylesheet is one generation", () => {
       .filter((v) => v.split(/\s+/).some((part) => !/^var\(--r-(card|control|tag)\)$/.test(part) && part !== "0" && part !== "50%"));
     expect(literals, [...new Set(literals)].join(", ")).toEqual([]);
   });
+
+  /* M6 A7 — direction, motion and contrast are properties of the stylesheet, not of a screen. */
+  it("writes direction with logical properties, so RTL is a translation and not a rewrite", () => {
+    const physical = [...css.matchAll(/(?<![\w-])((?:margin|padding|border)-(?:left|right)(?:-[a-z]+)?|border-(?:top|bottom)-(?:left|right)-radius|text-align:\s*(?:left|right)|float:\s*(?:left|right)|(?:^|[\s;{])(?:left|right)\s*:)/gm)]
+      .map((m) => m[1]!.trim());
+    expect(physical, [...new Set(physical)].join(", ")).toEqual([]);
+  });
+
+  it("moves only in opacity: every transition and keyframe, plus one 240 ms settle", () => {
+    const transitions = [...css.matchAll(/transition:\s*([^;}]+)/g)].map((m) => m[1]!.trim());
+    for (const value of transitions) expect(value, value).toMatch(/^opacity\b/);
+    const keyframes = [...css.matchAll(/@keyframes\s+[\w-]+\s*\{([\s\S]*?)\}\s*\}/g)].map((m) => m[1]!);
+    for (const body of keyframes) {
+      const props = [...body.matchAll(/([a-z-]+)\s*:/g)].map((m) => m[1]!);
+      expect(props.every((p) => p === "opacity"), body).toBe(true);
+    }
+    expect(css).toMatch(/@keyframes xr-settle/);
+    expect(css).toMatch(/\.xr-trust\.is-settled\s*\{\s*animation:\s*xr-settle 240ms/);
+    // One reduced-motion rule, and it silences everything.
+    expect(css.match(/prefers-reduced-motion:\s*reduce/g)?.length).toBe(1);
+    expect(css).toMatch(/prefers-reduced-motion:\s*reduce[\s\S]*?animation-duration:\s*\.001ms\s*!important/);
+  });
+
+  it("offers a high-contrast set that changes the quiet ramp and never the signal", () => {
+    const blocks = [...raw.matchAll(/(prefers-contrast: more|data-contrast="high"\])[^{]*\{([^}]*)\}/g)].map((m) => m[2]!);
+    expect(blocks.length).toBeGreaterThanOrEqual(2);
+    for (const block of blocks) {
+      expect(block).toMatch(/--line:/);
+      expect(block).not.toMatch(/--signal/);
+      expect(block).not.toMatch(/--bg:/);
+    }
+  });
 });

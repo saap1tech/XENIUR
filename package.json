@@ -29,6 +29,7 @@
     "demo:research": "node scripts/ensure-abi.mjs node && tsx scripts/demo-research.ts",
     "demo:visual": "node scripts/ensure-abi.mjs node && tsx scripts/demo-visual.tsx",
     "demo:sense": "node scripts/ensure-abi.mjs node && tsx scripts/demo-sense.ts",
+    "demo:work": "node scripts/ensure-abi.mjs node && tsx scripts/demo-work.ts",
     "preview:ui": "node scripts/ensure-abi.mjs node && tsx scripts/preview-ui.tsx"
   },
   "devDependencies": {

@@ -93,11 +93,11 @@ const trust = (objectId: string, over: Partial<TrustFacts> = {}): TrustFacts => 
 });
 
 /** The bridge a preview needs, and nothing more. Every write is a no-op. */
-export function sampleBridge(): XeniurBridge {
+export function sampleBridge(opts: { firstRun?: boolean } = {}): XeniurBridge {
   const noop = async () => undefined;
   return {
     blobs: { url: (h: string) => `xeniur-blob://asset/${h}` },
-    system: { info: async () => ({ version: "0.1", brainIsMock: true, brainModel: null, capabilities: [], firstRun: false }) },
+    system: { info: async () => ({ version: "0.1", brainIsMock: true, brainModel: null, capabilities: [], firstRun: opts.firstRun ?? false }) },
     worlds: { list: async () => [sampleSnapshot.world], open: async () => sampleSnapshot, create: async () => sampleSnapshot.world },
     sense: {
       map: async () => sampleMap,

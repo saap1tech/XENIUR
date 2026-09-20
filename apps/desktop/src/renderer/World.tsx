@@ -4,7 +4,7 @@ import type {
   CandidateRecord, ChallengeRecord, EntryRecord, GoalStatus, PackageInspectionView, Representation, Scene, Standing, SupportMap, Task,
   ThinkingMap, TrailRow, TrustFacts, WorkGoal, WorldSnapshot,
 } from "@xeniur/core";
-import { SceneRenderer, presentBindings, type SceneBindings } from "@xeniur/ui";
+import { SceneRenderer, presentBindings, t, type SceneBindings } from "@xeniur/ui";
 import {
   NEED_WORDS, SituationSchema, compileSituation, layoutScene, proposalsFor,
   type GestureProposal,
@@ -13,6 +13,7 @@ import { GOAL_STATUSES, GOAL_STATUS_WORDS } from "@xeniur/core";
 import { BrandMark } from "./BrandMark.js";
 import { Arrival } from "./Arrival.js";
 import { Ask } from "./Ask.js";
+import { KeyboardMap } from "./KeyboardMap.js";
 
 /** The project's meaningful things, not XENIUR's subsystems. */
 const ZONES = [
@@ -49,6 +50,8 @@ export interface WorldProps {
   onImported?(result: { objectId: string; worldId: string }): void;
   /** The goal as already known (a host or a test); undefined means read it from the bridge. */
   initialGoal?: WorkGoal | null;
+  /** A request resolved to a remote model and no key exists: the host offers Your models. */
+  onNeedsKey?(reason: string): void;
 }
 
 /**
@@ -65,9 +68,10 @@ export interface WorldProps {
  */
 export function World({
   snapshot, tasks, busy, initialSelection = null, initialZone = "work",
-  onBack, onOpenObject, onSubmit, onApprove, onReject, onImported, initialGoal,
+  onBack, onOpenObject, onSubmit, onApprove, onReject, onImported, initialGoal, onNeedsKey,
 }: WorldProps) {
   const [zone, setZone] = useState<Zone>(initialZone);
+  const [showKeys, setShowKeys] = useState(false);
   // Until the person clicks a zone, the goal's next question chooses the representation.
   const [zoneChosen, setZoneChosen] = useState<boolean>(initialZone !== "work");
   const [selectedId, setSelectedId] = useState<string | null>(
@@ -150,21 +154,36 @@ export function World({
   }, [bridge, goal]);
   // The standing feeds the compiler's knowledge counts, so it is read whenever the goal is.
   useEffect(() => { void refreshStanding(); }, [refreshStanding, showStanding, decisions, map]);
-  // Keys: W where do I stand · P present · ⌘1/2/3 density · Esc leaves any mode.
+  // Keys, as the map (`?`) lists them: ⌘K palette · ⌘1/2/3 density · 1–4 zones · ↑↓ Enter ·
+  // P present · W where do I stand · Esc leaves any mode. Never while typing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       if ((e.metaKey || e.ctrlKey) && ["1", "2", "3"].includes(e.key)) { e.preventDefault(); chooseDensity(Number(e.key) as 1 | 2 | 3); return; }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "?") { setShowKeys((v) => !v); return; }
+      if (["1", "2", "3", "4"].includes(e.key)) { const z = ZONES[Number(e.key) - 1]!; setZone(z.key); setZoneChosen(true); return; }
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        if (present) return;
+        e.preventDefault();
+        const ids = snapshot.states.map((st) => st.object.id);
+        if (ids.length === 0) return;
+        const at = ids.indexOf(selectedId ?? "");
+        const step = e.key === "ArrowDown" ? 1 : -1;
+        setSelectedId(ids[at < 0 ? 0 : (at + step + ids.length) % ids.length]!);
+        return;
+      }
+      if (e.key === "Enter" && selectedId && !present) { onOpenObject(selectedId); return; }
       if (e.key === "w" || e.key === "W") { if (goal) setShowStanding((v) => !v); }
       if (e.key === "p" || e.key === "P") { setPresent((v) => !v); setPresentSlot(0); }
       if (present && e.key === "ArrowRight") setPresentSlot((i) => i + 1);
       if (present && e.key === "ArrowLeft") setPresentSlot((i) => Math.max(0, i - 1));
-      if (e.key === "Escape") { setShowStanding(false); setPresent(false); }
+      if (e.key === "Escape") { setShowStanding(false); setPresent(false); setShowKeys(false); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [goal, present, chooseDensity]);
+  }, [goal, present, chooseDensity, snapshot.states, selectedId, onOpenObject]);
 
   // The centre follows the goal's focus on open; afterwards the goal follows the centre.
   useEffect(() => {
@@ -528,6 +547,7 @@ export function World({
 
   return (
     <div className={`xr-shell${inspector ? "" : " xr-shell--no-inspector"}`}>
+      {showKeys && <KeyboardMap onClose={() => setShowKeys(false)} />}
       <header className="xr-shell__head">
         <button type="button" className="xr-back" onClick={onBack}>←</button>
         <BrandMark compact />
@@ -623,7 +643,7 @@ export function World({
           <Ask worldId={worldId} utterance={ask.utterance} selection={ask.selection} intent={ask.intent} bindings={bindings}
             onCandidates={() => { void refreshCandidates(); }}
             onTrail={(row) => { if (row && selectedId) setTrailRows((rows) => [row, ...rows.filter((r) => r.id !== row.id)]); }}
-            onNeedsKey={() => setNotice("This task can use cloud AI. Connect a key in Settings › Your models, or continue with local capabilities.")}
+            onNeedsKey={() => { const why = t("models.needed"); if (onNeedsKey) onNeedsKey(why); else setNotice(why); }}
             onClose={() => setAsk(null)} />
         )}
         {notice && <p className="xr-centre__notice" role="status">{notice}<button type="button" className="xr-button" onClick={() => setNotice(null)}>Close</button></p>}
