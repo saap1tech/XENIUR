@@ -217,7 +217,7 @@ export function App() {
           { id: "streak", kind: "streak", glyph: "·", text: "Streak 6 — a decision or a claim keeps it.", worldId: null, worldTitle: null, objectId: null, zone: null, verb: "" },
         ] }}
         trust={{}}
-        onOpen={() => undefined} onOpenSituation={() => undefined} onContinue={() => undefined} onStart={() => undefined} onCreate={() => undefined} onApprove={() => undefined} onReject={() => undefined} onDismissArrival={() => undefined} onExplore={() => undefined} onWorkflows={() => undefined} />;
+        onOpen={() => undefined} onOpenSituation={() => undefined} onContinue={() => undefined} onStart={() => undefined} onCreate={() => undefined} onReject={() => undefined} onDismissArrival={() => undefined} onExplore={() => undefined} onWorkflows={() => undefined} />;
     }
     return <main className="xr-home"><BrandMark />
       <p className="xr-empty">The bridge is unavailable. This window is not XENIUR's own renderer.</p>
@@ -336,7 +336,7 @@ export function App() {
             await refreshWorlds();
             await openWorld(created.id);
           }}
-          onApprove={approve} onReject={reject}
+          onReject={reject}
           onExplore={() => setView({ kind: "web" })}
           onWorkflows={() => setView({ kind: "workflows" })}
         />

@@ -2067,3 +2067,8 @@ input[type="range"] { accent-color: var(--text); }
 .xr-arena__report p { margin: 0; }
 .xr-arena__report ul { margin: 0; padding-inline-start: var(--s-4); }
 .xr-challenge__ticket { color: var(--text); }
+/* ---- Approval: the exact plan, so consent binds to it and no other ------------------------- */
+.xr-approval__plan { margin: 0; display: grid; gap: 2px; font-size: 12px; color: var(--dim); }
+.xr-approval__plan div { display: grid; grid-template-columns: 64px 1fr; gap: var(--s-2); }
+.xr-approval__plan dt { color: var(--faint); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
+.xr-approval__plan dd { margin: 0; color: var(--text); }

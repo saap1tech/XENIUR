@@ -153,13 +153,26 @@ describe("approval is stated in words a person can judge", () => {
     const html = renderToStaticMarkup(
       <SceneRenderer
         scene={scene({ id: "r", component: "ApprovalDialog", taskId: TASK, level: "PURCHASE",
-                       preview: "Book court · 5:00 PM · $18", detail: "Riverside Tennis" })}
+                       preview: "Book court · 5:00 PM · $18", detail: "Riverside Tennis", objects: [] })}
         bindings={bindings()} />,
     );
     expect(html).toContain("Book court · 5:00 PM · $18");
     expect(html).toContain("This spends your money.");
     expect(html).toContain("Approve");
     expect(html).toContain("Decline");
+  });
+
+  /* M6 Part C, Gate 0 — consent binds to the exact plan, shown as itself. */
+  it("shows the plan it approves: the tool, what it touches, and the digest", () => {
+    const html = renderToStaticMarkup(
+      <SceneRenderer
+        scene={scene({ id: "r", component: "ApprovalDialog", taskId: TASK, level: "COMMIT",
+                       preview: "Submit the order", detail: "", tool: "browser.submit", objects: [OBJ], planDigest: "a".repeat(64) })}
+        bindings={bindings()} />,
+    );
+    expect(html).toContain("browser.submit");
+    expect(html).toContain("aaaaaaaaaaaa…");
+    expect(html).toContain("Approve this exact plan");
   });
 
   it("offers approve and decline on a parked task in the Active list", () => {

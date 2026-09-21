@@ -109,6 +109,10 @@ const ApprovalDialogNode = z.object({
   ...base, component: z.literal("ApprovalDialog"),
   taskId: UuidSchema,
   level: PermissionLevelSchema,
+  /** The exact plan being approved: its tool, the Objects it touches, and the digest that binds consent to it. */
+  tool: z.string().optional(),
+  objects: z.array(UuidSchema).default([]),
+  planDigest: z.string().optional(),
   /** The XENIUR-native preview line, e.g. "Book court · 5:00 PM · $18". */
   preview: z.string().min(1),
   detail: z.string().default(""),

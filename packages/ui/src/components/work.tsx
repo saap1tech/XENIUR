@@ -78,8 +78,16 @@ export function ApprovalDialog({ node, bindings }: { node: Node<"ApprovalDialog"
       <p className="xr-approval__preview">{node.preview}</p>
       {node.detail && <p className="xr-approval__detail">{node.detail}</p>}
       <p className="xr-approval__level">{wording[node.level] ?? "This needs your confirmation."}</p>
+      {/* Consent binds to this plan and no other: the tool, the things it touches, the digest. */}
+      {(node.tool || node.planDigest) && (
+        <dl className="xr-approval__plan">
+          {node.tool && <div><dt>Does</dt><dd className="xr-mono">{node.tool}</dd></div>}
+          <div><dt>Touches</dt><dd>{node.objects.length === 0 ? "nothing in this project" : node.objects.map((id) => bindings.states[id]?.properties.title ?? id.slice(0, 8)).join(" · ")}</dd></div>
+          {node.planDigest && <div><dt>Plan</dt><dd className="xr-mono">{node.planDigest.slice(0, 12)}…</dd></div>}
+        </dl>
+      )}
       <div className="xr-approval__actions">
-        <Button variant="primary" onClick={() => bindings.onApprove?.(node.taskId)}>Approve</Button>
+        <Button variant="primary" onClick={() => bindings.onApprove?.(node.taskId)}>Approve this exact plan</Button>
         <Button onClick={() => bindings.onReject?.(node.taskId)}>Decline</Button>
       </div>
     </div>

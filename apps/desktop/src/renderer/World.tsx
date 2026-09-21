@@ -9,7 +9,7 @@ import {
   NEED_WORDS, SituationSchema, compileSituation, layoutScene, proposalsFor,
   type GestureProposal,
 } from "@xeniur/grammar";
-import { GOAL_STATUSES, GOAL_STATUS_WORDS } from "@xeniur/core";
+import { GOAL_STATUSES, GOAL_STATUS_WORDS, planDigest } from "@xeniur/core";
 import { BrandMark } from "./BrandMark.js";
 import { Arrival } from "./Arrival.js";
 import { Ask } from "./Ask.js";
@@ -464,11 +464,16 @@ export function World({
     const parked = tasks.find((t) => t.status === "needs_approval");
 
     if (parked) {
+      // The plan the person is asked to approve — shown as itself, digest included, so the
+      // consent is to this plan and cannot quietly cover a different one.
+      const plan = parked.payload["plan"] as { tool?: string; objects?: string[]; args?: Record<string, unknown> } | undefined;
       nodes.push({
         id: `approval-${parked.id}`, component: "ApprovalDialog", taskId: parked.id,
         level: (parked.payload["__level"] as string) ?? "COMMIT",
         preview: (parked.payload["__preview"] as string) ?? parked.title,
         detail: (parked.payload["__detail"] as string) ?? "",
+        tool: plan?.tool ?? parked.tool, objects: plan?.objects ?? [],
+        planDigest: plan?.tool ? planDigest({ tool: plan.tool, args: plan.args ?? {} }) : undefined,
       });
     }
 

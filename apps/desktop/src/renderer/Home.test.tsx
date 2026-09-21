@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Home } from "./Home.js";
 
@@ -17,7 +19,6 @@ describe("Home visual hierarchy", () => {
       economy={null}
       onOpen={noop}
       onCreate={noop}
-      onApprove={noop}
       onReject={noop}
       onExplore={noop}
       onWorkflows={noop}
@@ -45,7 +46,7 @@ const home = (today: Today | null, trust: Record<string, TrustFacts> = {}) => re
   worlds={[world]} active={[{ id: "t-running", worldId: world.id, title: "rendering the turntable", status: "running", tool: "3d.render",
     payload: {}, progress: .4, attempts: 1, detail: null, error: null, createdAt: 1, updatedAt: 1, startedAt: 1, finishedAt: null } as never]}
   info={null} economy={null} today={today} trust={trust}
-  onOpen={noop} onOpenSituation={noop} onContinue={noop} onStart={noop} onCreate={noop} onApprove={noop} onReject={noop} onDismissArrival={noop} onExplore={noop} onWorkflows={noop} />);
+  onOpen={noop} onOpenSituation={noop} onContinue={noop} onStart={noop} onCreate={noop} onReject={noop} onDismissArrival={noop} onExplore={noop} onWorkflows={noop} />);
 
 describe("Today", () => {
   it("shows at most seven rows and counts the rest", () => {
@@ -112,5 +113,20 @@ describe("Continue Work", () => {
     expect(html).toContain("Bring something in");
     expect(html).toContain("Nothing to pick up yet");
     expect(html).not.toMatch(/profession|researcher|designer/i);
+  });
+});
+
+/* M6 Part C, Gate 0 — Review is not approval. */
+describe("Review is not approval", () => {
+  it("a parked task's Review opens its situation; nothing on Home approves", () => {
+    const html = home({ date: "2026-09-21", quiet: false, more: 0, resume: null, rows: [row(1)] });
+    expect(html).toContain(">Review<");
+    expect(html).toContain(">Decline<");
+    expect(html).not.toMatch(/>Approve/);
+  });
+
+  it("Home has no approval callback at all", () => {
+    const src = readFileSync(join(__dirname, "Home.tsx"), "utf8");
+    expect(src).not.toContain("onApprove");
   });
 });

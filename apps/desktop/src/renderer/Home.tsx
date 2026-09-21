@@ -17,7 +17,7 @@ function EconomyBand({ value }: { value: EconomySnapshot | null }) {
   </section>;
 }
 
-export function Home({ worlds, active, info, economy, today, trust, onOpen, onOpenSituation, onContinue, onStart, onCreate, onApprove, onReject, onDismissArrival, onExplore, onWorkflows }: {
+export function Home({ worlds, active, info, economy, today, trust, onOpen, onOpenSituation, onContinue, onStart, onCreate, onReject, onDismissArrival, onExplore, onWorkflows }: {
   worlds: World[]; active: Task[]; info: SystemInfo | null; economy: EconomySnapshot | null;
   /** At most seven situations that need a person. Null while loading; quiet when nothing does. */
   today: Today | null;
@@ -30,7 +30,9 @@ export function Home({ worlds, active, info, economy, today, trust, onOpen, onOp
   onContinue(card: ResumeCard, objectId?: string | null): void;
   /** Start something: a question, idea, task or outcome in the person's words → a World with that goal. */
   onStart(outcome: string): void;
-  onCreate(entry: HomeEntry): void; onApprove(taskId: string): void; onReject(taskId: string): void;
+  onCreate(entry: HomeEntry): void;
+  /** Decline a parked task from Home. Approval never happens here: Review opens the exact plan in its World. */
+  onReject(taskId: string): void;
   onDismissArrival(challengeWorldId: string): void;
   onExplore(): void; onWorkflows(): void;
 }) {
@@ -96,7 +98,7 @@ export function Home({ worlds, active, info, economy, today, trust, onOpen, onOp
                   <strong>{row.text}</strong>{row.worldTitle && <small>{row.worldTitle}</small>}
                 </button>
                 <span className="xr-today__verb">
-                  {taskId ? <><button type="button" className="xr-button xr-button--primary" onClick={() => onApprove(taskId)}>Review</button><button type="button" className="xr-button" onClick={() => onReject(taskId)}>Decline</button></>
+                  {taskId ? <><button type="button" className="xr-button xr-button--primary" onClick={() => onOpenSituation(row)}>Review</button><button type="button" className="xr-button" onClick={() => onReject(taskId)}>Decline</button></>
                     : row.kind === "challenge_arrival" ? <><button type="button" className="xr-button" onClick={() => onOpenSituation(row)}>{row.verb}</button><button type="button" className="xr-button" onClick={() => onDismissArrival(row.worldId!)}>Not for me</button></>
                     : row.verb ? <button type="button" className="xr-button" onClick={() => onOpenSituation(row)}>{row.verb}</button> : null}
                 </span>
