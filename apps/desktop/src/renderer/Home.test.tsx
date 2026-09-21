@@ -25,12 +25,26 @@ describe("Home visual hierarchy", () => {
     />);
 
     expect(html).toContain("Pick up where you left off.");
-    expect(html).toContain("Your Worlds");
+    expect(html).toContain("Your projects");
     expect(html).toContain("Today");
-    expect(html).toContain("Language is available inside each World as a shortcut.");
+    expect(html).toContain("Language is available inside each project as a shortcut.");
     expect(html).not.toContain("<textarea");
     expect(html).not.toMatch(/placeholder=/);
-    expect(html.indexOf("Your Worlds")).toBeLessThan(html.indexOf("Language is available"));
+  });
+
+  /* M6 Part C — Home compacted: resume → what needs you → recent projects; the resource band lives elsewhere. */
+  it("reads resume, then what needs you, then the most recent projects, and carries no resource band", () => {
+    const worlds = Array.from({ length: 8 }, (_, i) => ({ id: `${i}${i}${i}${i}${i}${i}${i}${i}-1111-4111-8111-111111111111`.replace(/^(.)(.)(.)(.)(.)(.)(.)(.)/, "$1$2$3$4$5$6$7$8"), title: `Project ${i}`, emoji: "◻", summary: "", createdAt: i, lastOpenedAt: i, kind: "work" as const, publisherId: null }));
+    const html = renderToStaticMarkup(<Home today={{ date: "2026-09-21", quiet: false, more: 0, resume: null, rows: [row(1, "decision_review")] }} trust={{}}
+      onOpenSituation={noop} onContinue={noop} onStart={noop} onDismissArrival={noop} worlds={worlds} active={[]} info={null} economy={null}
+      onOpen={noop} onCreate={noop} onReject={noop} onExplore={noop} onWorkflows={noop} />);
+    expect(html.indexOf("xr-resume")).toBeLessThan(html.indexOf("xr-today"));
+    expect(html.indexOf("xr-today")).toBeLessThan(html.indexOf("xr-project-section"));
+    expect(html).toContain("Project 7");                 // most recent first
+    expect(html).not.toContain("Project 1");             // six on Home
+    expect(html).toContain("2 more in the palette");
+    expect(html).not.toContain("xr-economy");
+    expect(html).not.toContain("Unlimited Local");
   });
 });
 
@@ -100,7 +114,7 @@ describe("Continue Work", () => {
       fragments: [{ text: "You were weighing ", objectId: null }, { text: "\"Jacket shell\"", objectId: "o" }, { text: ".", objectId: null },
         { text: " One new source was added.", objectId: null }],
     } });
-    expect(html.indexOf("Pick up where you left off")).toBeLessThan(html.indexOf("Your Worlds"));
+    expect(html.indexOf("Pick up where you left off")).toBeLessThan(html.indexOf("Your projects"));
     expect(html).toContain("Last active World");
     expect(html).toContain("Continue this work");
     expect(html).toContain("xr-resume__link");

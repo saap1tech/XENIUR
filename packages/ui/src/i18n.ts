@@ -31,6 +31,20 @@ export const EN = {
   "firstrun.skip": "Skip",
   "firstrun.notnow": "Not now",
 
+  // Home
+  "home.eyebrow": "Your visual workspace",
+  "home.title": "Pick up where you left off.",
+  "home.lead": "What you were doing, what changed, and what you can accomplish next — from the record, not a summary.",
+  "home.needsyou": "Needs you",
+  "home.today": "Today",
+  "home.recent": "Most recent",
+  "home.projects": "Your projects",
+  "home.count": "{count} on this machine",
+  "home.more": "{count} more in the palette",
+  "home.projectsubtitle": "Research, decisions, outcomes",
+  "home.empty": "Begin with a source, a thought, or a thing.",
+  "home.languagehint": "Language is available inside each project as a shortcut.",
+
   // The plan
   "plan.title": "Plan",
   "plan.aria": "The plan: {sentence}",

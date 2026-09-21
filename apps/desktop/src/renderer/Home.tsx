@@ -3,19 +3,11 @@ import type { EconomySnapshot, ResumeCard, SystemInfo, Task, Today, TodayRow, Tr
 import { SUPPORT_GLYPHS, describeTrust, resumeText } from "@xeniur/core";
 import { ArrowRight, Globe2, Layers3, Plus, Workflow } from "lucide-react";
 import { BrandMark } from "./BrandMark.js";
+import { t } from "@xeniur/ui";
 import { FolderCard } from "./components/ui/folder-card.js";
 
 const ENTRIES = [{ key: "import", label: "Bring something in" }, { key: "continue", label: "Continue work" }, { key: "review", label: "Review changes" }] as const;
 export type HomeEntry = typeof ENTRIES[number]["key"];
-
-function EconomyBand({ value }: { value: EconomySnapshot | null }) {
-  const intelligence = value?.intelligence; const compute = value?.compute;
-  return <section className="xr-economy" aria-label="How XENIUR uses resources">
-    <div><small>01 / ON YOUR MACHINE</small><strong>Unlimited Local</strong><span>Scene compilation · graph work · Blender · FFmpeg</span></div>
-    <div><small>02 / LIGHT REASONING</small><strong>Included Intelligence</strong><span>{intelligence?.configured ? `${intelligence.rollingRemaining} rolling · ${intelligence.reserveRemaining} reserve` : "Cloud capacity not configured"}</span></div>
-    <div><small>03 / COSTLY CREATION</small><strong>Metered Generation</strong><span>{compute?.configured ? `${compute.balance} Compute available` : "Pricing and balance not configured"}</span></div>
-  </section>;
-}
 
 export function Home({ worlds, active, info, economy, today, trust, onOpen, onOpenSituation, onContinue, onStart, onCreate, onReject, onDismissArrival, onExplore, onWorkflows }: {
   worlds: World[]; active: Task[]; info: SystemInfo | null; economy: EconomySnapshot | null;
@@ -39,11 +31,14 @@ export function Home({ worlds, active, info, economy, today, trust, onOpen, onOp
   const parkedTaskId = (row: TodayRow) => row.id.startsWith("task:") ? row.id.slice(5) : null;
   const [starting, setStarting] = useState(false);
   const [outcome, setOutcome] = useState("");
-  void active;
+  void active; void economy;
+  // Projects, most recently opened first; six on Home, the rest one palette away.
+  const shown = worlds.filter((w) => w.summary !== "__xeniur_settings__");
+  const recent = [...shown].sort((a, b) => (b.lastOpenedAt ?? b.createdAt) - (a.lastOpenedAt ?? a.createdAt)).slice(0, 6);
   return <main className="xr-home xr-home--next">
     <nav className="xr-site-nav"><BrandMark /><p>The visual interface between humans<br />and digital capability.</p><div><button type="button" onClick={onExplore}><Globe2 size={15} /> Protected Web</button><button type="button" onClick={onWorkflows}><Layers3 size={15} /> Workflows</button></div></nav>
     <section className="xr-home-workbench" aria-labelledby="workbench-title">
-      <header className="xr-home-workbench__head"><div><small>Your visual workspace</small><h1 id="workbench-title">Pick up where you left off.</h1><p>What you were doing, what changed, and what you can accomplish next — from the record, not a summary.</p></div></header>
+      <header className="xr-home-workbench__head"><div><small>{t("home.eyebrow")}</small><h1 id="workbench-title">{t("home.title")}</h1><p>{t("home.lead")}</p></div></header>
 
       {/* Continue Work: the last active World, from durable state. Then the two ways to begin. */}
       <div className="xr-continue">
@@ -83,11 +78,9 @@ export function Home({ worlds, active, info, economy, today, trust, onOpen, onOp
           </article>
         </div>
       </div>
+      {/* Blockers first: what needs a person, from the record. Then the projects, most recent first. */}
       <div className="xr-home-workbench__grid">
-        <section className="xr-project-section"><header><div><small>Living work</small><h2>Your Worlds</h2></div><span>{worlds.length} on this machine</span></header>
-          <div className="xr-folder-grid">{worlds.filter((w) => w.summary !== "__xeniur_settings__").map((world, index) => <FolderCard key={world.id} index={index} title={world.title} subtitle={world.summary || "Research, decisions, outcomes"} count={world.emoji} countLabel="" trust={trust[world.id] ? <FolderTrust facts={trust[world.id]!} /> : null} onClick={() => onOpen(world.id)} />)}
-            {worlds.length === 0 && <button type="button" className="xr-empty-world" onClick={() => onCreate("import")}><b>+</b><span>Begin with a source, a thought, or a thing.</span></button>}</div></section>
-        <aside className="xr-today" aria-labelledby="today-title"><header><Workflow size={19} /><div><small>Needs you</small><h2 id="today-title">Today</h2></div><span className="xr-today__date xr-mono">{today?.date ?? ""}</span></header>
+        <aside className="xr-today" aria-labelledby="today-title"><header><Workflow size={19} /><div><small>{t("home.needsyou")}</small><h2 id="today-title">{t("home.today")}</h2></div><span className="xr-today__date xr-mono">{today?.date ?? ""}</span></header>
           {today === null ? <div className="xr-today__quiet"><p>Reading your Worlds…</p></div>
             : today.quiet ? <div className="xr-today__quiet"><strong>Nothing needs you.</strong><p>Open a World when you want to; nothing here is waiting.</p></div>
             : <ol className="xr-today__rows">{today.rows.map((row) => {
@@ -105,11 +98,13 @@ export function Home({ worlds, active, info, economy, today, trust, onOpen, onOp
               </li>;
             })}</ol>}
           {today && !today.quiet && <p className="xr-today__rest">{today.more > 0 ? `${today.more} more behind these, in the Worlds they belong to.` : "Nothing else needs you."}</p>}
-          <footer><span>Language is available inside each World as a shortcut.</span><kbd>⌘ K</kbd></footer>
+          <footer><span>{t("home.languagehint")}</span><kbd>⌘ K</kbd></footer>
         </aside>
+        <section className="xr-project-section"><header><div><small>{t("home.recent")}</small><h2>{t("home.projects")}</h2></div><span>{t("home.count", { count: shown.length })}{worlds.length > recent.length ? ` · ${t("home.more", { count: worlds.length - recent.length })}` : ""}</span></header>
+          <div className="xr-folder-grid">{recent.map((world, index) => <FolderCard key={world.id} index={index} title={world.title} subtitle={world.summary || t("home.projectsubtitle")} count={world.emoji} countLabel="" trust={trust[world.id] ? <FolderTrust facts={trust[world.id]!} /> : null} onClick={() => onOpen(world.id)} />)}
+            {shown.length === 0 && <button type="button" className="xr-empty-world" onClick={() => onCreate("import")}><b>+</b><span>{t("home.empty")}</span></button>}</div></section>
       </div>
     </section>
-    <EconomyBand value={economy} />
     <footer className="xr-home-footer"><span>MADE WITH JUDGMENT</span><h2>Shape meaning.<br />Keep the history.</h2><p>XENIUR records research, choices, manual work, revisions, and model-touched steps. It does not estimate unrecorded effort or claim originality.</p>{info?.brainIsMock && <small>Deterministic Brain / no model requests are being made</small>}</footer>
   </main>;
 }

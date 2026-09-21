@@ -251,7 +251,7 @@ export function App() {
     return <Models reason={view.reason} onBack={() => setView(view.back)} />;
   }
   if (view.kind === "availability") {
-    return <Availability onBack={() => setView(view.back)} onModels={() => setView({ kind: "models", reason: null, back: view.back })} />;
+    return <Availability economy={economy} onBack={() => setView(view.back)} onModels={() => setView({ kind: "models", reason: null, back: view.back })} />;
   }
 
   // Focus Mode replaces everything, deliberately: chrome that is merely hidden is chrome

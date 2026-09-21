@@ -100,8 +100,8 @@ main.xr-home.xr-home--next { max-width: 1480px; padding: 24px clamp(24px,4vw,64p
   grid-template-columns: minmax(0,1fr) auto;
   gap: 32px;
   align-items: end;
-  border-bottom: 2px solid var(--text);
-  padding-bottom: 28px;
+  border-bottom: 1px solid var(--line);
+  padding: var(--s-4) 0;
 }
 .xr-home-workbench__head small,.xr-home-workbench .xr-project-section small {
   color: var(--brand-lime);
@@ -110,18 +110,18 @@ main.xr-home.xr-home--next { max-width: 1480px; padding: 24px clamp(24px,4vw,64p
   text-transform: uppercase;
 }
 .xr-home-workbench__head h1 {
-  margin: 12px 0 14px;
-  font: 750 clamp(68px,9vw,128px)/.76 var(--font-display);
-  letter-spacing: -.07em;
-  text-transform: uppercase;
+  margin: 8px 0 6px;
+  font: 700 clamp(26px,3vw,40px)/1.05 var(--font-display);
+  letter-spacing: -.03em;
 }
-.xr-home-workbench__head p { margin: 0; color: var(--dim); font-size: 17px; }
-.xr-home-workbench__grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(300px,360px); gap: clamp(28px,4vw,60px); align-items: start; }
-.xr-home-workbench .xr-project-section { padding: 42px 0 0; min-width: 0; }
+.xr-home-workbench__head p { margin: 0; color: var(--dim); font-size: 14px; max-width: 70ch; }
+.xr-home-workbench__grid { display: grid; grid-template-columns: minmax(0,1fr); gap: clamp(20px,3vw,40px); align-items: start; }
+.xr-home-workbench .xr-project-section { padding: 0; min-width: 0; }
+.xr-home-workbench .xr-today { max-width: 880px; }
 .xr-home-workbench .xr-project-section>header { display: flex; justify-content: space-between; align-items: end; gap: 20px; border: 0; padding: 0 0 20px; }
 .xr-home-workbench .xr-project-section h2 { font-size: clamp(34px,4vw,56px); }
 .xr-home-workbench .xr-project-section>header>span { color: var(--faint); font: 10px var(--font-mono); white-space: nowrap; }
-.xr-home-workbench .xr-folder-grid { grid-template-columns: repeat(2,minmax(0,1fr)); padding-top: 0; }
+.xr-home-workbench .xr-folder-grid { grid-template-columns: repeat(3,minmax(0,1fr)); padding-top: 0; }
 .xr-home-workbench .xr-folder { min-height: 390px; }
 .xr-text-action {
   color: var(--text);
@@ -250,7 +250,7 @@ main.xr-home.xr-home--next { max-width: 1480px; padding: 24px clamp(24px,4vw,64p
   grid-template-columns: repeat(3,1fr);
   border: 2px solid var(--text);
   box-shadow: 8px 8px 0 var(--brand-lime);
-  margin: 0 8px 108px 0;
+  margin: var(--s-4) 8px var(--s-6) 0;
 }
 .xr-economy div { min-height: 170px; padding: 24px; display: flex; flex-direction: column; border-inline-end: 1px solid var(--text); }
 .xr-economy div:last-child { border: 0; }
@@ -497,7 +497,7 @@ main.xr-home.xr-home--next { max-width: 1480px; padding: 24px clamp(24px,4vw,64p
 @media(max-width:1050px){.xr-folder-grid,.xr-workflow-grid{grid-template-columns:repeat(2,1fr)}.xr-economy{grid-template-columns:1fr}.xr-economy div{border-inline-end:0;border-bottom:1px solid var(--text);min-height:120px}.xr-site-nav{grid-template-columns:1fr auto}.xr-site-nav p{display:none}}
 @media(max-width:760px){body{min-width:320px}.xr-home--next,.xr-web,.xr-library{padding-inline-start:18px;padding-inline-end:18px}.xr-site-nav{grid-template-columns:1fr}.xr-site-nav>div{display:none}.xr-folder-grid,.xr-workflow-grid{grid-template-columns:1fr}.xr-web>header,.xr-library>header{grid-template-columns:1fr}.xr-web__controls{grid-template-columns:1fr}.xr-web__address{height:54px}.xr-web__stage{grid-template-columns:1fr}.xr-web__stage>aside{border-inline-end:0;border-bottom:1px solid var(--line)}.xr-web__stage label{margin-top:25px}.xr-process-share__events{grid-template-columns:1fr}.xr-home-footer{grid-template-columns:1fr}.xr-home-footer h2{font-size:66px}.xr-home-footer p{grid-row:3}.xr-compute-review dl div{grid-template-columns:1fr}}
 @media(max-width:1050px){.xr-home-workbench__grid{grid-template-columns:1fr}.xr-home-workbench .xr-folder-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:760px){.xr-home-workbench__head{grid-template-columns:1fr}.xr-home-workbench__head h1{font-size:68px}.xr-home-workbench .xr-folder-grid{grid-template-columns:1fr}.xr-home-workbench .xr-folder{min-height:370px}}
+@media(max-width:760px){.xr-home-workbench__head{grid-template-columns:1fr}.xr-home-workbench__head h1{font-size:26px}.xr-home-workbench .xr-folder-grid{grid-template-columns:1fr}.xr-home-workbench .xr-folder{min-height:370px}}
 @media (hover:hover) and (pointer:fine){.xr-workflow-card:hover{background:var(--surface)}.xr-folder:hover .xr-folder__panel{border-color:var(--brand-lime)}}
 /* Later legacy rules style the older attention panel; keep the new editorial scale. */
 * { box-sizing: border-box; }
