@@ -235,6 +235,18 @@ describe("the next human question", () => {
     expect(new Set([exploring.layoutId, conflicted.layoutId, making.layoutId, finishing.layoutId]).size).toBe(4);
   });
 
+  /* M6 Part C — the step the person is on says what they are doing more precisely than the status. */
+  it("the current plan step names the question ahead of the status; the focus and a zone still win", () => {
+    const step = (kind: string) => ({ outcome: "Ship it", status: "exploring", currentStep: { id: "t.x", kind, purpose: "x" } });
+    expect(compileSituation(situation({ goal: step("decide"), meaning: undefined, interaction: undefined })).need).toBe("decide");
+    expect(compileSituation(situation({ goal: step("make"), meaning: undefined, interaction: undefined })).need).toBe("make");
+    expect(compileSituation(situation({ goal: step("deliver"), meaning: undefined, interaction: undefined })).need).toBe("finish");
+    expect(compileSituation(situation({ goal: step("understand"), meaning: undefined, interaction: undefined, knowledge: k({ disputed: 1 }) })).need).toBe("understand_conflict");
+    expect(compileSituation(situation({ goal: step("check"), meaning: undefined, interaction: undefined })).need).toBe("finish");
+    // A decision in the centre is still a decision, whatever the step.
+    expect(compileSituation(situation({ goal: step("gather"), meaning: undefined, interaction: undefined, choices: [{ id: "a", label: "A" }, { id: "b", label: "B" }] })).need).toBe("decide");
+  });
+
   it("the zone the person clicked still wins over the need's defaults", () => {
     const p = compileSituation(situation({ goal: goal("making"), meaning: "cost", interaction: "adjust" }));
     expect(p.need).toBe("make");

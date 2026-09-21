@@ -1,4 +1,4 @@
-import type { GoalStatus, SceneComponentName } from "@xeniur/core";
+import type { GoalStatus, SceneComponentName, StepKind } from "@xeniur/core";
 import type { Interaction, Meaning } from "./dimensions.js";
 
 /**
@@ -28,6 +28,8 @@ export const NEED_WORDS: Record<Need, string> = {
 export interface KnowledgeCounts { known: number; proposed: number; disputed: number; unknown: number; chosenDespite: number }
 
 export interface NeedInput {
+  /** The plan step the person is on. Its kind is the question; the status is the fallback. */
+  step?: StepKind | undefined;
   status?: GoalStatus | undefined;
   goalKind: string;
   focusKind: "object" | "decision" | "constraints";
@@ -39,6 +41,18 @@ export interface NeedInput {
 export function needFor(input: NeedInput): Need {
   const k = input.knowledge;
   if (input.focusKind === "decision" || input.hasChoices) return "decide";
+  // A step the person adopted says what they are doing more precisely than the status does.
+  switch (input.step) {
+    case "gather": return "know_more";
+    case "understand": return k && k.disputed > 0 ? "understand_conflict" : "know_more";
+    case "compare":
+    case "decide": return "decide";
+    case "make": return "make";
+    case "check": return input.changes > 0 ? "see_change" : "finish";
+    case "deliver":
+    case "act": return "finish";
+    case undefined: break;
+  }
   switch (input.status) {
     case "finished":
     case "ready": return "finish";

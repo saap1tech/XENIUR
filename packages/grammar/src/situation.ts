@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ConstraintRecordSchema, GoalStatusSchema, SemanticTraitsSchema, UuidSchema, goalKindFor, type GoalStatus } from "@xeniur/core";
+import { ConstraintRecordSchema, GoalStatusSchema, SemanticTraitsSchema, StepKindSchema, UuidSchema, goalKindFor, type GoalStatus } from "@xeniur/core";
 import { InteractionSchema, MeaningSchema, TaskStateSchema } from "./dimensions.js";
 import { DisclosureLayerSchema } from "./density.js";
 
@@ -37,6 +37,8 @@ export const GoalSchema = z.preprocess((raw) => {
   requiredOutputs: z.array(z.string().min(1)).default([]),
   openQuestions: z.array(UuidSchema).default([]),
   nextActions: z.array(z.object({ id: z.string().min(1), text: z.string().min(1), objectId: UuidSchema.nullable().default(null) }).strict()).default([]),
+  /** The plan step the person is on, when a plan exists. Its kind names the next human question. */
+  currentStep: z.object({ id: z.string().min(1), kind: StepKindSchema, purpose: z.string().min(1) }).strict().optional(),
 }).strict());
 export type Goal = z.infer<typeof GoalSchema>;
 

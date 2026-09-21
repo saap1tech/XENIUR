@@ -131,6 +131,7 @@ export function compileSituation(situationInput: Situation): SemanticPlan {
     : situationInput.objects;
   // Which question the person is at. The zone's meaning/interaction, when given, still win.
   const need: Need = situationInput.need ?? needFor({
+    step: situationInput.goal.currentStep?.kind,
     status: situationInput.goal.status, goalKind: situationInput.goal.kind, focusKind: situationInput.focus.kind,
     knowledge: situationInput.knowledge, changes: situationInput.changes.length, hasChoices: situationInput.choices.length > 0,
   });

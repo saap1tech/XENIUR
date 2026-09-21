@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ConstraintRecord, DecisionDetail, FrictionState, ImpactReport, Lane, ObjectState, ProcessProof,
-  CandidateRecord, ChallengeRecord, EntryRecord, EnvelopeSheet, GoalStatus, JudgingSheetData, ModeEnvelopeInput, ModeRecord, PackageInspectionView, Representation, Scene, Standing, SupportMap, Task,
+  CandidateRecord, ChallengeRecord, EntryRecord, EnvelopeSheet, GoalStatus, JudgingSheetData, ModeEnvelopeInput, ModeRecord, PackageInspectionView, Representation, Scene, Standing, StepWork, SupportMap, Task, WorkPlan,
   ThinkingMap, TrailRow, TrustFacts, WorkGoal, WorldSnapshot,
 } from "@xeniur/core";
 import { SceneRenderer, presentBindings, t, type SceneBindings } from "@xeniur/ui";
@@ -9,7 +9,7 @@ import {
   NEED_WORDS, SituationSchema, compileSituation, layoutScene, proposalsFor,
   type GestureProposal,
 } from "@xeniur/grammar";
-import { GOAL_STATUSES, GOAL_STATUS_WORDS, planDigest } from "@xeniur/core";
+import { GOAL_STATUSES, GOAL_STATUS_WORDS, currentStepOf, planDigest } from "@xeniur/core";
 import { BrandMark } from "./BrandMark.js";
 import { Arrival } from "./Arrival.js";
 import { Ask } from "./Ask.js";
@@ -52,6 +52,8 @@ export interface WorldProps {
   onImported?(result: { objectId: string; worldId: string }): void;
   /** The goal as already known (a host or a test); undefined means read it from the bridge. */
   initialGoal?: WorkGoal | null;
+  /** The plan and its work as already known (a test); undefined means read them from the bridge. */
+  initialPlan?: { plan: WorkPlan; work: StepWork[] } | null;
   /** A request resolved to a remote model and no key exists: the host offers Your models. */
   onNeedsKey?(reason: string): void;
 }
@@ -70,7 +72,7 @@ export interface WorldProps {
  */
 export function World({
   snapshot, tasks, busy, initialSelection = null, initialZone = "work",
-  onBack, onOpenObject, onSubmit, onApprove, onReject, onImported, initialGoal, onNeedsKey,
+  onBack, onOpenObject, onSubmit, onApprove, onReject, onImported, initialGoal, initialPlan, onNeedsKey,
 }: WorldProps) {
   const [zone, setZone] = useState<Zone>(initialZone);
   const [showKeys, setShowKeys] = useState(false);
@@ -152,13 +154,24 @@ export function World({
   }, [bridge, worldId]);
 
   // The goal — what the person is trying to accomplish — and the Objects it is about.
+  // The plan: a versioned proposal of steps, and the work recorded against them, read apart.
+  const [plan, setPlan] = useState<WorkPlan | null>(initialPlan?.plan ?? null);
+  const [work, setWork] = useState<StepWork[]>(initialPlan?.work ?? []);
+  const refreshPlan = useCallback(async (goalId: string) => {
+    if (!bridge?.plans) return;
+    // A goal without a plan gets one proposed from its own words — every step proposed, none adopted.
+    setPlan((await bridge.plans.current(goalId)) ?? (await bridge.plans.propose(goalId)));
+    setWork((await bridge.plans.work(goalId)) ?? []);
+  }, [bridge]);
   const refreshGoal = useCallback(async () => {
     if (!bridge?.goals) return;                       // a static render keeps what it was given
     const g = (await bridge.goals.current(worldId)) ?? null;
     setGoal(g);
     setRelevant(g ? (await bridge.goals.relevant(g.id)) ?? [] : null);
-  }, [bridge, worldId]);
+    if (g) await refreshPlan(g.id); else { setPlan(null); setWork([]); }
+  }, [bridge, worldId, refreshPlan]);
   useEffect(() => { void refreshGoal(); }, [refreshGoal]);
+  const currentStep = useMemo(() => plan ? currentStepOf(plan, work) : null, [plan, work]);
   const refreshStanding = useCallback(async () => {
     if (!goal || !bridge?.goals) return;
     setStanding((await bridge.goals.standing(goal.id)) ?? null);
@@ -567,6 +580,7 @@ export function World({
         ? { id: goal.id, outcome: goal.outcome, status: goal.status, requiredOutputs: goal.requiredOutputs,
             openQuestions: goal.openQuestionIds,
             nextActions: goal.nextActions.filter((a) => !a.doneAt).map((a) => ({ id: a.id, text: a.text, objectId: a.objectId })),
+            ...(currentStep ? { currentStep: { id: currentStep.id, kind: currentStep.kind, purpose: currentStep.purpose } } : {}),
             description: goal.outcome, ...(zone === "deliveries" ? { deliverableId: selected.object.id } : {}) }
         : { kind: intent.goal, description: `${intent.goal} ${selected.properties.title}`,
             ...(zone === "deliveries" ? { deliverableId: selected.object.id } : {}) },
@@ -593,7 +607,7 @@ export function World({
       root.children.push({ id: "support-map", component: "SupportMap", objectId: selected.object.id, lanes: [], disclosure: intent.layer } as never);
     }
     return compiled;
-  }, [zone, zoneChosen, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints, challenge, supportMap, goal, relevant, showStanding, standing, density, sealSheet, sealMode, judgeEntry, judgingSheet]);
+  }, [zone, zoneChosen, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints, challenge, supportMap, goal, relevant, showStanding, standing, density, sealSheet, sealMode, judgeEntry, judgingSheet, currentStep]);
 
   const inspector: Scene | null = useMemo(() => selected ? {
     worldId, title: "", reason: "",

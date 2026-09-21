@@ -163,6 +163,20 @@ contextBridge.exposeInMainWorld("xeniur", {
     results: (worldId: string) => call("judging:results", { id: worldId }),
     exportResults: (worldId: string) => call("judging:exportResults", { id: worldId }),
   },
+  plans: {
+    current: (goalId: string) => call("plans:current", { id: goalId }),
+    propose: (goalId: string) => call("plans:propose", { id: goalId }),
+    adoptAll: (goalId: string) => call("plans:adoptAll", { id: goalId }),
+    setDisposition: (goalId: string, stepId: string, disposition: string) => call("plans:setDisposition", { goalId, stepId, disposition }),
+    edit: (goalId: string, stepId: string, patch: Record<string, unknown>) => call("plans:edit", { goalId, stepId, ...patch }),
+    reorder: (goalId: string, order: string[]) => call("plans:reorder", { goalId, order }),
+    addStep: (goalId: string, input: Record<string, unknown>) => call("plans:addStep", { goalId, ...input }),
+    replaceStep: (goalId: string, stepId: string, input: Record<string, unknown>) => call("plans:replaceStep", { goalId, stepId, ...input }),
+    setInputs: (goalId: string, stepId: string, objectIds: string[]) => call("plans:setInputs", { goalId, stepId, objectIds }),
+    setExecution: (goalId: string, stepId: string, execution: string, note?: string) => call("plans:setExecution", { goalId, stepId, execution, ...(note !== undefined ? { note } : {}) }),
+    attachEvidence: (goalId: string, stepId: string, evidence: Record<string, unknown>) => call("plans:attachEvidence", { goalId, stepId, evidence }),
+    work: (goalId: string) => call("plans:work", { id: goalId }),
+  },
   seal: {
     active: () => call("seal:active"),
     beat: (modeId: string, focusObjectId: string | null, versionId: string | null) => call("seal:beat", { modeId, focusObjectId, versionId }),
@@ -218,6 +232,7 @@ contextBridge.exposeInMainWorld("xeniur", {
       call("goals:create", { worldId, outcome, focusObjectId: focusObjectId ?? null }),
     setStatus: (goalId: string, status: string) => call("goals:setStatus", { id: goalId, status }),
     finish: (goalId: string, anyway?: { because: string }) => call("goals:finish", { id: goalId, ...(anyway ? { anyway } : {}) }),
+    setRequiredOutputs: (goalId: string, outputs: string[]) => call("goals:setRequiredOutputs", { id: goalId, outputs }),
     setOutcome: (goalId: string, outcome: string) => call("goals:setOutcome", { id: goalId, outcome }),
     setFocus: (goalId: string, objectId: string | null) => call("goals:setFocus", { id: goalId, objectId }),
     addNextAction: (goalId: string, text: string, objectId?: string | null) =>

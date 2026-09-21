@@ -11,6 +11,7 @@ import type { ChallengeRecord, ChallengeRulesInput, EntryRecord } from "./challe
 import type { TrailRow } from "./trail.js";
 import type { Today } from "./today.js";
 import type { FinishResult, GoalStatus, WorkGoal } from "./goal.js";
+import type { StepDisposition, StepEvidence, StepExecution, StepKind, StepWork, WorkPlan } from "./plan.js";
 import type { Standing } from "./standing.js";
 import type { SupportMap } from "./support-map.js";
 import type { CandidateRecord, ClaimSupport, SupportStatus } from "./sensemaking.js";
@@ -239,6 +240,8 @@ export interface XeniurBridge {
     setStatus(goalId: string, status: Exclude<GoalStatus, "finished">): Promise<WorkGoal | null>;
     /** Runs the completion check. Refused with what is missing; finishing anyway records a Decision. */
     finish(goalId: string, anyway?: { because: string }): Promise<FinishResult>;
+    /** What the work must produce. Changing it marks plan steps that pinned an older version for review. */
+    setRequiredOutputs(goalId: string, outputs: string[]): Promise<WorkGoal | null>;
     setOutcome(goalId: string, outcome: string): Promise<WorkGoal | null>;
     setFocus(goalId: string, objectId: string | null): Promise<WorkGoal | null>;
     addNextAction(goalId: string, text: string, objectId?: string | null): Promise<WorkGoal | null>;
@@ -307,6 +310,23 @@ export interface XeniurBridge {
     publishResults(worldId: string, placings: Placing[], note: string): Promise<SignedDocument<Results>>;
     results(worldId: string): Promise<SignedDocument<Results> | null>;
     exportResults(worldId: string): Promise<{ path: string }>;
+  };
+  /* The plan — a versioned proposal of steps, and the work recorded against them, apart */
+  plans?: {
+    current(goalId: string): Promise<WorkPlan | null>;
+    /** A first plan from the goal's words, by template. Every step proposed, none adopted. */
+    propose(goalId: string): Promise<WorkPlan>;
+    adoptAll(goalId: string): Promise<WorkPlan>;
+    setDisposition(goalId: string, stepId: string, disposition: StepDisposition): Promise<WorkPlan>;
+    edit(goalId: string, stepId: string, patch: { purpose?: string; expectedResult?: string; kind?: StepKind }): Promise<WorkPlan>;
+    reorder(goalId: string, order: string[]): Promise<WorkPlan>;
+    addStep(goalId: string, input: { kind: StepKind; purpose: string; expectedResult?: string; after?: string | null }): Promise<WorkPlan>;
+    replaceStep(goalId: string, stepId: string, input: { kind: StepKind; purpose: string; expectedResult?: string }): Promise<WorkPlan>;
+    setInputs(goalId: string, stepId: string, objectIds: string[]): Promise<WorkPlan>;
+    /** Complete is refused in words when the step's rule does not hold in the graph. */
+    setExecution(goalId: string, stepId: string, execution: StepExecution, note?: string): Promise<{ work: StepWork | null; refused: string | null }>;
+    attachEvidence(goalId: string, stepId: string, evidence: StepEvidence): Promise<StepWork>;
+    work(goalId: string): Promise<StepWork[]>;
   };
   /* The Sealed Session — heartbeats while it runs, facts read from them */
   seal?: {

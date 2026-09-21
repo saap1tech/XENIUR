@@ -4,12 +4,12 @@ import { join } from "node:path";
 import { extractCandidates } from "@xeniur/sensemaking";
 import { z } from "zod";
 import { ChallengeRulesSchema, ExitReasonSchema, GoalStatusSchema, ModeEnvelopeSchema, ModeKindSchema, OutreachEnvelopeSchema, PublisherRefSchema, ReportReasonSchema, TrustLevelSchema, authorizeFor, campaignPlan, campaignScope, describeEnvelope, describeRecipients, needsCampaign, planDigest, sha256Hex, UuidSchema, type ActionPlan, type FinishResult, type IntentResult, type WorldSnapshot } from "@xeniur/core";
-import { NotFinishable, connectionsFor, contextMaterialFor, finishGoal, standingFor, importPackage, inspectPackage, outcomeOf, renderAuditPage, renderProofPage, supportMapFor, todayFor, trustFactsFor, trustFactsForWorld } from "@xeniur/graph";
+import { NotComplete, NotFinishable, connectionsFor, contextMaterialFor, finishGoal, standingFor, importPackage, inspectPackage, outcomeOf, renderAuditPage, renderProofPage, supportMapFor, todayFor, trustFactsFor, trustFactsForWorld } from "@xeniur/graph";
 import { compileContext } from "@xeniur/grammar";
 import { policyFrom } from "@xeniur/models";
 import { proposeFromBound } from "@xeniur/sensemaking";
 import { SupportStatusSchema, type Tool, type PlanShape } from "@xeniur/core";
-import { CriterionMarkSchema, PlacingSchema, SignedDocumentEnvelopeSchema } from "@xeniur/core";
+import { CriterionMarkSchema, PlacingSchema, SignedDocumentEnvelopeSchema, StepDispositionSchema, StepEvidenceSchema, StepExecutionSchema, StepKindSchema, type StepWork } from "@xeniur/core";
 import { policyConstraints } from "./services.js";
 import { BrainIntentSchema, InvalidPlanError, bindProposal, resolveAsk, type BrainIntent } from "@xeniur/brain";
 import { planForProposal, proposalsFor } from "@xeniur/grammar";
@@ -157,6 +157,19 @@ const SCHEMAS = {
   "goals:addNextAction": z.object({ id: UuidSchema, text: z.string().min(1).max(200), objectId: UuidSchema.nullable() }),
   "goals:doneNextAction": z.object({ id: UuidSchema, actionId: z.string().min(1) }),
   "goals:relevant": Uuid,
+  "goals:setRequiredOutputs": z.object({ id: UuidSchema, outputs: z.array(z.string().min(1)).max(12) }),
+  "plans:current": Uuid,
+  "plans:propose": Uuid,
+  "plans:adoptAll": Uuid,
+  "plans:setDisposition": z.object({ goalId: UuidSchema, stepId: z.string().min(1), disposition: StepDispositionSchema }),
+  "plans:edit": z.object({ goalId: UuidSchema, stepId: z.string().min(1), purpose: z.string().min(1).max(200).optional(), expectedResult: z.string().max(300).optional(), kind: StepKindSchema.optional() }),
+  "plans:reorder": z.object({ goalId: UuidSchema, order: z.array(z.string().min(1)).max(24) }),
+  "plans:addStep": z.object({ goalId: UuidSchema, kind: StepKindSchema, purpose: z.string().min(1).max(200), expectedResult: z.string().max(300).optional(), after: z.string().nullable().optional() }),
+  "plans:replaceStep": z.object({ goalId: UuidSchema, stepId: z.string().min(1), kind: StepKindSchema, purpose: z.string().min(1).max(200), expectedResult: z.string().max(300).optional() }),
+  "plans:setInputs": z.object({ goalId: UuidSchema, stepId: z.string().min(1), objectIds: z.array(UuidSchema).max(24) }),
+  "plans:setExecution": z.object({ goalId: UuidSchema, stepId: z.string().min(1), execution: StepExecutionSchema, note: z.string().max(1000).optional() }),
+  "plans:attachEvidence": z.object({ goalId: UuidSchema, stepId: z.string().min(1), evidence: StepEvidenceSchema }),
+  "plans:work": Uuid,
   "goals:standing": Uuid,
   "today:get": z.undefined(),
   "trust:facts": Uuid,
@@ -643,6 +656,28 @@ export function registerIpc(services: Services): void {
     "goals:addNextAction": ({ id, text, objectId }) => services.graph.goals.addNextAction(id, { text, objectId }),
     "goals:doneNextAction": ({ id, actionId }) => services.graph.goals.doneNextAction(id, actionId),
     "goals:relevant": ({ id }) => services.graph.goals.relevantObjects(id),
+    "goals:setRequiredOutputs": ({ id, outputs }) => {
+      const goal = services.graph.goals.setRequiredOutputs(id, outputs);
+      // A requirement changed under the plan: steps that pinned an older version need review.
+      for (const output of outputs) if (services.graph.getObject(output)) services.graph.plans.onRequirementChanged(id, output);
+      return goal;
+    },
+    "plans:current": ({ id }) => services.graph.plans.current(id),
+    "plans:propose": ({ id }) => services.graph.plans.propose(id),
+    "plans:adoptAll": ({ id }) => services.graph.plans.adoptAll(id),
+    "plans:setDisposition": ({ goalId, stepId, disposition }) => services.graph.plans.setDisposition(goalId, stepId, disposition),
+    "plans:edit": ({ goalId, stepId, ...patch }) => services.graph.plans.edit(goalId, stepId, patch),
+    "plans:reorder": ({ goalId, order }) => services.graph.plans.reorder(goalId, order),
+    "plans:addStep": ({ goalId, ...input }) => services.graph.plans.addStep(goalId, input),
+    "plans:replaceStep": ({ goalId, stepId, ...input }) => services.graph.plans.replaceStep(goalId, stepId, input),
+    "plans:setInputs": ({ goalId, stepId, objectIds }) => services.graph.plans.setInputs(goalId, stepId, objectIds),
+    "plans:setExecution": ({ goalId, stepId, execution, note }): { work: StepWork | null; refused: string | null } => {
+      // Complete is refused in words when the rule does not hold; the screen shows the words.
+      try { return { work: services.graph.plans.setExecution(goalId, stepId, execution, note !== undefined ? { note } : {}), refused: null }; }
+      catch (cause) { if (cause instanceof NotComplete) return { work: services.graph.plans.workOf(goalId, stepId), refused: cause.message }; throw cause; }
+    },
+    "plans:attachEvidence": ({ goalId, stepId, evidence }) => services.graph.plans.attachEvidence(goalId, stepId, evidence),
+    "plans:work": ({ id }) => services.graph.plans.work(id),
     "goals:standing": ({ id }) => standingFor(services.graph, id),
     "today:get": () => todayFor(services.graph, { rhythm: services.rhythm }),
     "trust:world": ({ id }) => trustFactsForWorld(services.graph, id),
