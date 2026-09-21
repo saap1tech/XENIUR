@@ -1191,6 +1191,38 @@ CREATE TABLE challenge_results (
 );
 `;
 
+/**
+ * Migration 27 — guided plans.
+ *
+ * A plan is a versioned proposal of steps; every revision is a new immutable row and the old
+ * one points at it. Work state is keyed by (goal, step id) and lives apart from any revision,
+ * so editing the plan cannot write work and recording work cannot edit the plan.
+ */
+const GUIDED_PLANS = `
+CREATE TABLE work_plans (
+  id            TEXT PRIMARY KEY,
+  goal_id       TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+  world_id      TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+  revision      INTEGER NOT NULL,
+  origin        TEXT NOT NULL,                  -- template | person
+  steps         TEXT NOT NULL,                  -- JSON PlanStep[]
+  created_at    INTEGER NOT NULL,
+  superseded_by TEXT REFERENCES work_plans(id) ON DELETE SET NULL,
+  UNIQUE(goal_id, revision)
+);
+CREATE INDEX idx_work_plans_goal ON work_plans(goal_id, revision);
+
+CREATE TABLE step_work (
+  goal_id    TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+  step_id    TEXT NOT NULL,
+  execution  TEXT NOT NULL DEFAULT 'not_started',
+  evidence   TEXT NOT NULL DEFAULT '[]',        -- JSON StepEvidence[]
+  note       TEXT NOT NULL DEFAULT '',
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (goal_id, step_id)
+);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: INIT },
   { version: 2, name: "object_model", sql: OBJECT_MODEL },
@@ -1218,4 +1250,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 24, name: "context_envelopes", sql: CONTEXT_ENVELOPES },
   { version: 25, name: "seal", sql: SEAL },
   { version: 26, name: "judging", sql: JUDGING },
+  { version: 27, name: "guided_plans", sql: GUIDED_PLANS },
 ];
