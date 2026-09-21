@@ -1,6 +1,7 @@
 import type {
-  Atom, DecisionDetail, ObjectState, Representation, Standing, ThinkingMap, TrustFacts, WorkGoal, WorldSnapshot, XeniurBridge,
+  Atom, DecisionDetail, ObjectState, Representation, Standing, StepWork, ThinkingMap, TrustFacts, WorkGoal, WorkPlan, WorldSnapshot, XeniurBridge,
 } from "@xeniur/core";
+import { PlanStepSchema, templatePlanFor } from "@xeniur/core";
 
 /**
  * A realistic World for looking at the Studio without Electron: the Rainwear 2027 fixture —
@@ -79,6 +80,17 @@ export const sampleGoal: WorkGoal = {
     { id: "n2", text: "Pull Q1 returns by failure mode", objectId: null, tool: null, origin: "accepted_proposal", doneAt: null }],
   createdAt: now - 20 * DAY, updatedAt: now - 3 * DAY, lastActiveAt: now - 3 * DAY,
 };
+/** The plan for the sample goal — from the template, with one step adopted and worked on, one proposed. */
+export const samplePlan: WorkPlan = {
+  id: "99999999-9999-4999-8999-999999999999", goalId: ids.goal, worldId: W, revision: 2, origin: "person", createdAt: now - 19 * DAY, supersededBy: null,
+  steps: templatePlanFor({ outcome: sampleGoal.outcome, requiredOutputs: sampleGoal.requiredOutputs }).steps.map((s, i) =>
+    PlanStepSchema.parse({ ...s, disposition: i < 4 ? "adopted" : "proposed" })),
+};
+export const sampleWork: StepWork[] = [
+  { goalId: ids.goal, stepId: "t.gather", execution: "complete", evidence: [{ kind: "note", id: "n-1", at: now - 10 * DAY, by: "person" }], note: "both studies and the returns are in", updatedAt: now - 10 * DAY },
+  { goalId: ids.goal, stepId: "t.compare", execution: "needs_review", evidence: [{ kind: "source_version", id: "sv-1", at: now - 6 * DAY, by: "person" }], note: "Client requirement changed after this step was worked on.", updatedAt: now - 3 * DAY },
+  { goalId: ids.goal, stepId: "t.decide", execution: "in_progress", evidence: [], note: "", updatedAt: now - 2 * DAY },
+];
 export const sampleStanding: Standing = {
   goal: sampleGoal, worldId: W, worldTitle: "Rainwear 2027", focus: { id: ids.jacket, title: "Cold-weather shell" },
   knowledge: { known: [{ id: ids.claim1, title: sampleStates[2]!.properties.title }], proposed: [{ id: ids.claim2, title: sampleStates[3]!.properties.title }],
@@ -113,6 +125,10 @@ export function sampleBridge(opts: { firstRun?: boolean } = {}): XeniurBridge {
     brain: { trail: async () => [], resolve: async (u: string) => ({ intent: null, objects: [], interpretation: `I did not read "${u}"`, by: "unresolved", nearest: [] }) },
     goals: { current: async () => sampleGoal, relevant: async () => [ids.jacket, ids.decision, ids.claim1, ids.pattern, ids.question, ids.claim3], standing: async () => sampleStanding,
       setFocus: async () => sampleGoal, setStatus: async () => sampleGoal, setOutcome: async () => sampleGoal, create: async () => sampleGoal, addNextAction: async () => sampleGoal, doneNextAction: async () => sampleGoal },
+    plans: { current: async () => samplePlan, propose: async () => samplePlan, adoptAll: async () => samplePlan, setDisposition: async () => samplePlan, edit: async () => samplePlan,
+      reorder: async () => samplePlan, addStep: async () => samplePlan, replaceStep: async () => samplePlan, setInputs: async () => samplePlan,
+      setExecution: async () => ({ work: null, refused: '"Compare the options against what matters" is not complete: it needs a claim reviewed by a person against its source.' }),
+      attachEvidence: async () => sampleWork[0]!, work: async () => sampleWork },
     metrics: { record: noop }, publishers: { self: async () => ({ publicKey: "P".repeat(43), displayName: "You" }) },
     tasks: { active: async () => [], approve: noop, reject: noop, onEvent: () => () => undefined },
     economy: { snapshot: async () => ({ local: { metered: false, label: "Unlimited Local" }, intelligence: { configured: false, rollingRemaining: 0, rollingLimit: 0, reserveRemaining: 0, reserveLimit: 0, resetsAt: now }, compute: { configured: false, balance: 0, usdPerCompute: 0, held: 0 } }), cancel: noop },

@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { InputRole, WorkGoal, WorldSnapshot } from "@xeniur/core";
+import type { InputRole, StepWork, WorkGoal, WorkPlan, WorldSnapshot } from "@xeniur/core";
 import { ObjectGraph } from "@xeniur/graph";
 import { PermissionBroker } from "@xeniur/permissions";
 import { loadProvidersConfig, type ProviderEnv } from "@xeniur/providers";
@@ -225,5 +225,47 @@ describe("the Studio", () => {
 
   it("does not fill quiet: no empty constraint strip", () => {
     expect(html()).not.toContain("No constraints are attached yet");
+  });
+});
+
+/* M6 Part C — the guided shell: the plan in the rail, the step in the dock, the centre untouched. */
+describe("the guided shell", () => {
+  const GOAL = "77777777-7777-4777-8777-777777777777";
+  const goal = (): WorkGoal => ({ id: GOAL, worldId: snapshot.world.id, outcome: "Ship the rocket", status: "making",
+    focusObjectId: snapshot.states[0]!.object.id, requiredOutputs: [], openQuestionIds: [],
+    nextActions: [{ id: "n1", text: "Ask the printer for a quote", objectId: null, tool: null, origin: "person", doneAt: null }], createdAt: 1, updatedAt: 1, lastActiveAt: 1 });
+  const plan = (): WorkPlan => ({ id: "88888888-8888-4888-8888-888888888888", goalId: GOAL, worldId: snapshot.world.id, revision: 1, origin: "template", createdAt: 1, supersededBy: null,
+    steps: [
+      { id: "t.gather", kind: "gather", purpose: "Bring in what there is to know", inputs: [], expectedResult: "", completionRule: { kind: "person_confirms" }, dependsOn: [], disposition: "adopted" },
+      { id: "t.make", kind: "make", purpose: "Make the thing", inputs: [], expectedResult: "The artifact exists in its current form", completionRule: { kind: "person_confirms" }, dependsOn: ["t.gather"], disposition: "adopted" },
+      { id: "t.check", kind: "check", purpose: "Check it", inputs: [], expectedResult: "", completionRule: { kind: "person_confirms" }, dependsOn: ["t.make"], disposition: "skipped" },
+    ] });
+  const work: StepWork[] = [{ goalId: GOAL, stepId: "t.gather", execution: "complete", evidence: [], note: "in", updatedAt: 1 }];
+  const html = () => renderToStaticMarkup(
+    <World snapshot={snapshot} tasks={[]} busy={false} initialSelection={snapshot.states[0]!.object.id} initialGoal={goal()} initialPlan={{ plan: plan(), work }}
+      onBack={() => {}} onOpenObject={() => {}} onSubmit={() => {}} onApprove={() => {}} onReject={() => {}} />,
+  );
+
+  it("the rail is the plan, with Material one click away; the zones are still there behind it", () => {
+    const out = html();
+    expect(out).toContain("xr-plan");
+    expect(out).toContain("Bring in what there is to know");
+    expect(out).toContain(">Material<");
+    expect(out).not.toContain(">Sources<");                                  // behind the toggle, not gone
+  });
+
+  it("the header counts the record, excluding skipped; the dock names the current step and the next action", () => {
+    const out = html();
+    expect(out).toContain("1 of 2 complete · 1 skipped");
+    expect(out).toContain("xr-dock");
+    expect(out).toContain("Make the thing");
+    expect(out).toContain("Ask the printer for a quote");
+  });
+
+  it("the centre still shows the artifact: a plan in the rail does not replace the Scene", () => {
+    const out = html();
+    expect(out).toContain("xr-orbit__core");
+    expect(out).toContain("xr-stage__need");
+    expect(out).toContain("I need to make something");                        // from the step's kind
   });
 });

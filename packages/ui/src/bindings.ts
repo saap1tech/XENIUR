@@ -5,7 +5,7 @@ import type {
   ObjectState, PlanShape, ProcessProof, ReadinessReport, RebuildPlan, Representation, ResolvedPassage,
   SourceVersion, StepStatus, Task, ThinkingMap, ConstraintRecord, ConstraintValue,
 } from "@xeniur/core";
-import type { ChallengeRecord, EntryRecord, EnvelopeSheet, Standing as StandingData, SupportMap as SupportMapData, TrailRow, ExitReason, ModeKind, ModelProviderView, ModeRecord, TrustFacts, JudgingSheetData, CriterionMark } from "@xeniur/core";
+import type { ChallengeRecord, EntryRecord, EnvelopeSheet, Standing as StandingData, SupportMap as SupportMapData, TrailRow, ExitReason, ModeKind, ModelProviderView, ModeRecord, TrustFacts, JudgingSheetData, CriterionMark, WorkPlan, StepWork, StepDisposition, StepKind, StepExecution } from "@xeniur/core";
 import { formOf } from "@xeniur/core";
 
 export interface LineageView {
@@ -188,6 +188,19 @@ export interface SceneBindings {
   sealRunning?: ModeRecord | null;
   /** The entry ticket held here for the challenge on screen, when its rules need one. */
   ticketHeld?: { valid: boolean; usedAt: number | null; expiresAt: number } | null;
+  /** The plan and the work recorded against it, by goal id. Kept apart on purpose. */
+  plans?: Readonly<Record<string, { plan: WorkPlan; work: StepWork[] }>>;
+  /** Why the last Mark complete was refused, by step id — the rule's words. */
+  stepRefusals?: Readonly<Record<string, string>>;
+  onPlanAdoptAll?(goalId: string): void;
+  onPlanDisposition?(goalId: string, stepId: string, disposition: StepDisposition): void;
+  onPlanEdit?(goalId: string, stepId: string, patch: { purpose?: string; expectedResult?: string }): void;
+  onPlanReorder?(goalId: string, order: string[]): void;
+  onPlanAddStep?(goalId: string, input: { kind: StepKind; purpose: string }): void;
+  /** Change what the record says about a step. Complete goes through the rule; the host shows a refusal. */
+  onStepExecution?(goalId: string, stepId: string, execution: StepExecution, note?: string): void;
+  /** Put a step in the centre. */
+  onStepFocus?(goalId: string, stepId: string): void;
   /** What a judge sees for one entry, by entry id. */
   judgingSheets?: Readonly<Record<string, JudgingSheetData>>;
   /** The judge marks each criterion and writes a note; the host signs and stores it. */

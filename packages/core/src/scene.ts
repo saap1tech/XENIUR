@@ -42,6 +42,8 @@ export const SCENE_COMPONENTS = [
   "ThinkingMoves",
   // Judging as a Scene: one entry, its making, the recorded AI activity, and what the record cannot establish
   "JudgingSheet",
+  // The plan as a rail, and one step in the centre's language
+  "PlanBoard", "StepFocus",
 ] as const;
 export const SceneComponentSchema = z.enum(SCENE_COMPONENTS);
 export type SceneComponentName = z.infer<typeof SceneComponentSchema>;
@@ -426,6 +428,11 @@ const JudgingSheetNode = z.object({
   ...base, component: z.literal("JudgingSheet"), challengeWorldId: UuidSchema, entryId: UuidSchema,
 }).strict();
 
+/** The plan for a goal, editable when the person is at the rail. */
+const PlanBoardNode = z.object({ ...base, component: z.literal("PlanBoard"), goalId: UuidSchema, editable: z.boolean().default(true) }).strict();
+/** One step: the current one when `stepId` is null. */
+const StepFocusNode = z.object({ ...base, component: z.literal("StepFocus"), goalId: UuidSchema, stepId: z.string().nullable().default(null) }).strict();
+
 const LeafNodeSchema = z.discriminatedUnion("component", [
   ObjectCardNode, InspectorNode, DocumentNode, TimelineNode, TaskProgressNode,
   ComparisonNode, BrowserNode, CodePreviewNode, Viewport3DNode, ApprovalDialogNode,
@@ -440,7 +447,7 @@ const LeafNodeSchema = z.discriminatedUnion("component", [
   ChoiceCardsNode, StepperNode, EvidenceMeterNode, EmptySlotNode, ReviewSheetNode,
   ClaimPairNode, TrustStripNode, ModelSetupNode, ContextReviewNode,
   FocusContractNode, ChallengeBoardNode, SupportMapNode, AgentTrailNode, StandingNode,
-  ProposalsTrayNode, ContextIndicatorNode, ThinkingMovesNode, JudgingSheetNode,
+  ProposalsTrayNode, ContextIndicatorNode, ThinkingMovesNode, JudgingSheetNode, PlanBoardNode, StepFocusNode,
 ]);
 export type LeafSceneNode = z.infer<typeof LeafNodeSchema>;
 

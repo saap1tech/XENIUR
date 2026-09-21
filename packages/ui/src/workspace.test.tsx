@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type {
   DecisionDetail, ImpactReport, ObjectState, Representation, Scene,
 } from "@xeniur/core";
-import { describeEnvelope, planDigest, type CandidateRecord, type ChallengeRecord, type Compliance, type EntryRecord, type JudgingSheetData, type ModeRecord, type Standing as StandingData, type SupportMap as SupportMapData, type TrailRow } from "@xeniur/core";
+import { describeEnvelope, planDigest, type CandidateRecord, type ChallengeRecord, type Compliance, type EntryRecord, type JudgingSheetData, type ModeRecord, type Standing as StandingData, type StepWork, type SupportMap as SupportMapData, type TrailRow, type WorkPlan } from "@xeniur/core";
 import { SceneRenderer, emptyBindings, presentBindings, type SceneBindings } from "./index.js";
 
 const OBJ = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -939,5 +939,59 @@ describe("JudgingSheet", () => {
     expect(out).toContain("signed by you");
     expect(out).toContain("Record again");
     expect(out).toContain('aria-checked="true"');
+  });
+});
+
+/* M6 Part C — the plan guides; the person controls; the record says what happened. */
+describe("PlanBoard and StepFocus", () => {
+  const GOAL = "77777777-7777-4777-8777-777777777777";
+  const plan: WorkPlan = {
+    id: "88888888-8888-4888-8888-888888888888", goalId: GOAL, worldId: WORLD, revision: 3, origin: "person", createdAt: 1, supersededBy: null,
+    steps: [
+      { id: "t.gather", kind: "gather", purpose: "Bring in what there is to know", inputs: [], expectedResult: "", completionRule: { kind: "person_confirms" }, dependsOn: [], disposition: "adopted" },
+      { id: "t.compare", kind: "compare", purpose: "Compare the options", inputs: [], expectedResult: "Each option beside the requirement", completionRule: { kind: "claim_reviewed" }, dependsOn: ["t.gather"], disposition: "adopted" },
+      { id: "t.decide", kind: "decide", purpose: "Choose, and say why", inputs: [], expectedResult: "", completionRule: { kind: "decision_accepted" }, dependsOn: ["t.compare"], disposition: "skipped" },
+      { id: "t.old", kind: "make", purpose: "An old step", inputs: [], expectedResult: "", completionRule: { kind: "person_confirms" }, dependsOn: [], disposition: "replaced" },
+      { id: "t.deliver", kind: "deliver", purpose: "Deliver it", inputs: [], expectedResult: "", completionRule: { kind: "person_confirms" }, dependsOn: [], disposition: "proposed" },
+    ],
+  };
+  const work: StepWork[] = [
+    { goalId: GOAL, stepId: "t.gather", execution: "complete", evidence: [{ kind: "note", id: "n1", at: 1, by: "person" }], note: "both studies are in", updatedAt: 1 },
+    { goalId: GOAL, stepId: "t.compare", execution: "needs_review", evidence: [], note: "Requirement changed after this step was worked on.", updatedAt: 2 },
+  ];
+  const board = (over: Partial<SceneBindings> = {}) => render({ id: "p", component: "PlanBoard", goalId: GOAL, editable: true }, bindings({ plans: { [GOAL]: { plan, work } }, onPlanAdoptAll: () => {}, ...over }));
+
+  it("lists the steps in order with the record's word beside each; skipped is skipped, not complete; replaced is hidden", () => {
+    const html = board();
+    expect(html.indexOf("Bring in what there is to know")).toBeLessThan(html.indexOf("Compare the options"));
+    expect(html).toContain("1 of 2 complete · 1 needs review · 1 skipped");
+    expect(html).toMatch(/ skipped<\/span>/);
+    expect(html).not.toContain("An old step");
+    expect(html).not.toMatch(/\d+%/);
+  });
+
+  it("offers proposed steps for adoption and never adopts them itself", () => {
+    const html = board();
+    expect(html).toContain("1 steps proposed from your goal");
+    expect(html).toContain(">Adopt all<");
+    expect(html).toMatch(/ proposed<\/span>/);
+  });
+
+  it("marks the current step: the one needing review comes before the first not started", () => {
+    const html = board();
+    expect(html).toMatch(/xr-pstep is-adopted exec-needs_review is-current/);
+  });
+
+  it("StepFocus shows the rule in words, the evidence, and a note field only for a step that takes the person's word", () => {
+    const gather = render({ id: "s", component: "StepFocus", goalId: GOAL, stepId: "t.gather" }, bindings({ plans: { [GOAL]: { plan, work } }, onStepExecution: () => {} }));
+    expect(gather).toContain("Complete when:");
+    expect(gather).toContain("you say so, with a note.");
+    expect(gather).toContain("your word");
+    expect(gather).toContain(">Reopen<");
+    const compare = render({ id: "s", component: "StepFocus", goalId: GOAL, stepId: "t.compare" }, bindings({ plans: { [GOAL]: { plan, work } }, onStepExecution: () => {}, stepRefusals: { "t.compare": '"Compare the options" is not complete: it needs a claim reviewed by a person against its source.' } }));
+    expect(compare).toContain("a claim is reviewed by a person against its source.");
+    expect(compare).toContain("is not complete: it needs");
+    expect(compare).not.toContain("xr-stepfocus__confirm");
+    expect(compare).toContain(">Mark complete<");
   });
 });

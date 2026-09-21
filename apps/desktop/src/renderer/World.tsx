@@ -9,7 +9,7 @@ import {
   NEED_WORDS, SituationSchema, compileSituation, layoutScene, proposalsFor,
   type GestureProposal,
 } from "@xeniur/grammar";
-import { GOAL_STATUSES, GOAL_STATUS_WORDS, currentStepOf, planDigest } from "@xeniur/core";
+import { GOAL_STATUSES, GOAL_STATUS_WORDS, currentStepOf, planDigest, planProgress } from "@xeniur/core";
 import { BrandMark } from "./BrandMark.js";
 import { Arrival } from "./Arrival.js";
 import { Ask } from "./Ask.js";
@@ -76,6 +76,10 @@ export function World({
 }: WorldProps) {
   const [zone, setZone] = useState<Zone>(initialZone);
   const [showKeys, setShowKeys] = useState(false);
+  // The rail shows the plan; Material reveals the four zones. Keys 1–4 still reach the zones.
+  const [showMaterial, setShowMaterial] = useState(false);
+  const [focusStepId, setFocusStepId] = useState<string | null>(null);
+  const [stepRefusals, setStepRefusals] = useState<Record<string, string>>({});
   // The Sealed Session: the sheet being read, and the mode once it runs. Read from the store, never remembered.
   const [sealSheet, setSealSheet] = useState<{ sheet: EnvelopeSheet; envelope: ModeEnvelopeInput } | null>(null);
   const [sealMode, setSealMode] = useState<ModeRecord | null>(null);
@@ -187,7 +191,7 @@ export function World({
       if ((e.metaKey || e.ctrlKey) && ["1", "2", "3"].includes(e.key)) { e.preventDefault(); chooseDensity(Number(e.key) as 1 | 2 | 3); return; }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "?") { setShowKeys((v) => !v); return; }
-      if (["1", "2", "3", "4"].includes(e.key)) { const z = ZONES[Number(e.key) - 1]!; setZone(z.key); setZoneChosen(true); return; }
+      if (["1", "2", "3", "4"].includes(e.key)) { const z = ZONES[Number(e.key) - 1]!; setZone(z.key); setZoneChosen(true); setShowMaterial(true); return; }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         if (present) return;
         e.preventDefault();
@@ -203,7 +207,7 @@ export function World({
       if (e.key === "p" || e.key === "P") { setPresent((v) => !v); setPresentSlot(0); }
       if (present && e.key === "ArrowRight") setPresentSlot((i) => i + 1);
       if (present && e.key === "ArrowLeft") setPresentSlot((i) => Math.max(0, i - 1));
-      if (e.key === "Escape") { setShowStanding(false); setPresent(false); setShowKeys(false); }
+      if (e.key === "Escape") { setShowStanding(false); setPresent(false); setShowKeys(false); setFocusStepId(null); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -346,6 +350,22 @@ export function World({
       notify: setNotice,
     }),
     onCancel: async (taskId) => { await bridge?.tasks?.cancel(taskId); },
+    plans: plan && goal ? { [goal.id]: { plan, work } } : {},
+    stepRefusals,
+    onPlanAdoptAll: async (goalId) => { setPlan((await bridge?.plans?.adoptAll(goalId)) ?? plan); },
+    onPlanDisposition: async (goalId, stepId, disposition) => { setPlan((await bridge?.plans?.setDisposition(goalId, stepId, disposition)) ?? plan); },
+    onPlanEdit: async (goalId, stepId, patch) => { setPlan((await bridge?.plans?.edit(goalId, stepId, patch)) ?? plan); },
+    onPlanReorder: async (goalId, order) => { setPlan((await bridge?.plans?.reorder(goalId, order)) ?? plan); },
+    onPlanAddStep: async (goalId, input) => { setPlan((await bridge?.plans?.addStep(goalId, input)) ?? plan); },
+    onStepFocus: (_goalId, stepId) => { setFocusStepId((cur) => cur === stepId ? null : stepId); setShowStanding(false); },
+    onStepExecution: async (goalId, stepId, execution, note) => {
+      // The record changes here, never the plan. A refused completion is shown in the rule's words.
+      const r = await bridge?.plans?.setExecution(goalId, stepId, execution, note);
+      if (!r) return;
+      setStepRefusals((prev) => { const next = { ...prev }; if (r.refused) next[stepId] = r.refused; else delete next[stepId]; return next; });
+      setWork((await bridge?.plans?.work(goalId)) ?? work);
+      await refreshStanding();
+    },
     finishRefusals,
     onFinish: async (goalId, anyway) => {
       // The check decides. Refusals are shown in words; finishing anyway records a Decision.
@@ -486,7 +506,7 @@ export function World({
   }), [snapshot, byId, tasks, map, friction, decisions, impact, worldId, bridge,
        onApprove, onReject, onImported, refreshThinking, refreshChallenge, refreshStanding, refreshGoal, constraints, proof, trust, supportMap, trailRows,
        standing, candidates, refreshCandidates, connections, brainAvailable, challenge, entries, selfKey, selectedId,
-       gestureProposals, gesturePair, zone, sealSheet, sealMode, judgingSheet, entries, ticket, finishRefusals]);
+       gestureProposals, gesturePair, zone, sealSheet, sealMode, judgingSheet, entries, ticket, finishRefusals, plan, work, goal, stepRefusals]);
   bindingsRef.current = bindings;
 
   /** One thing at a time in the centre, chosen by the zone and what is selected. */
@@ -517,6 +537,13 @@ export function World({
       });
     }
 
+    // A step chosen from the rail: that step, in the centre's language, until Esc or another click.
+    if (focusStepId && goal && plan) return {
+      worldId, title: snapshot.world.title, reason: "One step of the plan: its purpose, its rule, and what the record says",
+      root: { id: "root", component: "Canvas", layout: "column", children: [
+        { id: "step", component: "StepFocus", goalId: goal.id, stepId: focusStepId },
+      ] as never },
+    };
     // Where do I stand: the goal's state as the centre, until Esc.
     if (showStanding && goal) return {
       worldId, title: snapshot.world.title, reason: "Where you stand on this goal",
@@ -607,7 +634,7 @@ export function World({
       root.children.push({ id: "support-map", component: "SupportMap", objectId: selected.object.id, lanes: [], disclosure: intent.layer } as never);
     }
     return compiled;
-  }, [zone, zoneChosen, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints, challenge, supportMap, goal, relevant, showStanding, standing, density, sealSheet, sealMode, judgeEntry, judgingSheet, currentStep]);
+  }, [zone, zoneChosen, worldId, snapshot, selected, selectedId, tasks, decisions, showHow, impact, constraints, challenge, supportMap, goal, relevant, showStanding, standing, density, sealSheet, sealMode, judgeEntry, judgingSheet, currentStep, focusStepId, plan]);
 
   const inspector: Scene | null = useMemo(() => selected ? {
     worldId, title: "", reason: "",
@@ -717,6 +744,7 @@ export function World({
               {/* Finished is not chosen here: it is the outcome of Finish, under Where I stand. */}
               {GOAL_STATUSES.filter((st) => st !== "finished" || goal.status === "finished").map((st) => <option key={st} value={st} disabled={st === "finished"}>{GOAL_STATUS_WORDS[st].label}</option>)}
             </select>
+            {plan && <span className="xr-goalbar__progress xr-mono" title="Adopted steps, as the record says">{planProgress(plan, work).sentence}</span>}
           </div>
         )}
         <div className="xr-focusbar" aria-live="polite">
@@ -734,7 +762,17 @@ export function World({
       </header>
 
       <nav className="xr-rail">
-        {ZONES.map((z) => (
+        {goal && plan && snapshot.world.kind === "work" && (
+          <div className="xr-rail__switch" role="tablist" aria-label="Rail">
+            <button type="button" role="tab" aria-selected={!showMaterial} className={`xr-rail__tab${showMaterial ? "" : " is-active"}`} onClick={() => setShowMaterial(false)}>{t("plan.showplan")}</button>
+            <button type="button" role="tab" aria-selected={showMaterial} className={`xr-rail__tab${showMaterial ? " is-active" : ""}`} onClick={() => setShowMaterial(true)}>{t("plan.material")}</button>
+          </div>
+        )}
+        {goal && plan && !showMaterial && snapshot.world.kind === "work" && (
+          <SceneRenderer scene={{ worldId, title: "", reason: "", root: { id: "plan-root", component: "Canvas", layout: "column",
+            children: [{ id: "plan", component: "PlanBoard", goalId: goal.id, editable: true }] as never } }} bindings={bindings} />
+        )}
+        {(showMaterial || !goal || !plan || snapshot.world.kind !== "work") && ZONES.map((z) => (
           <button key={z.key} type="button"
             className={`xr-rail__item${zone === z.key ? " is-active" : ""}`}
             onDragOver={z.key === "work" ? (e) => e.preventDefault() : undefined}
@@ -805,7 +843,16 @@ export function World({
           </div>
         )}
 
-        <footer className="xr-language-dock">
+        <footer className={`xr-language-dock${goal && plan ? " has-step" : ""}`}>
+          {goal && plan && (
+            <div className="xr-dock">
+              <span className="xr-dock__k">{t("dock.step")}</span>
+              {currentStep
+                ? <button type="button" className="xr-dock__step" onClick={() => setFocusStepId(currentStep.id)}>{currentStep.purpose}{currentStep.expectedResult ? <small> — {currentStep.expectedResult}</small> : null}</button>
+                : <span className="xr-dock__quiet">{t("dock.nothing")}</span>}
+              {goal.nextActions.find((a) => !a.doneAt) && <><span className="xr-dock__k">{t("dock.next")}</span><span className="xr-dock__next">{goal.nextActions.find((a) => !a.doneAt)!.text}</span></>}
+            </div>
+          )}
           <label htmlFor="world-language">{askingForGoal ? "What are you trying to accomplish?" : "Use language for this"}</label>
           <input id="world-language" value={utterance}
             placeholder={askingForGoal ? "One sentence, in your words" : `Ask about ${selected?.properties.title ?? "this World"}, or say what to do — “compare these two”, “make a delivery preview”`}
