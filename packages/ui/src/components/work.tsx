@@ -55,6 +55,11 @@ export function TaskProgress({ node, bindings }: { node: Node<"TaskProgress">; b
               <Button onClick={() => bindings.onReject?.(task.id)}>Decline</Button>
             </div>
           )}
+          {(task.status === "queued" || task.status === "running") && bindings.onCancel && (
+            <div className="xr-task__actions">
+              <Button onClick={() => bindings.onCancel?.(task.id)}>Stop</Button>
+            </div>
+          )}
         </li>
       ))}
     </ul>

@@ -4,6 +4,7 @@ import { SceneRenderer, type SceneBindings } from "@xeniur/ui";
 import { SituationSchema, compileSituation, layoutScene } from "@xeniur/grammar";
 import { BrandMark } from "./BrandMark.js";
 import { ProcessShare } from "./ProcessShare.js";
+import { reviewSupportBinding } from "./lib/reviewSupport.js";
 
 export interface ObjectViewProps {
   detail: ObjectDetail;
@@ -48,6 +49,7 @@ export function ObjectView({ detail, busy, onRefresh, onBack }: ObjectViewProps)
   const [constraints, setConstraints] = useState<ConstraintRecord[]>([]);
   const [proof, setProof] = useState<ProcessProof | null>(null);
   const [sharing, setSharing] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   // Paper: opt-in, for reading at length. Remembered for this viewer only.
   const [paper, setPaper] = useState<boolean>(() => { try { return window.localStorage?.getItem("xeniur.paper") === "1"; } catch { return false; } });
 
@@ -87,6 +89,11 @@ export function ObjectView({ detail, busy, onRefresh, onBack }: ObjectViewProps)
       onRefresh();
     },
     onReviewApprove: async (id) => { await bridge?.living.release(id, "artifact"); onRefresh(); },
+    onReviewSupport: reviewSupportBinding({
+      save: (id, status) => bridge?.sense?.reviewSupport?.(id, status) ?? Promise.reject(new Error("the bridge is unavailable")),
+      refresh: () => onRefresh(),
+      notify: setNotice,
+    }),
   }), [detail, objectId, bridge, onRefresh, impact, constraints, proof]);
 
   // The rebuild/review split is per-Object and cheap; it is refetched whenever the Object
@@ -169,6 +176,7 @@ export function ObjectView({ detail, busy, onRefresh, onBack }: ObjectViewProps)
         ))}
       </nav>
 
+      {notice && <p className="xr-centre__notice" role="status">{notice}<button type="button" className="xr-button" onClick={() => setNotice(null)}>Close</button></p>}
       <SceneRenderer scene={scene} bindings={bindings} />
       {sharing && proof && <ProcessShare objectId={objectId} title={detail.state.properties.title} proof={proof} onClose={() => setSharing(false)} />}
     </main>

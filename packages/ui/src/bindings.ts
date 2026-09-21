@@ -176,6 +176,8 @@ export interface SceneBindings {
   onAddNextAction?(goalId: string, text: string): void;
   /** Finish the goal: the check decides. With `anyway`, the person's reason becomes a Decision. */
   onFinish?(goalId: string, anyway?: { because: string }): void;
+  /** Stop a queued or running task. Stopping future work is not undoing what already happened. */
+  onCancel?(taskId: string): void;
   /** What the last Finish attempt said was missing, by goal id. Empty once it succeeds. */
   finishRefusals?: Readonly<Record<string, string[]>>;
   onStartMode?(kind: ModeKind, sheetDigest: string): void;

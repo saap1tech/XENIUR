@@ -14,6 +14,7 @@ import { BrandMark } from "./BrandMark.js";
 import { Arrival } from "./Arrival.js";
 import { Ask } from "./Ask.js";
 import { KeyboardMap } from "./KeyboardMap.js";
+import { reviewSupportBinding } from "./lib/reviewSupport.js";
 import { Organizer } from "./Organizer.js";
 
 /** The project's meaningful things, not XENIUR's subsystems. */
@@ -325,6 +326,13 @@ export function World({
       await refreshCandidates(); await refreshThinking(); await refreshStanding();
     },
     onRejectCandidate: async (id) => { await bridge?.sense?.rejectCandidate?.(id); await refreshCandidates(); },
+    // A citation's review saves, refreshes the knowledge it touches, and fails in words.
+    onReviewSupport: reviewSupportBinding({
+      save: (id, status) => bridge?.sense?.reviewSupport?.(id, status) ?? Promise.reject(new Error("the bridge is unavailable")),
+      refresh: async () => { await refreshThinking(); await refreshStanding(); },
+      notify: setNotice,
+    }),
+    onCancel: async (taskId) => { await bridge?.tasks?.cancel(taskId); },
     finishRefusals,
     onFinish: async (goalId, anyway) => {
       // The check decides. Refusals are shown in words; finishing anyway records a Decision.

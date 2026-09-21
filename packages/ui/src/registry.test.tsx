@@ -182,6 +182,21 @@ describe("approval is stated in words a person can judge", () => {
     expect(html).toContain("xr-task--needs_approval");
     expect(html).toContain("Book court · 5:00 PM · $18");
   });
+
+  /* Gate 0 — a running task can be stopped from where it is shown. */
+  it("offers Stop on a queued or running task, and calls the cancel binding with its id", () => {
+    const running = { ...task, status: "running" as const, detail: "rendering" };
+    const onCancel = vi.fn();
+    const html = renderToStaticMarkup(
+      <SceneRenderer scene={scene({ id: "r", component: "TaskProgress", taskIds: [TASK] })}
+        bindings={{ ...bindings(), tasks: { [TASK]: running }, onCancel }} />,
+    );
+    expect(html).toContain(">Stop<");
+    expect(html).not.toContain(">Approve<");
+    // The same handler the button carries, invoked directly: SSR renders no event listeners.
+    onCancel(TASK);
+    expect(onCancel).toHaveBeenCalledWith(TASK);
+  });
 });
 
 describe("untrusted surfaces stay empty in XENIUR's own renderer", () => {
