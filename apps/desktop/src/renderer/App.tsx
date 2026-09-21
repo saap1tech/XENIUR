@@ -7,6 +7,7 @@ import { CommandPalette, usePaletteShortcut, type Command } from "./CommandPalet
 import { FocusMode } from "./FocusMode.js";
 import { FirstRun } from "./FirstRun.js";
 import { Models } from "./Models.js";
+import { Availability } from "./Availability.js";
 import { BrandMark } from "./BrandMark.js";
 import { ComputeReview } from "./ComputeReview.js";
 import { WebLayer } from "./WebLayer.js";
@@ -28,7 +29,9 @@ type View =
   | { kind: "workflows" }
   | { kind: "firstrun" }
   /** Your models, with the sentence that brought the person here and the view to return to. */
-  | { kind: "models"; reason: string | null; back: View };
+  | { kind: "models"; reason: string | null; back: View }
+  /** What works here — the runtime's own report, read on open. */
+  | { kind: "availability"; back: View };
 
 export function App() {
   const [worlds, setWorlds] = useState<WorldRow[]>([]);
@@ -166,6 +169,8 @@ export function App() {
     { id: "home", group: "Go", label: "Back to Worlds", run: () => setView({ kind: "home" }) },
     { id: "models", group: "Settings", label: "Your models", hint: "keys stay in your keychain",
       run: () => setView((current) => ({ kind: "models", reason: null, back: current })) },
+    { id: "availability", group: "Settings", label: "What works here", hint: "available · needs setup · disabled · not implemented",
+      run: () => setView((current) => ({ kind: "availability", back: current })) },
   ];
 
   if (view.kind === "object") {
@@ -244,6 +249,9 @@ export function App() {
 
   if (view.kind === "models") {
     return <Models reason={view.reason} onBack={() => setView(view.back)} />;
+  }
+  if (view.kind === "availability") {
+    return <Availability onBack={() => setView(view.back)} onModels={() => setView({ kind: "models", reason: null, back: view.back })} />;
   }
 
   // Focus Mode replaces everything, deliberately: chrome that is merely hidden is chrome

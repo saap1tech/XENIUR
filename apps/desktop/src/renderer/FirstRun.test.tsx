@@ -71,3 +71,29 @@ describe("the keyboard map", () => {
     expect(KEY_MAP.map((r) => r.what)).toContain("keys.density");
   });
 });
+
+/* Gate 0 — what works here, as the runtime says. */
+import { Availability } from "./Availability.js";
+import type { AvailabilityReport } from "@xeniur/core";
+
+describe("What works here", () => {
+  it("shows four distinct state words and never calls a not-implemented feature available", () => {
+    const report: AvailabilityReport = { at: 1_700_000_000_000, features: {
+      "brain.live": { state: "disabled_by_policy", because: "liveCallsEnabled is false" },
+      "models.cloud": { state: "needs_setup", because: "no cloud key is stored" },
+      "browser.manual": { state: "available", because: "isolated tabs" },
+      "browser.delegated": { state: "not_implemented", because: "no driver acts on a visible tab yet" },
+      "browser.route.service_api": { state: "not_implemented", because: "no adapter" },
+      "outreach.send": { state: "disabled_by_policy", because: "DisabledTransport" },
+      "web.risk_lookup": { state: "disabled_by_policy", because: "local-only" },
+      "hands.playwright": { state: "not_implemented", because: "not imported" },
+      "capabilities.registry": { state: "not_implemented", because: "never constructed" },
+    } };
+    const html = renderToStaticMarkup(<Availability report={report} onBack={noop} onModels={noop} />);
+    for (const w of ["available", "needs setup", "disabled by policy", "not implemented"]) expect(html).toContain(`>${w}<`);
+    const delegated = html.slice(html.indexOf("The assistant acting in a tab"), html.indexOf("Sending to a service endpoint"));
+    expect(delegated).toContain("not implemented");
+    expect(delegated).not.toContain(">available<");
+    expect(html).toContain("Nothing on this list is a promise.");
+  });
+});

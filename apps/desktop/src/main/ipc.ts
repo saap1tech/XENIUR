@@ -17,6 +17,7 @@ import type { Services } from "./services.js";
 import { assertTrustedSender, UntrustedSenderError } from "./security.js";
 import { captureWeb } from "./web/capture.js";
 import { exploreIntoProposals } from "./web/explore.js";
+import { runtimeAvailability } from "./availability.js";
 import { fetchArenaFeed } from "./web/arena.js";
 import { generationFingerprint, verifiedGenerationPrice } from "./economy.js";
 
@@ -70,6 +71,7 @@ const SCHEMAS = {
   "code:run": Uuid,
   "code:stop": Uuid,
   "system:info": z.undefined(),
+  "system:availability": z.undefined(),
 
   /* Living Objects */
   "living:detail": Uuid,
@@ -406,6 +408,7 @@ export function registerIpc(services: Services): void {
     "code:stop": ({ id }) => { services.preview.stop(id); },
 
     "system:info": () => services.systemInfo(),
+    "system:availability": () => runtimeAvailability(services),
 
     /* ------------------------------------------------------ Living Objects */
 

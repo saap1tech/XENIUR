@@ -3,6 +3,7 @@ import type { DecisionDetail, InfluenceReport } from "./decisions.js";
 import type { ImpactReport, OutcomeLedger, TrustFacts } from "./impact.js";
 import type { EnvelopeSheet, ExitReason, ModeEnvelopeInput, ModeKind, ModeRecord, Reward, Streak } from "./modes.js";
 import type { SealFacts } from "./seal.js";
+import type { AvailabilityReport } from "./availability.js";
 import type { Assessment, CriterionMark, JudgingSheetData, Placing, Results, SignedDocument, Ticket } from "./judging.js";
 import type { PublisherRef, PublisherReport, PublisherView, ReportReason, TrustLevel } from "./publisher.js";
 import type { CampaignRecord, OutboundMessage, OutreachEnvelopeInput } from "./outreach.js";
@@ -177,7 +178,11 @@ export interface XeniurBridge {
     stop(objectId: string): Promise<void>;
   };
   blobs: { url(blobHash: string): string };
-  system: { info(): Promise<SystemInfo> };
+  system: {
+    info(): Promise<SystemInfo>;
+    /** What this build, as assembled here, can do — four honest words per feature. Read, never cached. */
+    availability(): Promise<AvailabilityReport>;
+  };
 
   /* Living Objects */
   living: {

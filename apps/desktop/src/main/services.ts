@@ -94,6 +94,8 @@ export interface Services {
   browser: BrowserShell;
   preview: PreviewRuntime;
   systemInfo(): Promise<SystemInfo>;
+  /** Every provider id the registry actually implements — what config may name. */
+  providerIds: string[];
   lineage(representationId: string): LineagePayload;
   dispose(): Promise<void>;
 }
@@ -487,7 +489,7 @@ export function createServices(window: BrowserWindow): Services {
     impactOf: impactOfObject, passageOf,
     packageOf: (objectId, outPath) => exportPackage(graph, objectId, outPath)
       .then((r) => ({ path: r.path, bytes: r.bytes })),
-    systemInfo, lineage,
+    systemInfo, lineage, providerIds: ALL_PROVIDERS.map((p) => p.id),
     async dispose() {
       metrics.end();
       browser.closeAll();

@@ -38,12 +38,6 @@
     ]
   },
   "capabilities": {
-    "think": {
-      "order": [
-        "mock",
-        "openai"
-      ]
-    },
     "image": {
       "order": [
         "local.sharp",
@@ -68,15 +62,11 @@
     },
     "code": {
       "order": [
-        "local.template",
-        "mock.code",
-        "openai"
+        "local.template"
       ]
     },
     "browser": {
-      "order": [
-        "local.playwright"
-      ]
+      "order": []
     },
     "transform": {
       "order": [
@@ -88,7 +78,6 @@
     },
     "export": {
       "order": [
-        "local.package",
         "local.blender",
         "local.ffmpeg",
         "local.sharp"
@@ -120,13 +109,6 @@
       "binary": "/Applications/Blender.app/Contents/MacOS/Blender",
       "worker": "blender/xeniur_worker.py"
     },
-    "local.playwright": {
-      "enabled": true,
-      "kind": "deterministic",
-      "cost": {
-        "usd": 0
-      }
-    },
     "local.template": {
       "enabled": true,
       "kind": "deterministic",
@@ -157,13 +139,6 @@
       }
     },
     "mock.video": {
-      "enabled": true,
-      "kind": "mock",
-      "cost": {
-        "usd": 0
-      }
-    },
-    "mock.code": {
       "enabled": true,
       "kind": "mock",
       "cost": {
@@ -205,13 +180,6 @@
       }
     },
     "local.import": {
-      "enabled": true,
-      "kind": "deterministic",
-      "cost": {
-        "usd": 0
-      }
-    },
-    "local.package": {
       "enabled": true,
       "kind": "deterministic",
       "cost": {

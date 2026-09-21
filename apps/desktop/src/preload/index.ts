@@ -80,7 +80,10 @@ contextBridge.exposeInMainWorld("xeniur", {
     // Content addresses are resolved by the main process's own protocol handler.
     url: (blobHash: string) => `xeniur-blob://asset/${blobHash}`,
   },
-  system: { info: () => call("system:info") },
+  system: {
+    info: () => call("system:info"),
+    availability: () => call("system:availability"),
+  },
 
   living: {
     detail: (objectId: string) => call("living:detail", { id: objectId }),

@@ -34,6 +34,13 @@ export const EN = {
   // Protected Web
   "web.explore.proposed": "{count} suggestions proposed for review — none accepted until you say so",
 
+  // What works here
+  "avail.title": "What works here",
+  "avail.lead": "Read from this build as it is assembled on this machine, each time this screen opens. Four words, kept apart: available · needs setup · disabled by policy · not implemented.",
+  "avail.reading": "Reading the runtime…",
+  "avail.foot": "Nothing on this list is a promise. A thing named but built nowhere says not implemented; a thing held off by a switch says that the switch is not on this screen.",
+  "web.act.unavailable": "Actions from a tab are {state}: {because}",
+
   // Your models — reachable when a task needs it, and from the palette
   "models.title": "Your models",
   "models.needed": "This task can use cloud AI. Connect a key, or continue with local capabilities.",

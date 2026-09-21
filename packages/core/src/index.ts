@@ -40,3 +40,4 @@ export * from "./action-receipt.js";
 export * from "./capability-manifest.js";
 export * from "./seal.js";
 export * from "./judging.js";
+export * from "./availability.js";
