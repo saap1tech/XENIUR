@@ -31,6 +31,9 @@ export const EN = {
   "firstrun.skip": "Skip",
   "firstrun.notnow": "Not now",
 
+  // Protected Web
+  "web.explore.proposed": "{count} suggestions proposed for review — none accepted until you say so",
+
   // Your models — reachable when a task needs it, and from the palette
   "models.title": "Your models",
   "models.needed": "This task can use cloud AI. Connect a key, or continue with local capabilities.",

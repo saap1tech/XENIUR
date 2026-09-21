@@ -16,6 +16,7 @@ import { planForProposal, proposalsFor } from "@xeniur/grammar";
 import type { Services } from "./services.js";
 import { assertTrustedSender, UntrustedSenderError } from "./security.js";
 import { captureWeb } from "./web/capture.js";
+import { exploreIntoProposals } from "./web/explore.js";
 import { fetchArenaFeed } from "./web/arena.js";
 import { generationFingerprint, verifiedGenerationPrice } from "./economy.js";
 
@@ -382,12 +383,10 @@ export function registerIpc(services: Services): void {
     "web:explore": async ({ worldId, url }) => {
       if (!services.graph.getWorld(worldId)) throw new Error("Choose a World before capturing this source.");
       const captured = await captureWeb(url, services.webRisk);
-      const source = services.sense.recordSource({ worldId, kind: "article", title: captured.title,
-        url: captured.url, text: captured.text, hash: sha256Hex(captured.text), extractor: "xeniur-explore/1",
-        metadata: { risk: captured.risk.status } });
-      const atoms = services.sense.acceptCandidates(worldId, source.id, extractCandidates(captured.text));
-      return { objectId: source.id, sourceId: source.id, title: captured.title, url: captured.url,
-        excerpt: captured.text.slice(0, 520), contentHash: sha256Hex(captured.text), risk: captured.risk, atomCount: atoms.length };
+      // Capture stores the copy and proposes; acceptance is a separate, recorded act in the tray.
+      const { sourceId, candidateCount, contentHash } = exploreIntoProposals(services.sense, worldId, captured);
+      return { objectId: sourceId, sourceId, title: captured.title, url: captured.url,
+        excerpt: captured.text.slice(0, 520), contentHash, risk: captured.risk, candidateCount };
     },
     "economy:snapshot": () => services.compute.snapshot(),
     "economy:confirm": ({ quoteId }) => services.compute.confirm(quoteId, (quote) => enqueuePlan(services, quote.worldId, quote.plan, quote.id)),
@@ -752,12 +751,13 @@ export function registerIpc(services: Services): void {
     "sense:dismissFriction": ({ id, reason }) => { services.sense.dismissFriction(id, reason ?? ""); },
 
     "sense:capture": ({ worldId, kind, title, text, url, author }) => {
+      // The copy is stored; heuristic candidates are proposed, as such. Nothing is written in as understood.
       const source = services.sense.recordSource({
-        worldId, kind, title, url: url ?? null, author: author ?? null,
+        worldId, kind, title, text, hash: sha256Hex(text), url: url ?? null, author: author ?? null,
       });
-      // Heuristic candidates, offered as such. Nothing is written in as understood.
-      const atoms = services.sense.acceptCandidates(worldId, source.id, extractCandidates(text));
-      return { sourceId: source.id, atoms };
+      const version = services.sense.latestVersionOf(source.id);
+      const candidates = version ? services.sense.propose(worldId, version.id, extractCandidates(text), "heuristic/1") : [];
+      return { sourceId: source.id, candidates };
     },
 
     "sense:observe": ({ worldId, text, about }) =>

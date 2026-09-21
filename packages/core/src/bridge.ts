@@ -159,7 +159,8 @@ export interface XeniurBridge {
   web: {
     settings(): Promise<WebSettings>;
     setRiskMode(mode: WebSettings["riskMode"]): Promise<WebSettings>;
-    explore(worldId: string, url: string): Promise<CapturedWebSource & { sourceId: string; atomCount: number }>;
+    /** Stores the readable copy as a Source and proposes candidates. Nothing is accepted here. */
+    explore(worldId: string, url: string): Promise<CapturedWebSource & { sourceId: string; candidateCount: number }>;
   };
   economy: {
     snapshot(): Promise<EconomySnapshot>;
@@ -381,10 +382,11 @@ export interface XeniurBridge {
     map(worldId: string): Promise<ThinkingMap | null>;
     friction(worldId: string): Promise<FrictionState>;
     dismissFriction(worldId: string, reason?: string): Promise<void>;
+    /** Stores the copy as a Source version and proposes candidates. Accepting is a separate act. */
     capture(input: {
       worldId: string; kind: string; title: string; text: string;
       url?: string; author?: string;
-    }): Promise<{ sourceId: string; atoms: Atom[] }>;
+    }): Promise<{ sourceId: string; candidates: CandidateRecord[] }>;
     observe(worldId: string, text: string, about?: string): Promise<Atom>;
     sort(objectId: string, lane: Lane): Promise<Atom | null>;
     rate(objectId: string, confidence: number | null): Promise<Atom | null>;
