@@ -2072,3 +2072,10 @@ input[type="range"] { accent-color: var(--text); }
 .xr-approval__plan div { display: grid; grid-template-columns: 64px 1fr; gap: var(--s-2); }
 .xr-approval__plan dt { color: var(--faint); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
 .xr-approval__plan dd { margin: 0; color: var(--text); }
+/* ---- Finish: the check decides; a refusal is words; finishing anyway is a reason ------------ */
+.xr-standing__finish { display: grid; gap: var(--s-2); margin-top: var(--s-2); justify-items: start; }
+.xr-standing__refused { display: grid; gap: var(--s-1); padding: var(--s-2) var(--s-3); background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-card); font-size: 13px; width: 100%; }
+.xr-standing__refused p { margin: 0; color: var(--text); }
+.xr-standing__refused ul { margin: 0; padding-inline-start: var(--s-4); color: var(--dim); }
+.xr-standing__refused label { color: var(--faint); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; margin-top: var(--s-1); }
+.xr-standing__refused input { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-control); color: var(--text); font: 13px var(--font-sans); padding: var(--s-1) var(--s-2); }

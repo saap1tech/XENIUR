@@ -174,6 +174,10 @@ export interface SceneBindings {
   /** Open the full "what the model sees" sheet from the compact indicator. */
   onOpenContext?(contextDigest: string): void;
   onAddNextAction?(goalId: string, text: string): void;
+  /** Finish the goal: the check decides. With `anyway`, the person's reason becomes a Decision. */
+  onFinish?(goalId: string, anyway?: { because: string }): void;
+  /** What the last Finish attempt said was missing, by goal id. Empty once it succeeds. */
+  finishRefusals?: Readonly<Record<string, string[]>>;
   onStartMode?(kind: ModeKind, sheetDigest: string): void;
   onDeclineMode?(kind: ModeKind): void;
   /** Ask for the Sealed Session sheet for this entry. Nothing starts until it is read. */

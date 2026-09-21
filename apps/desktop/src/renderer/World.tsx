@@ -80,6 +80,7 @@ export function World({
   const [judging, setJudging] = useState<{ isJudge: boolean; openedAt: number | null }>({ isJudge: false, openedAt: null });
   const [judgeEntry, setJudgeEntry] = useState<string | null>(null);      // entry id; null = the board
   const [judgingSheet, setJudgingSheet] = useState<JudgingSheetData | null>(null);
+  const [finishRefusals, setFinishRefusals] = useState<Record<string, string[]>>({});
   const [ticket, setTicket] = useState<{ valid: boolean; usedAt: number | null; expiresAt: number } | null>(null);
   // Until the person clicks a zone, the goal's next question chooses the representation.
   const [zoneChosen, setZoneChosen] = useState<boolean>(initialZone !== "work");
@@ -324,6 +325,15 @@ export function World({
       await refreshCandidates(); await refreshThinking(); await refreshStanding();
     },
     onRejectCandidate: async (id) => { await bridge?.sense?.rejectCandidate?.(id); await refreshCandidates(); },
+    finishRefusals,
+    onFinish: async (goalId, anyway) => {
+      // The check decides. Refusals are shown in words; finishing anyway records a Decision.
+      const result = await bridge?.goals?.finish(goalId, anyway);
+      if (!result) return;
+      if (result.finished) { setFinishRefusals((r) => ({ ...r, [goalId]: [] })); setGoal(result.goal); }
+      else setFinishRefusals((r) => ({ ...r, [goalId]: result.missing }));
+      await refreshStanding();
+    },
     onNextActionDone: async (goalId, actionId) => { await bridge?.goals?.doneNextAction(goalId, actionId); await refreshStanding(); await refreshGoal(); },
     onAddNextAction: async (goalId, text) => { await bridge?.goals?.addNextAction(goalId, text, selectedId); await refreshStanding(); await refreshGoal(); },
     agentTrail: selectedId ? { [selectedId]: trailRows } : {},
@@ -455,7 +465,7 @@ export function World({
   }), [snapshot, byId, tasks, map, friction, decisions, impact, worldId, bridge,
        onApprove, onReject, onImported, refreshThinking, refreshChallenge, refreshStanding, refreshGoal, constraints, proof, trust, supportMap, trailRows,
        standing, candidates, refreshCandidates, connections, brainAvailable, challenge, entries, selfKey, selectedId,
-       gestureProposals, gesturePair, zone, sealSheet, sealMode, judgingSheet, entries, ticket]);
+       gestureProposals, gesturePair, zone, sealSheet, sealMode, judgingSheet, entries, ticket, finishRefusals]);
   bindingsRef.current = bindings;
 
   /** One thing at a time in the centre, chosen by the zone and what is selected. */
@@ -681,8 +691,9 @@ export function World({
               onClick={() => setShowStanding((v) => !v)}>Where I stand</button>
             <select className="xr-goalbar__status" value={goal.status} aria-label="How you are working on it"
               title={GOAL_STATUS_WORDS[goal.status].means}
-              onChange={(e) => { void bridge?.goals?.setStatus(goal.id, e.target.value as GoalStatus).then((g) => { if (g) setGoal(g); }); }}>
-              {GOAL_STATUSES.map((st) => <option key={st} value={st}>{GOAL_STATUS_WORDS[st].label}</option>)}
+              onChange={(e) => { void bridge?.goals?.setStatus(goal.id, e.target.value as Exclude<GoalStatus, "finished">).then((g) => { if (g) setGoal(g); }); }}>
+              {/* Finished is not chosen here: it is the outcome of Finish, under Where I stand. */}
+              {GOAL_STATUSES.filter((st) => st !== "finished" || goal.status === "finished").map((st) => <option key={st} value={st} disabled={st === "finished"}>{GOAL_STATUS_WORDS[st].label}</option>)}
             </select>
           </div>
         )}

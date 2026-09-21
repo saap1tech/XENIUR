@@ -182,11 +182,13 @@ describe("the World organises around the goal", () => {
     expect(html.indexOf("xr-goalbar")).toBeLessThan(html.indexOf("xr-focusbar"));
   });
 
-  it("offers every way of working, in any order — statuses are not stages", () => {
+  it("offers every way of working, in any order — statuses are not stages; finished is not one of them", () => {
     const html = renderWith(goal({ status: "exploring" }));
-    for (const s of ["exploring", "understanding", "making", "reviewing", "ready", "finished"]) {
+    for (const s of ["exploring", "understanding", "making", "reviewing", "ready"]) {
       expect(html).toContain(`<option value="${s}"`);
     }
+    // Finished is the outcome of Finish, under Where I stand — never a label one picks.
+    expect(html).not.toContain('<option value="finished"');
   });
 });
 

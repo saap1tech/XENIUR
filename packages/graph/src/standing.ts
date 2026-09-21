@@ -178,8 +178,10 @@ export function finishGoal(graph: ObjectGraph, goalId: string, opts: { anyway?: 
   for (const n of standing.needed) {
     if (!n.satisfied) { missing.push(`${n.output} has not been made`); continue; }
     if (n.objectId) {
-      const released = (graph.db.prepare(`SELECT COUNT(*) c FROM releases WHERE object_id = ?`).get(n.objectId) as { c: number }).c;
-      if (released === 0) missing.push(`${n.output} has no release`);
+      // A release of an earlier version is not a release of what exists now.
+      const current = graph.currentState(n.objectId)?.versionId ?? null;
+      const released = (graph.db.prepare(`SELECT COUNT(*) c FROM releases WHERE object_id = ? AND version_id = ?`).get(n.objectId, current) as { c: number }).c;
+      if (released === 0) missing.push(`${n.output} has no release of its current version`);
     }
   }
   if (standing.knowledge.disputed.length > 0) missing.push(`${standing.knowledge.disputed.length} claim${standing.knowledge.disputed.length === 1 ? "" : "s"} still disputed`);

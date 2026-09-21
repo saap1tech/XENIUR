@@ -3,8 +3,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { extractCandidates } from "@xeniur/sensemaking";
 import { z } from "zod";
-import { ChallengeRulesSchema, ExitReasonSchema, GoalStatusSchema, ModeEnvelopeSchema, ModeKindSchema, OutreachEnvelopeSchema, PublisherRefSchema, ReportReasonSchema, TrustLevelSchema, authorizeFor, campaignPlan, campaignScope, describeEnvelope, describeRecipients, needsCampaign, planDigest, sha256Hex, UuidSchema, type ActionPlan, type IntentResult, type WorldSnapshot } from "@xeniur/core";
-import { connectionsFor, contextMaterialFor, standingFor, importPackage, inspectPackage, outcomeOf, renderAuditPage, renderProofPage, supportMapFor, todayFor, trustFactsFor, trustFactsForWorld } from "@xeniur/graph";
+import { ChallengeRulesSchema, ExitReasonSchema, GoalStatusSchema, ModeEnvelopeSchema, ModeKindSchema, OutreachEnvelopeSchema, PublisherRefSchema, ReportReasonSchema, TrustLevelSchema, authorizeFor, campaignPlan, campaignScope, describeEnvelope, describeRecipients, needsCampaign, planDigest, sha256Hex, UuidSchema, type ActionPlan, type FinishResult, type IntentResult, type WorldSnapshot } from "@xeniur/core";
+import { NotFinishable, connectionsFor, contextMaterialFor, finishGoal, standingFor, importPackage, inspectPackage, outcomeOf, renderAuditPage, renderProofPage, supportMapFor, todayFor, trustFactsFor, trustFactsForWorld } from "@xeniur/graph";
 import { compileContext } from "@xeniur/grammar";
 import { policyFrom } from "@xeniur/models";
 import { proposeFromBound } from "@xeniur/sensemaking";
@@ -147,7 +147,9 @@ const SCHEMAS = {
   "publishers:report": PublisherRefSchema.extend({ reason: ReportReasonSchema, note: z.string().max(500) }),
   "goals:current": Uuid,
   "goals:create": z.object({ worldId: UuidSchema, outcome: z.string().min(1).max(500), focusObjectId: UuidSchema.nullable() }),
-  "goals:setStatus": z.object({ id: UuidSchema, status: GoalStatusSchema }),
+  // Finished is not a status one can set: it is the outcome of goals:finish.
+  "goals:setStatus": z.object({ id: UuidSchema, status: GoalStatusSchema.exclude(["finished"]) }),
+  "goals:finish": z.object({ id: UuidSchema, anyway: z.object({ because: z.string().min(8).max(500) }).optional() }),
   "goals:setOutcome": z.object({ id: UuidSchema, outcome: z.string().min(1).max(500) }),
   "goals:setFocus": z.object({ id: UuidSchema, objectId: UuidSchema.nullable() }),
   "goals:addNextAction": z.object({ id: UuidSchema, text: z.string().min(1).max(200), objectId: UuidSchema.nullable() }),
@@ -619,8 +621,19 @@ export function registerIpc(services: Services): void {
     },
     "goals:setStatus": ({ id, status }) => {
       const goal = services.graph.goals.setStatus(id, status);
-      if (goal) services.metrics.record(status === "finished" ? "goal_finished" : "goal_status_changed", { detail: { status } });
+      if (goal) services.metrics.record("goal_status_changed", { detail: { status } });
       return goal;
+    },
+    "goals:finish": ({ id, anyway }): FinishResult => {
+      // The check decides; a person may finish anyway, and that is a Decision the report names.
+      try {
+        const goal = finishGoal(services.graph, id, anyway ? { anyway } : {});
+        services.metrics.record("goal_finished", { detail: { anyway: Boolean(anyway) } });
+        return { finished: true, goal };
+      } catch (cause) {
+        if (cause instanceof NotFinishable) return { finished: false, missing: cause.missing };
+        throw cause;
+      }
     },
     "goals:setOutcome": ({ id, outcome }) => services.graph.goals.setOutcome(id, outcome),
     "goals:setFocus": ({ id, objectId }) => services.graph.goals.setFocus(id, objectId),

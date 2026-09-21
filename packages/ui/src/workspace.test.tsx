@@ -750,6 +750,24 @@ describe("Standing", () => {
     expect(html).toContain("not yet made");
   });
 
+  /* Gate 0 — Finish runs the check; refusals are words; finishing anyway needs a reason. */
+  it("offers Finish, shows what is missing, and asks for a reason before finishing anyway", () => {
+    const html = render({ id: "st", component: "Standing", goalId: GOAL },
+      bindings({ standings: { [GOAL]: data }, onFinish: () => {}, finishRefusals: { [GOAL]: ["print.stl has no release of its current version", "1 claim still disputed"] } }));
+    expect(html).toContain(">Finish<");
+    expect(html).toContain("Not finished yet:");
+    expect(html).toContain("print.stl has no release of its current version");
+    expect(html).toContain("Finish anyway — because");
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>Finish anyway<\/button>/);
+    expect(html).not.toContain("✓");
+  });
+
+  it("without a refusal there is Finish and nothing about finishing anyway", () => {
+    const html = render({ id: "st", component: "Standing", goalId: GOAL }, bindings({ standings: { [GOAL]: data }, onFinish: () => {} }));
+    expect(html).toContain(">Finish<");
+    expect(html).not.toContain("Finish anyway");
+  });
+
   it("carries no generated sentence: the aria label is the describeStanding template", () => {
     const html = out();
     expect(html).toContain("1 known, 1 proposed, 0 disputed, 1 unknown.");

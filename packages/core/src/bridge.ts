@@ -9,7 +9,7 @@ import type { CampaignRecord, OutboundMessage, OutreachEnvelopeInput } from "./o
 import type { ChallengeRecord, ChallengeRulesInput, EntryRecord } from "./challenges.js";
 import type { TrailRow } from "./trail.js";
 import type { Today } from "./today.js";
-import type { GoalStatus, WorkGoal } from "./goal.js";
+import type { FinishResult, GoalStatus, WorkGoal } from "./goal.js";
 import type { Standing } from "./standing.js";
 import type { SupportMap } from "./support-map.js";
 import type { CandidateRecord, ClaimSupport, SupportStatus } from "./sensemaking.js";
@@ -230,7 +230,10 @@ export interface XeniurBridge {
   goals: {
     current(worldId: string): Promise<WorkGoal | null>;
     create(worldId: string, outcome: string, focusObjectId?: string | null): Promise<WorkGoal>;
-    setStatus(goalId: string, status: GoalStatus): Promise<WorkGoal | null>;
+    /** Any way of working except finished — that is the outcome of `finish`. */
+    setStatus(goalId: string, status: Exclude<GoalStatus, "finished">): Promise<WorkGoal | null>;
+    /** Runs the completion check. Refused with what is missing; finishing anyway records a Decision. */
+    finish(goalId: string, anyway?: { because: string }): Promise<FinishResult>;
     setOutcome(goalId: string, outcome: string): Promise<WorkGoal | null>;
     setFocus(goalId: string, objectId: string | null): Promise<WorkGoal | null>;
     addNextAction(goalId: string, text: string, objectId?: string | null): Promise<WorkGoal | null>;

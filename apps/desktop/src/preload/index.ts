@@ -214,6 +214,7 @@ contextBridge.exposeInMainWorld("xeniur", {
     create: (worldId: string, outcome: string, focusObjectId?: string | null) =>
       call("goals:create", { worldId, outcome, focusObjectId: focusObjectId ?? null }),
     setStatus: (goalId: string, status: string) => call("goals:setStatus", { id: goalId, status }),
+    finish: (goalId: string, anyway?: { because: string }) => call("goals:finish", { id: goalId, ...(anyway ? { anyway } : {}) }),
     setOutcome: (goalId: string, outcome: string) => call("goals:setOutcome", { id: goalId, outcome }),
     setFocus: (goalId: string, objectId: string | null) => call("goals:setFocus", { id: goalId, objectId }),
     addNextAction: (goalId: string, text: string, objectId?: string | null) =>

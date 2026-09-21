@@ -82,6 +82,25 @@ describe("where you stand is read from rows", () => {
   });
 });
 
+/* M6 Part C, Gate 0 — a release of an earlier version does not finish what exists now. */
+describe("Finish checks the current version", () => {
+  it("refuses when the released version is not the current one, and accepts once it is", () => {
+    const jacket = g.createObject({ worldId, semanticType: "prop", title: "Jacket shell" }).object.id;
+    const rep = (t: string) => g.addRepresentation({ objectId: jacket, modality: "text", format: "md", blobHash: g.putBlob(Buffer.from(t), "text/markdown", "md"), provenance: "human" });
+    g.commitVersion({ objectId: jacket, forms: [{ role: "doc.primary", representationId: rep("v1").id }] });
+    const goal = g.goals.create(worldId, "Ship the spec", { focusObjectId: jacket, requiredOutputs: ["doc.primary"] });
+    const evaluator = new ReadinessEvaluator(g, loadProfiles(process.cwd()));
+    evaluator.approve({ objectId: jacket, profileId: "client", force: true });
+    // Then the document changes: the release is of a version that no longer exists as current.
+    g.commitVersion({ objectId: jacket, forms: [{ role: "doc.primary", representationId: rep("v2").id }] });
+    let refused: string[] = [];
+    try { finishGoal(g, goal.id); } catch (e) { refused = (e as NotFinishable).missing; }
+    expect(refused).toEqual(["doc.primary has no release of its current version"]);
+    evaluator.approve({ objectId: jacket, profileId: "client", force: true });
+    expect(finishGoal(g, goal.id).status).toBe("finished");
+  });
+});
+
 /* M6 A6 — finishing with incomplete knowledge is a decision, never a badge. */
 describe("Finish", () => {
   it("refuses while a required output is unmade, and finish-anyway records a decision the report names", async () => {

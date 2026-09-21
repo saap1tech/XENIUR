@@ -73,3 +73,8 @@ export function goalKindFor(status: GoalStatus): "understand" | "decide" | "crea
 export function describeGoal(goal: Pick<WorkGoal, "outcome" | "status">): string {
   return `${goal.outcome} — ${GOAL_STATUS_WORDS[goal.status].label}`;
 }
+
+/** What Finish answers: done, or what is missing — in words a person can act on. */
+export type FinishResult =
+  | { finished: true; goal: WorkGoal }
+  | { finished: false; missing: string[] };

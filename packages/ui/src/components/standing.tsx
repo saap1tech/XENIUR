@@ -18,7 +18,9 @@ type Node<T extends LeafSceneNode["component"]> = Extract<LeafSceneNode, { compo
 export function Standing({ node, bindings }: { node: Node<"Standing">; bindings: SceneBindings }) {
   const s = bindings.standings?.[node.goalId];
   const [draft, setDraft] = useState("");
+  const [because, setBecause] = useState("");
   if (!s) return null;
+  const refused = bindings.finishRefusals?.[node.goalId] ?? [];
   const open = s.nextActions.filter((a) => !a.doneAt);
   const missing = s.needed.filter((n) => !n.satisfied);
   const c = s.changed;
@@ -107,6 +109,23 @@ export function Standing({ node, bindings }: { node: Node<"Standing">; bindings:
             </ul>
           )}
           {missing.length === 0 && s.needed.length > 0 && <p className="xr-standing__quiet">Everything named exists.</p>}
+          {/* Finish runs the check. It is refused in words; finishing anyway is a Decision with a reason. */}
+          {bindings.onFinish && s.goal.status !== "finished" && (
+            <div className="xr-standing__finish">
+              <Button variant="primary" onClick={() => bindings.onFinish?.(node.goalId)}>Finish</Button>
+              {refused.length > 0 && (
+                <div className="xr-standing__refused" role="status">
+                  <p>Not finished yet:</p>
+                  <ul>{refused.map((m) => <li key={m}>{m}</li>)}</ul>
+                  <label htmlFor={`finish-because-${node.goalId.slice(0, 8)}`}>Finish anyway — because</label>
+                  <input id={`finish-because-${node.goalId.slice(0, 8)}`} value={because} onChange={(e) => setBecause(e.target.value)}
+                    placeholder="cost and time: the client needs it this week" />
+                  <Button disabled={because.trim().length < 8} onClick={() => { bindings.onFinish?.(node.goalId, { because: because.trim() }); setBecause(""); }}>Finish anyway</Button>
+                </div>
+              )}
+            </div>
+          )}
+          {s.goal.status === "finished" && <p className="xr-standing__quiet">Finished.</p>}
         </section>
       </div>
     </section>
