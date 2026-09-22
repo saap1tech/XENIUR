@@ -14,6 +14,7 @@ import type { Today } from "./today.js";
 import type { FinishResult, GoalStatus, WorkGoal } from "./goal.js";
 import type { StepDisposition, StepEvidence, StepExecution, StepKind, StepWork, WorkPlan } from "./plan.js";
 import type { WorkPosition, WorkPositionInput } from "./position.js";
+import type { ActionDescription, ActionRequest, Attempt, AttemptCheck } from "./route-adapter.js";
 import type { Standing } from "./standing.js";
 import type { SupportMap } from "./support-map.js";
 import type { CandidateRecord, ClaimSupport, Rights, SupportStatus } from "./sensemaking.js";
@@ -336,6 +337,25 @@ export interface XeniurBridge {
   position?: {
     save(input: Omit<WorkPositionInput, "savedAt">): Promise<WorkPosition>;
     get(worldId: string): Promise<WorkPosition | null>;
+  };
+  /* One delegated action: drafted, approved as an exact plan, dispatched once, answered honestly */
+  actions?: {
+    /** Describes it through its route. Nothing is sent, and nothing is typed into a page. */
+    draft(input: { worldId: string; goalId?: string | null; stepId?: string | null; adapterId: string; request: ActionRequest }): Promise<{ id: string; description: ActionDescription; reviewDigest: string }>;
+    /** The person approved this exact plan; the grant is issued in the trusted process. */
+    approve(actionId: string, accountLabel: string | null, minutes?: number): Promise<{ grantId: string }>;
+    dispatch(actionId: string): Promise<Attempt>;
+    /** Ask the destination what became of an attempt. Never a retry. */
+    checkStatus(attemptId: string): Promise<AttemptCheck>;
+    list(worldId: string): Promise<Array<{ id: string; adapterId: string; description: ActionDescription; state: string; createdAt: number; attempts: Attempt[] }>>;
+    get(actionId: string): Promise<{ description: ActionDescription; reviewDigest: string; attempts: Attempt[]; checks: Record<string, AttemptCheck[]> }>;
+    discard(actionId: string): Promise<void>;
+  };
+  /** Endpoints the person configured. A screen learns whether a token exists, never what it is. */
+  routes?: {
+    list(): Promise<Array<{ id: string; label: string; endpoint: string; statusEndpoint: string | null; fields: string[]; hasToken: boolean }>>;
+    setToken(routeId: string, token: string): Promise<{ hasToken: boolean }>;
+    removeToken(routeId: string): Promise<{ hasToken: boolean }>;
   };
   /* The plan — a versioned proposal of steps, and the work recorded against them, apart */
   plans?: {

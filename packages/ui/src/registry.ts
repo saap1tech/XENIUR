@@ -21,6 +21,7 @@ import { FocusContract } from "./components/modes.jsx";
 import { ChallengeBoard } from "./components/challenges.jsx";
 import { JudgingSheet } from "./components/judging.jsx";
 import { PlanBoard, StepFocus } from "./components/plan.jsx";
+import { ActionReceiptCard, ActionReviewCard } from "./components/action.jsx";
 import { AgentTrail, SupportMap } from "./components/lenses.jsx";
 import { Standing } from "./components/standing.jsx";
 import { ContextIndicator, ProposalsTray } from "./components/proposals.jsx";
@@ -48,7 +49,7 @@ export const COMPONENT_REGISTRY: Readonly<Record<Exclude<SceneComponentName, "Ca
   CompareForms, ThinkingTable, IdeaDrawer,
   ObjectOrbit, AffordanceRing, SpatialCanvas, ConstraintStrip, RangeMeter, PriorityBalance,
   PeopleChips, Calendar, SchematicMap, ChoiceCards, Stepper, EvidenceMeter, EmptySlot, ReviewSheet,
-  ClaimPair, TrustStrip, ModelSetup, ContextReview, FocusContract, ChallengeBoard, SupportMap, AgentTrail, Standing, ProposalsTray, ContextIndicator, ThinkingMoves, JudgingSheet, PlanBoard, StepFocus,
+  ClaimPair, TrustStrip, ModelSetup, ContextReview, FocusContract, ChallengeBoard, SupportMap, AgentTrail, Standing, ProposalsTray, ContextIndicator, ThinkingMoves, JudgingSheet, PlanBoard, StepFocus, ActionReviewCard, ActionReceiptCard,
 };
 
 export interface Refusal { id: string; component: string; reason: string; }

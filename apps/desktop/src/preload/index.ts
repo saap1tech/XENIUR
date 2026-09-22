@@ -183,6 +183,20 @@ contextBridge.exposeInMainWorld("xeniur", {
     save: (input: Record<string, unknown>) => call("position:save", input),
     get: (worldId: string) => call("position:get", { id: worldId }),
   },
+  actions: {
+    draft: (input: Record<string, unknown>) => call("actions:draft", input),
+    approve: (actionId: string, accountLabel: string | null, minutes?: number) => call("actions:approve", { actionId, accountLabel, ...(minutes ? { minutes } : {}) }),
+    dispatch: (actionId: string) => call("actions:dispatch", { actionId }),
+    checkStatus: (attemptId: string) => call("actions:checkStatus", { attemptId }),
+    list: (worldId: string) => call("actions:list", { id: worldId }),
+    get: (actionId: string) => call("actions:get", { id: actionId }),
+    discard: (actionId: string) => call("actions:discard", { actionId }),
+  },
+  routes: {
+    list: () => call("routes:list"),
+    setToken: (routeId: string, token: string) => call("routes:setToken", { routeId, token }),
+    removeToken: (routeId: string) => call("routes:removeToken", { routeId }),
+  },
   plans: {
     current: (goalId: string) => call("plans:current", { id: goalId }),
     propose: (goalId: string) => call("plans:propose", { id: goalId }),

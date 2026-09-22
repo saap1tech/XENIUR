@@ -44,6 +44,8 @@ export const SCENE_COMPONENTS = [
   "JudgingSheet",
   // The plan as a rail, and one step in the centre's language
   "PlanBoard", "StepFocus",
+  // One delegated action: the plan a person approves, and what became of it
+  "ActionReviewCard", "ActionReceiptCard",
 ] as const;
 export const SceneComponentSchema = z.enum(SCENE_COMPONENTS);
 export type SceneComponentName = z.infer<typeof SceneComponentSchema>;
@@ -433,6 +435,11 @@ const PlanBoardNode = z.object({ ...base, component: z.literal("PlanBoard"), goa
 /** One step: the current one when `stepId` is null. */
 const StepFocusNode = z.object({ ...base, component: z.literal("StepFocus"), goalId: UuidSchema, stepId: z.string().nullable().default(null) }).strict();
 
+/** The exact operation a person is asked to approve. */
+const ActionReviewCardNode = z.object({ ...base, component: z.literal("ActionReviewCard"), actionId: UuidSchema }).strict();
+/** What became of it: four honest states, their attempts and every status check. */
+const ActionReceiptCardNode = z.object({ ...base, component: z.literal("ActionReceiptCard"), actionId: UuidSchema }).strict();
+
 const LeafNodeSchema = z.discriminatedUnion("component", [
   ObjectCardNode, InspectorNode, DocumentNode, TimelineNode, TaskProgressNode,
   ComparisonNode, BrowserNode, CodePreviewNode, Viewport3DNode, ApprovalDialogNode,
@@ -448,6 +455,7 @@ const LeafNodeSchema = z.discriminatedUnion("component", [
   ClaimPairNode, TrustStripNode, ModelSetupNode, ContextReviewNode,
   FocusContractNode, ChallengeBoardNode, SupportMapNode, AgentTrailNode, StandingNode,
   ProposalsTrayNode, ContextIndicatorNode, ThinkingMovesNode, JudgingSheetNode, PlanBoardNode, StepFocusNode,
+  ActionReviewCardNode, ActionReceiptCardNode,
 ]);
 export type LeafSceneNode = z.infer<typeof LeafNodeSchema>;
 

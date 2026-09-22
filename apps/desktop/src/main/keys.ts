@@ -110,3 +110,16 @@ export class SafeStorageSigningKeyStore implements SigningKeyStore {
     }), { mode: 0o600 });
   }
 }
+
+/**
+ * Route tokens — the person's own, for the endpoints they configured. Kept in the same
+ * keychain-backed file under a `route:` prefix, read only in the main process, and never
+ * returned to the renderer: a screen learns whether a token exists, never what it is.
+ */
+export class SafeStorageRouteTokens {
+  constructor(private readonly keys: SafeStorageKeyStore) {}
+  has(routeId: string): boolean { return this.keys.has(`route:${routeId}` as never); }
+  read(routeId: string): string | null { return this.keys.read(`route:${routeId}` as never); }
+  write(routeId: string, token: string): void { this.keys.write(`route:${routeId}` as never, token); }
+  remove(routeId: string): void { this.keys.remove(`route:${routeId}` as never); }
+}

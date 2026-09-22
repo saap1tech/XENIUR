@@ -1011,3 +1011,50 @@ describe("terminology in the components", () => {
     }
   });
 });
+
+/* M6 Part C — the plan a person approves, and what became of it. */
+describe("ActionReviewCard and ActionReceiptCard", () => {
+  const ACTION = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const description = {
+    destination: "https://receiver.example/hook", accountLabel: "My receiver",
+    effect: "Sends these fields to receiver.example, as one request you approved.",
+    actionClass: "api_post" as const, route: "service_api" as const,
+    items: [{ title: "Seam spec", objectId: OBJ, versionId: "v-7", digest: "c".repeat(64) }],
+    fields: [{ name: "order", chars: 16 }],
+    amount: 240, currency: "USD",
+    verification: "The endpoint answers with an id, and can be asked again afterwards what became of it.",
+  };
+
+  it("shows where it goes, as whom, what it carries, the amount and the digest — never a value", () => {
+    const html = render({ id: "a", component: "ActionReviewCard", actionId: ACTION },
+      bindings({ actionReviews: { [ACTION]: { description, reviewDigest: "d".repeat(64), accountVerifiedByPerson: true } }, onApproveAction: () => {} }));
+    expect(html).toContain("https://receiver.example/hook");
+    expect(html).toContain("My receiver");
+    expect(html).toContain("Seam spec");
+    expect(html).toContain("240 USD");
+    expect(html).toContain("dddddddddddd…");
+    expect(html).toContain("Approve this exact action");
+    expect(html).toContain("can be asked again afterwards");
+    expect(html).toContain("16 characters");                       // the size, not the value
+  });
+
+  it("says when the account was not confirmed by a person", () => {
+    const html = render({ id: "a", component: "ActionReviewCard", actionId: ACTION },
+      bindings({ actionReviews: { [ACTION]: { description, reviewDigest: "d".repeat(64), accountVerifiedByPerson: false } } }));
+    expect(html).toContain("you have not confirmed this is the right account");
+  });
+
+  it("the receipt keeps every attempt as it was, and offers Check status — never a retry", () => {
+    const attempts = [
+      { id: "at-1", actionId: ACTION, idempotencyKey: "at-1", state: "uncertain" as const, reference: "ord-9", responseDigest: null, detail: "timed out", startedAt: 1, endedAt: 2 },
+    ];
+    const html = render({ id: "r", component: "ActionReceiptCard", actionId: ACTION },
+      bindings({ actionReceipts: { [ACTION]: { description, attempts, checks: { "at-1": [{ id: "c-1", attemptId: "at-1", result: "unsupported", detail: "this endpoint cannot be asked afterwards", at: 3 }] } } }, onCheckStatus: () => {} }));
+    expect(html).toContain("uncertain");
+    expect(html).toContain("Check the status; do not send it again");
+    expect(html).toContain(">Check status<");
+    expect(html).not.toMatch(/Try again|Retry/);
+    expect(html).toContain("this endpoint cannot be asked afterwards");
+    expect(html).toContain("never written over it");
+  });
+});

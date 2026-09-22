@@ -41,7 +41,9 @@ export function availabilityFrom(r: RuntimeShape, at = Date.now()): Availability
       : callable.length === 0 ? f("needs_setup", `${withKey.length} key${withKey.length === 1 ? "" : "s"} stored, but no model with a verified price is callable`)
       : f("available", `${callable.length} provider${callable.length === 1 ? "" : "s"} with a key and a verified price`),
     "browser.manual": r.browserManualWired ? f("available", "isolated tabs, HTTPS only, address policy on every frame") : f("not_implemented", "no browser shell is constructed"),
-    "browser.delegated": r.browserDelegatedWired ? f("available", "bound to a tab you can see, with a grant") : f("not_implemented", "no driver acts on a visible tab yet"),
+    "browser.delegated": r.browserDelegatedWired
+      ? f("available", "bound to a tab you can see, with a grant you gave")
+      : f("needs_setup", "add one of your accounts and open a tab; the assistant acts only where you can watch"),
     "browser.route.service_api": r.serviceRoutes.length === 0
       ? f("not_implemented", "no service route adapter is constructed")
       : r.serviceRoutes.some((s) => s.endpoint && s.token) ? f("available", `${r.serviceRoutes.filter((s) => s.endpoint && s.token).length} route${r.serviceRoutes.length === 1 ? "" : "s"} configured with a token`)
@@ -73,8 +75,9 @@ export function runtimeShape(services: Services, env: NodeJS.ProcessEnv = proces
     handsWired: false,
     capabilityRegistryWired: false,
     browserManualWired: Boolean(services.browser),
-    browserDelegatedWired: false,
-    serviceRoutes: [],
+    // Acting in a tab needs a signed-in account and a tab to act in; without one it is setup, not a promise.
+    browserDelegatedWired: services.browser.profiles().some((p) => p.kind === "signed_in") && services.browser.tabs().length > 0,
+    serviceRoutes: services.routes.endpoints.map((e) => ({ id: e.id, endpoint: Boolean(e.endpoint), token: services.routes.tokens.has(e.id) })),
   };
 }
 

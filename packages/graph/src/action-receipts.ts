@@ -45,8 +45,11 @@ export class ActionReceiptStore {
     // When an executor did not return the broker digest, hash the exact ActionPlan
     // persisted before execution. Never reconstruct a lookalike from selected fields.
     const digest = receipt.planDigest ?? planDigest(action.plan);
-    const outcome: ActionReceiptRecord["outcome"] = action.status === "completed" ? "succeeded"
-      : action.status === "failed" ? "failed" : action.status === "refused" ? "refused" : "unknown";
+    // What the executor established, when it established something: an outreach send that got
+    // no clear answer is `unknown`, not `failed`. Otherwise the action's own status decides.
+    const given = ["succeeded", "failed", "refused", "partial", "unknown"].includes(receipt.outcome) ? receipt.outcome as ActionReceiptRecord["outcome"] : null;
+    const outcome: ActionReceiptRecord["outcome"] = given ?? (action.status === "completed" ? "succeeded"
+      : action.status === "failed" ? "failed" : action.status === "refused" ? "refused" : "unknown");
     const capability = typeof action.plan.args["capability"] === "string"
       ? action.plan.args["capability"] : action.tool;
     const receiptFacts = {

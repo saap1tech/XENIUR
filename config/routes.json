@@ -1,0 +1,4 @@
+{
+  "_about": "Endpoints you configured for the assistant to send to — your own receivers, not services XENIUR chose. Each needs a token, which is stored by your operating system's keychain and never written into a project, a package or a receipt. Add one here and set its token from Your models; until both exist, the route says it needs setup.",
+  "endpoints": []
+}

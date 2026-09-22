@@ -155,8 +155,12 @@ describe("no transport is reachable without a configured key", () => {
     const e = envelope();
     const c = g.outreach.create(worldId, e, approve(e));
     const r = await g.outreach.send(c.id, msg("ana@example.com"), new MockTransport({ fail: true }));
+    // The send did not go through, and nothing establishes that it did not arrive either: the
+    // durable receipt says unknown, which is what the store always wrote and now survives.
     expect(r.outcome).toBe("failed");
-    expect(g.actionReceipts.getByAction(r.actionId)!.outcome).toBe("failed");
+    const receipt = g.actionReceipts.getByAction(r.actionId)!;
+    expect(receipt.outcome).toBe("unknown");
+    expect(receipt.providerResponse?.status).toBe("no clear answer");
     expect(g.outreach.get(c.id)!.sent).toBe(0);
   });
 });

@@ -1334,6 +1334,53 @@ CREATE TABLE held_downloads (
 );
 `;
 
+/**
+ * Migration 31 — delegated actions and their attempts.
+ *
+ * An attempt row is written when the operation is dispatched and its end state written once;
+ * later evidence is a row in `attempt_checks`, never an edit. A click is not a success: only
+ * the destination's own evidence makes an attempt `confirmed`, and an answer that establishes
+ * nothing leaves it `uncertain` — which the person answers with Check status, not a retry.
+ */
+const DELEGATED_ACTIONS = `
+CREATE TABLE delegated_actions (
+  id            TEXT PRIMARY KEY,
+  world_id      TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+  goal_id       TEXT,
+  step_id       TEXT,
+  route         TEXT NOT NULL,                -- embedded_tab | service_api
+  adapter_id    TEXT NOT NULL,
+  request       TEXT NOT NULL,                -- JSON ActionRequest, as reviewed
+  description   TEXT NOT NULL,                -- JSON ActionDescription, as shown
+  review_digest TEXT NOT NULL,
+  grant_id      TEXT REFERENCES grants(id) ON DELETE SET NULL,
+  state         TEXT NOT NULL DEFAULT 'draft',  -- draft | approved | dispatched | done
+  created_at    INTEGER NOT NULL
+);
+CREATE INDEX idx_delegated_actions_world ON delegated_actions(world_id, created_at);
+
+CREATE TABLE action_attempts (
+  id              TEXT PRIMARY KEY,
+  action_id       TEXT NOT NULL REFERENCES delegated_actions(id) ON DELETE CASCADE,
+  idempotency_key TEXT NOT NULL UNIQUE,
+  state           TEXT NOT NULL,              -- attempted | confirmed | failed | uncertain
+  reference       TEXT,
+  response_digest TEXT,
+  detail          TEXT NOT NULL DEFAULT '',
+  started_at      INTEGER NOT NULL,
+  ended_at        INTEGER
+);
+CREATE INDEX idx_action_attempts_action ON action_attempts(action_id, started_at);
+
+CREATE TABLE attempt_checks (
+  id         TEXT PRIMARY KEY,
+  attempt_id TEXT NOT NULL REFERENCES action_attempts(id) ON DELETE CASCADE,
+  result     TEXT NOT NULL,
+  detail     TEXT NOT NULL DEFAULT '',
+  at         INTEGER NOT NULL
+);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: INIT },
   { version: 2, name: "object_model", sql: OBJECT_MODEL },
@@ -1365,4 +1412,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 28, name: "work_positions", sql: WORK_POSITIONS },
   { version: 29, name: "grants", sql: GRANTS },
   { version: 30, name: "browser", sql: BROWSER },
+  { version: 31, name: "delegated_actions", sql: DELEGATED_ACTIONS },
 ];

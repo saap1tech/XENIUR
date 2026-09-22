@@ -5,7 +5,7 @@ import type {
   ObjectState, PlanShape, ProcessProof, ReadinessReport, RebuildPlan, Representation, ResolvedPassage,
   SourceVersion, StepStatus, Task, ThinkingMap, ConstraintRecord, ConstraintValue,
 } from "@xeniur/core";
-import type { ChallengeRecord, EntryRecord, EnvelopeSheet, Standing as StandingData, SupportMap as SupportMapData, TrailRow, ExitReason, ModeKind, ModelProviderView, ModeRecord, TrustFacts, JudgingSheetData, CriterionMark, WorkPlan, StepWork, StepDisposition, StepKind, StepExecution } from "@xeniur/core";
+import type { ChallengeRecord, EntryRecord, EnvelopeSheet, Standing as StandingData, SupportMap as SupportMapData, TrailRow, ExitReason, ModeKind, ModelProviderView, ModeRecord, TrustFacts, JudgingSheetData, CriterionMark, WorkPlan, StepWork, StepDisposition, StepKind, StepExecution, ActionDescription, Attempt, AttemptCheck } from "@xeniur/core";
 import { formOf } from "@xeniur/core";
 
 export interface LineageView {
@@ -201,6 +201,14 @@ export interface SceneBindings {
   onStepExecution?(goalId: string, stepId: string, execution: StepExecution, note?: string): void;
   /** Put a step in the centre. */
   onStepFocus?(goalId: string, stepId: string): void;
+  /** A delegated action awaiting approval: what it does, and the digest consent binds to. */
+  actionReviews?: Readonly<Record<string, { description: ActionDescription; reviewDigest: string; accountVerifiedByPerson: boolean }>>;
+  /** What became of one: its attempts, and the checks asked about each. */
+  actionReceipts?: Readonly<Record<string, { description: ActionDescription; attempts: Attempt[]; checks: Readonly<Record<string, AttemptCheck[]>> }>>;
+  onApproveAction?(actionId: string): void;
+  onDiscardAction?(actionId: string): void;
+  /** Ask the destination what became of an attempt. Never a retry. */
+  onCheckStatus?(attemptId: string): void;
   /** What a judge sees for one entry, by entry id. */
   judgingSheets?: Readonly<Record<string, JudgingSheetData>>;
   /** The judge marks each criterion and writes a note; the host signs and stores it. */

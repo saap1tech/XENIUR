@@ -25,6 +25,7 @@ import { TicketStore } from "./tickets.js";
 import { PlanStore } from "./plans.js";
 import { PositionStore } from "./positions.js";
 import { GrantStore } from "./grants.js";
+import { DelegatedActionStore } from "./delegated-actions.js";
 import { TrailStore } from "./trail.js";
 import { GoalStore } from "./goals.js";
 import { EnvelopeStore } from "./envelopes.js";
@@ -101,6 +102,8 @@ export class ObjectGraph {
   readonly positions: PositionStore;
   /** What the person allowed, exactly — checked before reading, before sending, at dispatch. */
   readonly grants: GrantStore;
+  /** Delegated actions: drafted, approved, dispatched once, and answered in four honest states. */
+  readonly delegated: DelegatedActionStore;
   /** Saw · decided · authorised · executed, one row per model call or consequential action. */
   readonly trail: TrailStore;
   /** What the person is trying to accomplish, per World, in their words. */
@@ -129,6 +132,7 @@ export class ObjectGraph {
     this.plans = new PlanStore(db, this);
     this.positions = new PositionStore(db);
     this.grants = new GrantStore(db);
+    this.delegated = new DelegatedActionStore(db, this);
     this.trail = new TrailStore(db);
     this.goals = new GoalStore(db, this);
     this.envelopes = new EnvelopeStore(db);

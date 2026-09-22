@@ -9,7 +9,7 @@ import { compileContext } from "@xeniur/grammar";
 import { policyFrom } from "@xeniur/models";
 import { proposeFromBound } from "@xeniur/sensemaking";
 import { SupportStatusSchema, type Tool, type PlanShape } from "@xeniur/core";
-import { ProfileKindSchema, RightsSchema, CriterionMarkSchema, PlacingSchema, SignedDocumentEnvelopeSchema, StepDispositionSchema, StepEvidenceSchema, StepExecutionSchema, StepKindSchema, type StepWork } from "@xeniur/core";
+import { ActionRequestSchema, ProfileKindSchema, RightsSchema, CriterionMarkSchema, PlacingSchema, SignedDocumentEnvelopeSchema, StepDispositionSchema, StepEvidenceSchema, StepExecutionSchema, StepKindSchema, type StepWork } from "@xeniur/core";
 import { policyConstraints } from "./services.js";
 import { BrainIntentSchema, InvalidPlanError, bindProposal, resolveAsk, type BrainIntent } from "@xeniur/brain";
 import { planForProposal, proposalsFor } from "@xeniur/grammar";
@@ -176,6 +176,17 @@ const SCHEMAS = {
     stepId: z.string().nullable().default(null), objectId: UuidSchema.nullable().default(null), formRole: z.string().nullable().default(null),
     zone: z.enum(["sources", "decisions", "work", "deliveries"]).nullable().default(null), tabIds: z.array(z.string().min(1)).max(32).default([]), pendingReviewId: z.string().nullable().default(null) }),
   "position:get": Uuid,
+  "actions:draft": z.object({ worldId: UuidSchema, goalId: UuidSchema.nullable().default(null), stepId: z.string().nullable().default(null),
+    adapterId: z.string().min(1), request: ActionRequestSchema }),
+  "actions:approve": z.object({ actionId: UuidSchema, accountLabel: z.string().max(200).nullable().default(null), minutes: z.number().int().positive().max(240).default(30) }),
+  "actions:dispatch": z.object({ actionId: UuidSchema }),
+  "actions:checkStatus": z.object({ attemptId: UuidSchema }),
+  "actions:list": Uuid,
+  "actions:get": Uuid,
+  "actions:discard": z.object({ actionId: UuidSchema }),
+  "routes:list": z.undefined(),
+  "routes:setToken": z.object({ routeId: z.string().min(1), token: z.string().min(1).max(4000) }),
+  "routes:removeToken": z.object({ routeId: z.string().min(1) }),
   "plans:current": Uuid,
   "plans:propose": Uuid,
   "plans:adoptAll": Uuid,
@@ -708,6 +719,46 @@ export function registerIpc(services: Services): void {
     },
     "position:save": (input) => services.graph.positions.save(input),
     "position:get": ({ id }) => services.graph.positions.get(id),
+    "actions:draft": ({ worldId, goalId, stepId, adapterId, request }) =>
+      services.graph.delegated.draft({ worldId, goalId, stepId, adapterId, request }),
+    "actions:approve": ({ actionId, accountLabel, minutes }) => {
+      // The person approved this exact plan. The grant is issued here, in the trusted process,
+      // bound to its digest, to this route and class, for one action and a bounded time.
+      const a = services.graph.delegated.get(actionId);
+      const grant = services.graph.grants.issue({
+        kind: "action", route: a.route as "embedded_tab" | "service_api", worldId: a.worldId, goalId: a.goalId,
+        tabId: a.request.tabId, origins: a.route === "embedded_tab" && a.description.destination.startsWith("http") ? [new URL(a.description.destination).origin] : [],
+        accountLabel: accountLabel ?? a.description.accountLabel, accountVerifiedBy: accountLabel ? "person" : null,
+        actionClasses: [a.request.actionClass], reviewDigest: a.reviewDigest,
+        payloadVersionIds: a.request.items.map((i) => i.versionId).filter((v): v is string => v !== null),
+        oneUse: true, limits: { maxActions: 1, maxAmount: a.request.amount, currency: a.request.currency },
+        expiresAt: Date.now() + minutes * 60_000, because: a.description.effect,
+      });
+      services.graph.delegated.approve(actionId, grant.id);
+      return { grantId: grant.id };
+    },
+    "actions:dispatch": ({ actionId }) => services.graph.delegated.dispatch(actionId, (plan) => {
+      // The second, independent gate: the broker, over the same plan.
+      services.broker.guard({ tool: "outreach.send", args: { ...plan.args, destination: plan.destination }, scope: plan.destination });
+    }),
+    "actions:checkStatus": ({ attemptId }) => services.graph.delegated.checkStatus(attemptId),
+    "actions:list": ({ id }) => services.graph.delegated.list(id),
+    "actions:get": ({ id }) => {
+      const a = services.graph.delegated.get(id);
+      const attempts = services.graph.delegated.attempts(id);
+      return { ...a, attempts, checks: Object.fromEntries(attempts.map((x) => [x.id, services.graph.delegated.checksOf(x.id)])) };
+    },
+    "actions:discard": ({ actionId }) => {
+      const a = services.graph.delegated.get(actionId);
+      if (a.grantId) services.graph.grants.revoke(a.grantId, "you discarded this action");
+      services.graph.db.prepare(`DELETE FROM delegated_actions WHERE id = ? AND state IN ('draft','approved')`).run(actionId);
+    },
+    "routes:list": () => services.routes.endpoints.map((e) => ({
+      id: e.id, label: e.label, endpoint: e.endpoint, statusEndpoint: e.statusEndpoint, fields: e.fields,
+      hasToken: services.routes.tokens.has(e.id),
+    })),
+    "routes:setToken": ({ routeId, token }) => { services.routes.tokens.write(routeId, token); return { hasToken: true }; },
+    "routes:removeToken": ({ routeId }) => { services.routes.tokens.remove(routeId); return { hasToken: false }; },
     "plans:current": ({ id }) => services.graph.plans.current(id),
     "plans:propose": ({ id }) => services.graph.plans.propose(id),
     "plans:adoptAll": ({ id }) => services.graph.plans.adoptAll(id),

@@ -64,3 +64,5 @@ export { PlanStore, NotComplete } from "./plans.js";
 export { PositionStore } from "./positions.js";
 export { GrantStore } from "./grants.js";
 export type { GrantNeed } from "./grants.js";
+export { DelegatedActionStore, digestOf } from "./delegated-actions.js";
+export { MockRouteAdapter } from "./route-mock.js";

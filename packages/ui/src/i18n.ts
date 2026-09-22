@@ -169,6 +169,26 @@ export const EN = {
   "save.nothing": "There is nothing to save here yet.",
   "save.saved": "Saved “{title}”. {count} suggestions proposed — none accepted until you say so.",
 
+  // One delegated action
+  "action.eyebrow": "BEFORE THIS HAPPENS",
+  "action.destination": "Where it goes",
+  "action.account": "As",
+  "action.noaccount": "no account named",
+  "action.unverified": "you have not confirmed this is the right account",
+  "action.does": "What it is",
+  "action.route.tab": "in the tab you can see",
+  "action.route.api": "to the endpoint you configured",
+  "action.amount": "Amount",
+  "action.plan": "This plan",
+  "action.carries": "What it carries",
+  "action.fields": "What is sent",
+  "action.approve": "Approve this exact action",
+  "action.discard": "Discard",
+  "receipt.eyebrow": "WHAT BECAME OF IT",
+  "receipt.aria": "The record of an action sent to {destination}.",
+  "receipt.check": "Check status",
+  "receipt.note": "Attempts are kept as they were. A later answer is recorded beside the attempt it is about, never written over it.",
+
   // Protected Web
   "web.explore.proposed": "{count} suggestions proposed for review — none accepted until you say so",
 

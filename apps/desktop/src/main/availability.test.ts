@@ -19,12 +19,24 @@ describe("availability is read, not assumed", () => {
     expect(r["brain.live"].state).toBe("disabled_by_policy");
     expect(r["models.cloud"].state).toBe("needs_setup");
     expect(r["browser.manual"].state).toBe("available");
-    expect(r["browser.delegated"].state).toBe("not_implemented");
+    // The driver exists now; what is missing is an account and a tab to act in.
+    expect(r["browser.delegated"].state).toBe("needs_setup");
+    expect(r["browser.delegated"].because).toMatch(/only where you can watch/);
     expect(r["browser.route.service_api"].state).toBe("not_implemented");
     expect(r["outreach.send"].state).toBe("disabled_by_policy");
     expect(r["web.risk_lookup"].state).toBe("disabled_by_policy");
     expect(r["hands.playwright"].state).toBe("not_implemented");
     expect(r["capabilities.registry"].state).toBe("not_implemented");
+  });
+
+  it("acting in a tab is available once an account and a tab exist", () => {
+    expect(availabilityFrom({ ...base, browserDelegatedWired: true }).features["browser.delegated"].state).toBe("available");
+  });
+
+  it("a configured route with a token is available; one without is setup; none at all is not implemented", () => {
+    expect(availabilityFrom({ ...base, serviceRoutes: [{ id: "r", endpoint: true, token: true }] }).features["browser.route.service_api"].state).toBe("available");
+    expect(availabilityFrom({ ...base, serviceRoutes: [{ id: "r", endpoint: true, token: false }] }).features["browser.route.service_api"].state).toBe("needs_setup");
+    expect(availabilityFrom(base).features["browser.route.service_api"].state).toBe("not_implemented");
   });
 
   it("every one of the four states is reachable, and each carries a reason", () => {

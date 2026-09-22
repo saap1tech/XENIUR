@@ -32,8 +32,9 @@ import {
 } from "@xeniur/models";
 import type { ModelProviderView } from "@xeniur/core";
 import { appPaths, BINARIES } from "./paths.js";
-import { SafeStorageKeyStore, SafeStorageSigningKeyStore } from "./keys.js";
+import { SafeStorageKeyStore, SafeStorageRouteTokens, SafeStorageSigningKeyStore } from "./keys.js";
 import { TabManager } from "./web/tabs.js";
+import { HttpsJsonAdapter, type RouteEndpoint } from "./routes/https-json.js";
 import { PreviewRuntime } from "./preview.js";
 
 export interface Services {
@@ -70,6 +71,8 @@ export interface Services {
   compute: ComputeLedger;
   workflows: WorkflowLibrary;
   webRisk: WebRiskChecker;
+  /** Routes the person configured, and the tokens that are theirs. */
+  routes: { adapter: HttpsJsonAdapter; endpoints: RouteEndpoint[]; tokens: SafeStorageRouteTokens };
   /** Arena feeds: URLs the person added (config/arena.json plus this machine's preferences). */
   arena: {
     feeds(): Array<{ url: string; label: string }>;
@@ -254,7 +257,8 @@ export function createServices(window: BrowserWindow): Services {
    * a person who wipes their data sees the scenes again — which is the right behaviour.
    */
   const modelRegistry = ModelRegistry.load(paths.projectRoot);
-  const keyStore: KeyStore = new SafeStorageKeyStore(paths.root);
+  const keyStore = new SafeStorageKeyStore(paths.root);
+  const routeTokens = new SafeStorageRouteTokens(keyStore);
   const firstRunMarker = join(paths.root, ".first-run-done");
 
   const providerView = (): ModelProviderView[] => modelRegistry.providers().map((p) => {
@@ -325,6 +329,17 @@ export function createServices(window: BrowserWindow): Services {
         blockers: r.blockers.map((b) => b.detail),
       })),
   });
+
+  // Routes the person configured, with their own tokens. Registered so a route can be named
+  // in a review; whether it can run is the adapter's own honest answer.
+  const routeEndpoints: RouteEndpoint[] = (() => {
+    try { return (JSON.parse(readFileSync(join(paths.projectRoot, "config/routes.json"), "utf8")) as { endpoints?: RouteEndpoint[] }).endpoints ?? []; }
+    catch { return []; }
+  })();
+  const httpsJson = new HttpsJsonAdapter({ endpoints: routeEndpoints, tokens: routeTokens });
+  graph.delegated.register(httpsJson);
+  // An attempt that was in flight when XENIUR closed is uncertain, never assumed either way.
+  graph.delegated.reconcileInterrupted();
 
   const browser = new TabManager(window, webRisk, graph, join(paths.scratchDir, "downloads"),
     (tabId) => { try { window.webContents.send("xeniur:browser-event", { tabId }); } catch { /* the window may be gone */ } });
@@ -489,7 +504,8 @@ export function createServices(window: BrowserWindow): Services {
   };
 
   return {
-    graph, models, queue, broker, sessions, metrics, compute, workflows, webRisk, arena, mail: new DisabledTransport(), router, brain, gatedBrain, spend, config, env, browser, preview,
+    graph, models, queue, broker, sessions, metrics, compute, workflows, webRisk, arena,
+    routes: { adapter: httpsJson, endpoints: routeEndpoints, tokens: routeTokens }, mail: new DisabledTransport(), router, brain, gatedBrain, spend, config, env, browser, preview,
     rebuild, validation, readiness, rhythm, sense,
     detailOf, historyOf, thinkingMap,
     impactOf: impactOfObject, passageOf,
