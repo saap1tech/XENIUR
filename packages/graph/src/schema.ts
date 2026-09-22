@@ -1289,6 +1289,51 @@ CREATE TABLE grant_events (
 CREATE INDEX idx_grant_events_grant ON grant_events(grant_id, at);
 `;
 
+/**
+ * Migration 30 — browsing inside XENIUR.
+ *
+ * Profiles are the person's accounts; a signed-in one persists its session so signing in stays
+ * signed in, and its partition name keeps the `persist:web` prefix the IPC guard refuses.
+ * Tabs belong to a project and a step, or to nothing at all — unassigned browsing is allowed
+ * and saves nothing. Downloads are held here until the person says what to do with them.
+ */
+const BROWSER = `
+CREATE TABLE browser_profiles (
+  id           TEXT PRIMARY KEY,
+  label        TEXT NOT NULL,
+  kind         TEXT NOT NULL,                 -- ephemeral | signed_in
+  partition    TEXT NOT NULL,
+  created_at   INTEGER NOT NULL,
+  last_used_at INTEGER
+);
+
+CREATE TABLE browser_tabs (
+  id         TEXT PRIMARY KEY,
+  profile_id TEXT NOT NULL REFERENCES browser_profiles(id) ON DELETE CASCADE,
+  world_id   TEXT REFERENCES worlds(id) ON DELETE SET NULL,
+  goal_id    TEXT,
+  step_id    TEXT,
+  url        TEXT NOT NULL DEFAULT '',
+  title      TEXT NOT NULL DEFAULT '',
+  position   INTEGER NOT NULL DEFAULT 0,
+  opened_at  INTEGER NOT NULL,
+  closed_at  INTEGER
+);
+CREATE INDEX idx_browser_tabs_world ON browser_tabs(world_id, closed_at, position);
+
+CREATE TABLE held_downloads (
+  id       TEXT PRIMARY KEY,
+  tab_id   TEXT NOT NULL,
+  filename TEXT NOT NULL,
+  mime     TEXT NOT NULL DEFAULT '',
+  bytes    INTEGER NOT NULL,
+  sha256   TEXT NOT NULL,
+  path     TEXT NOT NULL,
+  at       INTEGER NOT NULL,
+  decided  TEXT                                -- kept | discarded; NULL while the person has not said
+);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: INIT },
   { version: 2, name: "object_model", sql: OBJECT_MODEL },
@@ -1319,4 +1364,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 27, name: "guided_plans", sql: GUIDED_PLANS },
   { version: 28, name: "work_positions", sql: WORK_POSITIONS },
   { version: 29, name: "grants", sql: GRANTS },
+  { version: 30, name: "browser", sql: BROWSER },
 ];

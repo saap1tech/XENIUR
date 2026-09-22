@@ -4,6 +4,7 @@ import type { ImpactReport, OutcomeLedger, TrustFacts } from "./impact.js";
 import type { EnvelopeSheet, ExitReason, ModeEnvelopeInput, ModeKind, ModeRecord, Reward, Streak } from "./modes.js";
 import type { SealFacts } from "./seal.js";
 import type { AvailabilityReport } from "./availability.js";
+import type { BrowserProfile, BrowserTab, HeldDownload, ProfileKind, TabSnapshot, TabState } from "./browser.js";
 import type { Assessment, CriterionMark, JudgingSheetData, Placing, Results, SignedDocument, Ticket } from "./judging.js";
 import type { PublisherRef, PublisherReport, PublisherView, ReportReason, TrustLevel } from "./publisher.js";
 import type { CampaignRecord, OutboundMessage, OutreachEnvelopeInput } from "./outreach.js";
@@ -152,12 +153,31 @@ export interface XeniurBridge {
     cancel(taskId: string): Promise<void>;
     onEvent(handler: (event: TaskEvent, task: Task) => void): () => void;
   };
+  /* Browsing inside XENIUR: the person's accounts, their tabs, one visible view each */
   browser: {
-    open(url: string): Promise<{ viewId: string }>;
-    navigate(viewId: string, url: string): Promise<void>;
-    setBounds(viewId: string, rect: Rect): void;
-    close(viewId: string): Promise<void>;
-    status(viewId: string): Promise<LiveSiteState | null>;
+    profiles(): Promise<BrowserProfile[]>;
+    /** A signed-in account persists its session; an ephemeral one keeps nothing and reads only. */
+    createProfile(label: string, kind: ProfileKind): Promise<BrowserProfile>;
+    removeProfile(profileId: string): Promise<void>;
+    openTab(input: { profileId: string; url: string; worldId?: string | null; goalId?: string | null; stepId?: string | null }): Promise<BrowserTab>;
+    /** A project's tabs, or — with null — the unassigned ones. */
+    tabs(worldId?: string | null): Promise<BrowserTab[]>;
+    activate(tabId: string): Promise<void>;
+    navigate(tabId: string, url: string): Promise<void>;
+    back(tabId: string): Promise<void>;
+    forward(tabId: string): Promise<void>;
+    reload(tabId: string): Promise<void>;
+    find(tabId: string, text: string): Promise<void>;
+    setBounds(tabId: string, rect: Rect): void;
+    closeTab(tabId: string): Promise<void>;
+    state(tabId: string): Promise<TabState | null>;
+    /** The visible, authenticated view — never a fresh public fetch. */
+    snapshot(tabId: string): Promise<TabSnapshot>;
+    /** The person takes the tab back. It needs no reason and stops what the assistant was doing. */
+    takeOver(tabId: string): Promise<void>;
+    downloads(): Promise<HeldDownload[]>;
+    decideDownload(id: string, decision: "kept" | "discarded"): Promise<void>;
+    onEvent(handler: (payload: { tabId: string }) => void): () => void;
   };
   web: {
     settings(): Promise<WebSettings>;

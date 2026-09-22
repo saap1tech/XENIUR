@@ -49,13 +49,29 @@ contextBridge.exposeInMainWorld("xeniur", {
     },
   },
   browser: {
-    open: (url: string) => call("browser:open", { url }),
-    navigate: (viewId: string, url: string) => call("browser:navigate", { viewId, url }),
-    setBounds: (viewId: string, rect: { x: number; y: number; width: number; height: number }) => {
-      void call("browser:setBounds", { viewId, rect });
+    profiles: () => call("browser:profiles"),
+    createProfile: (label: string, kind: string) => call("browser:createProfile", { label, kind }),
+    removeProfile: (profileId: string) => call("browser:removeProfile", { profileId }),
+    openTab: (input: Record<string, unknown>) => call("browser:openTab", input),
+    tabs: (worldId?: string | null) => call("browser:tabs", worldId === undefined ? {} : { worldId }),
+    activate: (tabId: string) => call("browser:activate", { tabId }),
+    navigate: (tabId: string, url: string) => call("browser:navigate", { tabId, url }),
+    back: (tabId: string) => call("browser:back", { tabId }),
+    forward: (tabId: string) => call("browser:forward", { tabId }),
+    reload: (tabId: string) => call("browser:reload", { tabId }),
+    find: (tabId: string, text: string) => call("browser:find", { tabId, text }),
+    setBounds: (tabId: string, rect: { x: number; y: number; width: number; height: number }) => { void call("browser:setBounds", { tabId, rect }); },
+    closeTab: (tabId: string) => call("browser:closeTab", { tabId }),
+    state: (tabId: string) => call("browser:state", { tabId }),
+    snapshot: (tabId: string) => call("browser:snapshot", { tabId }),
+    takeOver: (tabId: string) => call("browser:takeOver", { tabId }),
+    downloads: () => call("browser:downloads"),
+    decideDownload: (id: string, decision: "kept" | "discarded") => call("browser:decideDownload", { id, decision }),
+    onEvent: (handler: (payload: { tabId: string }) => void) => {
+      const listener = (_e: unknown, payload: { tabId: string }) => handler(payload);
+      ipcRenderer.on("xeniur:browser-event", listener);
+      return () => { ipcRenderer.removeListener("xeniur:browser-event", listener); };
     },
-    close: (viewId: string) => call("browser:close", { viewId }),
-    status: (viewId: string) => call("browser:status", { viewId }),
   },
   web: {
     settings: () => call("web:settings"),

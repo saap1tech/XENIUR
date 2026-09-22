@@ -33,7 +33,7 @@ import {
 import type { ModelProviderView } from "@xeniur/core";
 import { appPaths, BINARIES } from "./paths.js";
 import { SafeStorageKeyStore, SafeStorageSigningKeyStore } from "./keys.js";
-import { BrowserShell } from "./browser.js";
+import { TabManager } from "./web/tabs.js";
 import { PreviewRuntime } from "./preview.js";
 
 export interface Services {
@@ -91,7 +91,8 @@ export interface Services {
   spend: SpendLedger;
   config: ProvidersConfig;
   env: ProviderEnv;
-  browser: BrowserShell;
+  /** Browsing inside XENIUR: profiles, tabs, one visible view each. */
+  browser: TabManager;
   preview: PreviewRuntime;
   systemInfo(): Promise<SystemInfo>;
   /** Every provider id the registry actually implements — what config may name. */
@@ -325,7 +326,8 @@ export function createServices(window: BrowserWindow): Services {
       })),
   });
 
-  const browser = new BrowserShell(window, webRisk);
+  const browser = new TabManager(window, webRisk, graph, join(paths.scratchDir, "downloads"),
+    (tabId) => { try { window.webContents.send("xeniur:browser-event", { tabId }); } catch { /* the window may be gone */ } });
   const preview = new PreviewRuntime(window);
 
   // Every tool the queue can run. A task that names anything else fails loudly rather

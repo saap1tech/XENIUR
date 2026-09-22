@@ -54,6 +54,10 @@ describe("who is asking, before what they are asking", () => {
   });
 
   it("refuses anything coming from a web browsing partition", () => {
+    // A sign-in profile's partition keeps the prefix, so the same guard refuses it.
+    for (const partition of ["persist:web:profile:abc", "/Users/x/.../Partitions/persist_web_profile_abc"]) {
+      expect(() => assertTrustedSender(event({ storagePath: partition })), partition).toThrow();
+    }
     expect(() => assertTrustedSender(event({ storagePath: "/Users/x/.../Partitions/persist_web_default" })))
       .toThrow(/web browsing partition/);
   });

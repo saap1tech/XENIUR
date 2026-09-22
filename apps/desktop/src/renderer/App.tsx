@@ -8,6 +8,7 @@ import { FocusMode } from "./FocusMode.js";
 import { FirstRun } from "./FirstRun.js";
 import { Models } from "./Models.js";
 import { Availability } from "./Availability.js";
+import { Browser, type BrowserLayout } from "./Browser.js";
 import { t } from "@xeniur/ui";
 import { BrandMark } from "./BrandMark.js";
 import { ComputeReview } from "./ComputeReview.js";
@@ -32,7 +33,9 @@ type View =
   /** Your models, with the sentence that brought the person here and the view to return to. */
   | { kind: "models"; reason: string | null; back: View }
   /** What works here — the runtime's own report, read on open. */
-  | { kind: "availability"; back: View };
+  | { kind: "availability"; back: View }
+  /** Browsing, with the project and step the tabs belong to. Null world: unassigned browsing. */
+  | { kind: "browser"; worldId: string | null; goalId: string | null; stepId: string | null; back: View };
 
 export function App() {
   const [worlds, setWorlds] = useState<WorldRow[]>([]);
@@ -44,6 +47,7 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [economy, setEconomy] = useState<EconomySnapshot | null>(null);
   const [quote, setQuote] = useState<ComputeQuote | null>(null);
+  const [browserLayout, setBrowserLayout] = useState<BrowserLayout>("fill");
 
   const bridge = window.xeniur;
   usePaletteShortcut(setPaletteOpen);
@@ -172,6 +176,8 @@ export function App() {
       run: () => setView((current) => ({ kind: "models", reason: null, back: current })) },
     { id: "availability", group: "Settings", label: "What works here", hint: "available · needs setup · disabled · not implemented",
       run: () => setView((current) => ({ kind: "availability", back: current })) },
+    { id: "browse", group: "Go", label: "Browse the web", hint: "your accounts, inside your work",
+      run: () => setView((current) => ({ kind: "browser", worldId: current.kind === "world" ? current.snapshot.world.id : null, goalId: null, stepId: null, back: current })) },
   ];
 
   if (view.kind === "object") {
@@ -251,6 +257,10 @@ export function App() {
   if (view.kind === "models") {
     return <Models reason={view.reason} onBack={() => setView(view.back)} />;
   }
+  if (view.kind === "browser") {
+    return <Browser worldId={view.worldId} goalId={view.goalId} stepId={view.stepId} layout={browserLayout} onLayout={setBrowserLayout}
+      onBack={() => setView(view.back)} />;
+  }
   if (view.kind === "availability") {
     return <Availability economy={economy} onBack={() => setView(view.back)} onModels={() => setView({ kind: "models", reason: null, back: view.back })} />;
   }
@@ -292,7 +302,7 @@ export function App() {
         finally { setBusy(false); }
       }} />}
 
-      {view.kind === "web" ? <WebLayer worlds={worlds} onBack={() => setView({ kind: "home" })} />
+      {view.kind === "web" ? <WebLayer worlds={worlds} onBrowse={() => setView((current) => ({ kind: "browser", worldId: null, goalId: null, stepId: null, back: current }))} onBack={() => setView({ kind: "home" })} />
       : view.kind === "workflows" ? <WorkflowLibrary onBack={() => setView({ kind: "home" })} onApplied={(worldId) => { void refreshWorlds(); void openWorld(worldId); }} />
       : view.kind === "object" ? (
         <ObjectView

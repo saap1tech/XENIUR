@@ -9,7 +9,7 @@ import { compileContext } from "@xeniur/grammar";
 import { policyFrom } from "@xeniur/models";
 import { proposeFromBound } from "@xeniur/sensemaking";
 import { SupportStatusSchema, type Tool, type PlanShape } from "@xeniur/core";
-import { CriterionMarkSchema, PlacingSchema, SignedDocumentEnvelopeSchema, StepDispositionSchema, StepEvidenceSchema, StepExecutionSchema, StepKindSchema, type StepWork } from "@xeniur/core";
+import { ProfileKindSchema, CriterionMarkSchema, PlacingSchema, SignedDocumentEnvelopeSchema, StepDispositionSchema, StepEvidenceSchema, StepExecutionSchema, StepKindSchema, type StepWork } from "@xeniur/core";
 import { policyConstraints } from "./services.js";
 import { BrainIntentSchema, InvalidPlanError, bindProposal, resolveAsk, type BrainIntent } from "@xeniur/brain";
 import { planForProposal, proposalsFor } from "@xeniur/grammar";
@@ -54,11 +54,25 @@ const SCHEMAS = {
   "tasks:approve": Uuid,
   "tasks:reject": Uuid,
   "tasks:cancel": Uuid,
-  "browser:open": z.object({ url: z.string().url().refine((u) => /^https?:/.test(u), "only http(s)") }),
-  "browser:navigate": z.object({ viewId: z.string().min(1), url: z.string().url() }),
-  "browser:setBounds": Rect,
-  "browser:close": z.object({ viewId: z.string().min(1) }),
-  "browser:status": z.object({ viewId: z.string().min(1) }),
+  "browser:profiles": z.undefined(),
+  "browser:createProfile": z.object({ label: z.string().min(1).max(60), kind: ProfileKindSchema }),
+  "browser:removeProfile": z.object({ profileId: z.string().min(1) }),
+  "browser:openTab": z.object({ profileId: z.string().min(1), url: z.string().url(), worldId: UuidSchema.nullable().default(null),
+    goalId: UuidSchema.nullable().default(null), stepId: z.string().nullable().default(null) }),
+  "browser:tabs": z.object({ worldId: UuidSchema.nullable().optional() }),
+  "browser:activate": z.object({ tabId: z.string().min(1) }),
+  "browser:navigate": z.object({ tabId: z.string().min(1), url: z.string().url() }),
+  "browser:back": z.object({ tabId: z.string().min(1) }),
+  "browser:forward": z.object({ tabId: z.string().min(1) }),
+  "browser:reload": z.object({ tabId: z.string().min(1) }),
+  "browser:find": z.object({ tabId: z.string().min(1), text: z.string().max(200) }),
+  "browser:setBounds": z.object({ tabId: z.string().min(1), rect: z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }) }),
+  "browser:closeTab": z.object({ tabId: z.string().min(1) }),
+  "browser:state": z.object({ tabId: z.string().min(1) }),
+  "browser:snapshot": z.object({ tabId: z.string().min(1) }),
+  "browser:takeOver": z.object({ tabId: z.string().min(1) }),
+  "browser:downloads": z.undefined(),
+  "browser:decideDownload": z.object({ id: z.string().min(1), decision: z.enum(["kept", "discarded"]) }),
   "web:settings": z.undefined(),
   "web:setRiskMode": z.object({ mode: z.enum(["local_only", "google_lookup"]) }),
   "web:explore": z.object({ worldId: UuidSchema, url: z.string().url().max(4000) }),
@@ -385,11 +399,25 @@ export function registerIpc(services: Services): void {
     "tasks:reject": ({ id }) => { services.queue.reject(id); },
     "tasks:cancel": ({ id }) => { services.queue.cancel(id); },
 
-    "browser:open": ({ url }) => services.browser.open(url),
-    "browser:navigate": ({ viewId, url }) => services.browser.navigate(viewId, url),
-    "browser:setBounds": ({ viewId, rect }) => { services.browser.setBounds(viewId, rect); },
-    "browser:close": ({ viewId }) => { services.browser.close(viewId); },
-    "browser:status": ({ viewId }) => services.browser.status(viewId),
+    "browser:profiles": () => services.browser.profiles(),
+    "browser:createProfile": ({ label, kind }) => services.browser.createProfile(label, kind),
+    "browser:removeProfile": ({ profileId }) => services.browser.removeProfile(profileId),
+    "browser:openTab": (input) => services.browser.openTab(input),
+    "browser:tabs": ({ worldId }) => services.browser.tabs(worldId),
+    "browser:activate": ({ tabId }) => { services.browser.activate(tabId); },
+    "browser:navigate": ({ tabId, url }) => services.browser.navigate(tabId, url),
+    "browser:back": ({ tabId }) => { services.browser.back(tabId); },
+    "browser:forward": ({ tabId }) => { services.browser.forward(tabId); },
+    "browser:reload": ({ tabId }) => { services.browser.reload(tabId); },
+    "browser:find": ({ tabId, text }) => { services.browser.find(tabId, text); },
+    "browser:setBounds": ({ tabId, rect }) => { services.browser.setBounds(tabId, rect); },
+    "browser:closeTab": ({ tabId }) => { services.browser.closeTab(tabId); },
+    "browser:state": ({ tabId }) => services.browser.state(tabId),
+    "browser:snapshot": ({ tabId }) => services.browser.snapshot(tabId),
+    // Take over is the person's, always, and it needs no reason.
+    "browser:takeOver": ({ tabId }) => { services.browser.takeOver(tabId); },
+    "browser:downloads": () => services.browser.downloads(),
+    "browser:decideDownload": ({ id, decision }) => { services.browser.decideDownload(id, decision); },
     "web:settings": () => ({
       riskMode: services.compute.preference("web.riskMode", "local_only") === "google_lookup" ? "google_lookup" as const : "local_only" as const,
       lookupConfigured: Boolean(process.env["GOOGLE_WEB_RISK_API_KEY"]),
