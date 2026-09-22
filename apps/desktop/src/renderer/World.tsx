@@ -58,6 +58,8 @@ export interface WorldProps {
   initialStep?: string | null;
   /** A request resolved to a remote model and no key exists: the host offers Your models. */
   onNeedsKey?(reason: string): void;
+  /** Browse for this project and step: tabs opened there belong to it. */
+  onBrowse?(stepId: string | null): void;
 }
 
 /**
@@ -74,7 +76,7 @@ export interface WorldProps {
  */
 export function World({
   snapshot, tasks, busy, initialSelection = null, initialZone = "work", initialStep = null,
-  onBack, onOpenObject, onSubmit, onApprove, onReject, onImported, initialGoal, initialPlan, onNeedsKey,
+  onBack, onOpenObject, onSubmit, onApprove, onReject, onImported, initialGoal, initialPlan, onNeedsKey, onBrowse,
 }: WorldProps) {
   const [zone, setZone] = useState<Zone>(initialZone);
   const [showKeys, setShowKeys] = useState(false);
@@ -873,6 +875,7 @@ export function World({
                 ? <button type="button" className="xr-dock__step" onClick={() => setFocusStepId(currentStep.id)}>{currentStep.purpose}{currentStep.expectedResult ? <small> — {currentStep.expectedResult}</small> : null}</button>
                 : <span className="xr-dock__quiet">{t("dock.nothing")}</span>}
               {goal.nextActions.find((a) => !a.doneAt) && <><span className="xr-dock__k">{t("dock.next")}</span><span className="xr-dock__next">{goal.nextActions.find((a) => !a.doneAt)!.text}</span></>}
+              {onBrowse && <button type="button" className="xr-text-action xr-dock__browse" onClick={() => onBrowse(currentStep?.id ?? null)}>{t("dock.browse")}</button>}
             </div>
           )}
           <label htmlFor="world-language">{askingForGoal ? "What are you trying to accomplish?" : "Use language for this"}</label>

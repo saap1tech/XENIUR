@@ -11,7 +11,7 @@ export interface WebSettings {
   disclosure: string;
 }
 export interface CapturedWebSource {
-  objectId: string; title: string; url: string; excerpt: string;
+  title: string; url: string; excerpt: string;
   contentHash: string; risk: WebRiskResult;
 }
 export interface LiveSiteState {

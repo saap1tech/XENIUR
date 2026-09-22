@@ -24,6 +24,14 @@ export function contextMaterialFor(graph: ObjectGraph, focusId: string): Record<
   ]);
   // "Don't send this to AI": a versioned processing permission on the Object's settings. It
   // never changes rights or removes anything; the compiler names it as the reason.
+  /** What the person said about this source when they saved it. */
+  const sourceMeta = (sourceId: string): Record<string, unknown> => {
+    const row = graph.db.prepare(`SELECT metadata FROM sources WHERE id = ?`).get(sourceId) as { metadata: string } | undefined;
+    try { return row ? JSON.parse(row.metadata) as Record<string, unknown> : {}; } catch { return {}; }
+  };
+  const sourceAllows = (sourceId: string): boolean => sourceMeta(sourceId)["aiProcessing"] !== "never";
+  const capturedFromSession = (sourceId: string): boolean => sourceMeta(sourceId)["capturedFrom"] === "visible_session";
+
   const aiAllowed = (objectId: string): boolean =>
     graph.currentState(objectId)?.properties.settings["aiProcessing"] !== "never";
   const decisions = graph.decisions.list(worldId).map((d) => ({
@@ -58,8 +66,12 @@ export function contextMaterialFor(graph: ObjectGraph, focusId: string): Record<
         supportReviewed: support?.checkedBy === "human",
         relatedToFocus: true,
         // A passage travels with the decision that cites it; if the person barred the atom
-        // that carries it, the passage stays home too.
-        aiAllowed: e.atomObjectId ? aiAllowed(e.atomObjectId) : true,
+        // that carries it, the passage stays home too. A capture carries its own answer:
+        // "don't send this to AI", said when it was saved, is read from the source itself.
+        aiAllowed: sourceAllows(v["source_id"] as string) && (e.atomObjectId ? aiAllowed(e.atomObjectId) : true),
+        // Material captured while signed in is the person's to keep and not, by that alone,
+        // theirs to disclose: it needs a grant naming this exact version to leave.
+        needsDisclosureGrant: capturedFromSession(v["source_id"] as string),
       });
     }
   }

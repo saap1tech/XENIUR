@@ -2135,6 +2135,7 @@ input[type="range"] { accent-color: var(--text); }
 .xr-dock__step small { color: var(--dim); }
 .xr-dock__next { color: var(--dim); }
 .xr-dock__quiet { color: var(--faint); }
+.xr-dock__browse { margin-inline-start: auto; font-size: 12px; }
 .xr-goalbar__progress { font-size: 10px; color: var(--dim); margin-inline-start: var(--s-2); white-space: nowrap; }
 /* ---- Technical names stay inspectable, and are marked as such ------------------------------- */
 .xr-technical { font-family: var(--font-mono); font-size: .92em; color: var(--faint); }

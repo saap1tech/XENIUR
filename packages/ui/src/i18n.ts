@@ -113,6 +113,7 @@ export const EN = {
   "dock.step": "Now",
   "dock.next": "Next",
   "dock.nothing": "No step in front of you.",
+  "dock.browse": "Browse for this step",
   "after.import": "Added “{title}”. Next: {next}.",
   "after.importonly": "Added “{title}”.",
   "after.complete": "Finished: {outcome}. The delivery report says what was chosen despite uncertainty.",

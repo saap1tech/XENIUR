@@ -457,7 +457,7 @@ export function registerIpc(services: Services): void {
       const captured = await captureWeb(url, services.webRisk);
       // Capture stores the copy and proposes; acceptance is a separate, recorded act in the tray.
       const { sourceId, candidateCount, contentHash } = exploreIntoProposals(services.sense, worldId, captured);
-      return { objectId: sourceId, sourceId, title: captured.title, url: captured.url,
+      return { sourceId, title: captured.title, url: captured.url,
         excerpt: captured.text.slice(0, 520), contentHash, risk: captured.risk, candidateCount };
     },
     "economy:snapshot": () => services.compute.snapshot(),
@@ -904,12 +904,13 @@ export function registerIpc(services: Services): void {
       const source = services.sense.recordSource({
         worldId, kind, title, text, hash: sha256Hex(text), url: url ?? null, author: author ?? null,
         rights: permittedUse,
-        metadata: sourceIdentity ? { capturedFrom: "visible_session", tabId: sourceIdentity.tabId, account: sourceIdentity.profileLabel, capturedAt: Date.now() } : {},
+        metadata: {
+          ...(sourceIdentity ? { capturedFrom: "visible_session", tabId: sourceIdentity.tabId, account: sourceIdentity.profileLabel, capturedAt: Date.now() } : {}),
+          ...(aiProcessing === "never" ? { aiProcessing: "never" } : {}),
+        },
       });
-      if (aiProcessing === "never") {
-        const current = services.graph.currentState(source.id);
-        if (current) services.graph.commitVersion({ objectId: source.id, properties: { settings: { ...current.properties.settings, aiProcessing: "never" } }, label: "not sent to AI" });
-      }
+      // A Source is not an Object, so the permission lives with the Source itself and the
+      // context compiler reads it there. Saying it must record it somewhere it will be read.
       const version = services.sense.latestVersionOf(source.id);
       const candidates = version ? services.sense.propose(worldId, version.id, extractCandidates(text), "heuristic/1") : [];
       return { sourceId: source.id, candidates };

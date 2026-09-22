@@ -597,6 +597,34 @@ describe("the graph offers the context compiler everything, generously", () => {
     expect(m.passages[0]!["text"]).toBe("Finish is matte throughout.");
     expect(m.passages[0]!["supportReviewed"]).toBe(false);
   });
+
+  /* M6 Part C — what the person said when they saved it is read where it is used. */
+  it("carries a capture's own answer: not for AI stays home, and material from a session needs a grant", async () => {
+    const { contextMaterialFor } = await import("./context-material.js");
+    const { objectId } = asset();
+    const make = (sourceId: string, metadata: string) => {
+      const copy = `${sourceId.slice(0, 8)}-2222-4222-8222-222222222222`;
+      g.db.prepare(`INSERT INTO sources (id, world_id, kind, title, retrieved_at, metadata) VALUES (?, ?, 'clip', 'Supplier portal', ?, ?)`)
+        .run(sourceId, worldId, Date.now(), metadata);
+      g.db.prepare(`INSERT INTO source_versions (id, source_id, retrieved_at, content_hash, text_blob_hash, extractor, partial, rights) VALUES (?, ?, ?, 'h', ?, 'verbatim/1', 0, 'unknown')`)
+        .run(copy, sourceId, Date.now(), g.putBlob(Buffer.from(`from ${sourceId.slice(0, 4)}`), "text/plain", "txt"));
+      const d = g.decisions.create({ worldId, question: `Which, for ${sourceId.slice(0, 4)}?`, options: [{ key: "a", label: "A", note: "" }], chosenOption: "a", rationale: "because" });
+      g.decisions.cite(d.objectId, { sourceVersionId: copy, atomObjectId: null, atomVersionId: null, relation: "supports", note: "" });
+      g.decisions.accept(d.objectId, "Ada", { skipSteelman: true });
+      g.decisions.link({ fromObjectId: objectId, toObjectId: d.objectId, relation: "satisfies" });
+      return copy;
+    };
+    const barred = make("33333333-3333-4333-8333-333333333333", JSON.stringify({ capturedFrom: "visible_session", aiProcessing: "never" }));
+    const captured = make("44444444-4444-4444-8444-444444444444", JSON.stringify({ capturedFrom: "visible_session" }));
+    const typed = make("55555555-5555-4555-8555-555555555555", "{}");
+
+    const m = contextMaterialFor(g, objectId)! as { passages: Array<Record<string, unknown>> };
+    const of = (id: string) => m.passages.find((p) => p["sourceVersionId"] === id)!;
+    expect(of(barred)["aiAllowed"]).toBe(false);
+    expect(of(captured)["aiAllowed"]).toBe(true);
+    expect(of(captured)["needsDisclosureGrant"]).toBe(true);
+    expect(of(typed)["needsDisclosureGrant"]).toBe(false);
+  });
 });
 
 /* M6 Part C — a captured passage compared against a requirement, and what a change does to it. */

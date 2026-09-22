@@ -317,6 +317,7 @@ export function App() {
           onOpenObject={(id) => { void openObject(id, view.snapshot); }}
           onSubmit={submit} onApprove={approve} onReject={reject}
           onNeedsKey={(reason) => setView((current) => ({ kind: "models", reason, back: current }))}
+          onBrowse={(stepId) => setView((current) => ({ kind: "browser", worldId: view.snapshot.world.id, goalId: null, stepId, back: current }))}
           onImported={(result) => {
             // Re-read whichever World it landed in — the same one, or a new critique World.
             void bridge?.worlds.list().then(setWorlds);

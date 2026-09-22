@@ -31,6 +31,8 @@
     "demo:sense": "node scripts/ensure-abi.mjs node && tsx scripts/demo-sense.ts",
     "demo:work": "node scripts/ensure-abi.mjs node && tsx scripts/demo-work.ts",
     "demo:arena": "node scripts/ensure-abi.mjs node && tsx scripts/demo-arena.ts",
+    "demo:guided": "node scripts/ensure-abi.mjs node && tsx scripts/demo-guided.ts",
+    "demo:browser": "node scripts/ensure-abi.mjs node && tsx scripts/demo-browser.ts",
     "preview:ui": "node scripts/ensure-abi.mjs node && tsx scripts/preview-ui.tsx"
   },
   "devDependencies": {
