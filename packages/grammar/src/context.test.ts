@@ -21,15 +21,15 @@ const material = (over: Partial<ContextMaterial> = {}): ContextMaterial => ({
   }],
   passages: [
     { sourceVersionId: SV1, sourceTitle: "Client brief", text: "Finish is matte throughout, because the film is shot under hard studio light.",
-      rights: "permitted", citedBy: DEC, supportReviewed: true, relatedToFocus: true, aiAllowed: true },
+      rights: "permitted", citedBy: DEC, supportReviewed: true, relatedToFocus: true, aiAllowed: true, needsDisclosureGrant: false },
     { sourceVersionId: SV2, sourceTitle: "Internal returns data", text: "Seam failure caused 63% of warranty returns in Q1.",
-      rights: "restricted", citedBy: null, supportReviewed: false, relatedToFocus: true, aiAllowed: true },
+      rights: "restricted", citedBy: null, supportReviewed: false, relatedToFocus: true, aiAllowed: true, needsDisclosureGrant: false },
   ],
   constraints: [{ objectId: CON, title: "Budget", kind: "range", value: 1500, relatedToFocus: true, aiAllowed: true }],
   changes: [{ kind: "review", subject: "How should the prop be finished?", because: "the brief changed" }],
   ...over,
 });
-const remote: ContextPolicy = { destination: "remote", maxTokens: 6000, includeDecisions: true, includePassages: true, includeConstraints: true, includeChanges: true, onlyReviewedSupport: false };
+const remote: ContextPolicy = { destination: "remote", maxTokens: 6000, includeDecisions: true, includePassages: true, includeConstraints: true, includeChanges: true, onlyReviewedSupport: false, disclosureApproved: [] };
 const local: ContextPolicy = { ...remote, destination: "local" };
 
 describe("the context compiler is pure", () => {
@@ -112,14 +112,14 @@ describe("what is left out is named, with why", () => {
 
   it("can exclude passages whose citation nobody has reviewed", () => {
     const plan = compileContext(material({ passages: [
-      { sourceVersionId: SV1, sourceTitle: "Client brief", text: "matte throughout", rights: "permitted", citedBy: DEC, supportReviewed: false, relatedToFocus: true, aiAllowed: true },
+      { sourceVersionId: SV1, sourceTitle: "Client brief", text: "matte throughout", rights: "permitted", citedBy: DEC, supportReviewed: false, relatedToFocus: true, aiAllowed: true, needsDisclosureGrant: false },
     ] }), { ...remote, onlyReviewedSupport: true });
     expect(plan.excluded[0]!.why).toBe("unresolved_support");
   });
 
   it("says in the block when a passage's support is not yet reviewed", () => {
     const plan = compileContext(material({ passages: [
-      { sourceVersionId: SV1, sourceTitle: "Client brief", text: "matte throughout", rights: "permitted", citedBy: DEC, supportReviewed: false, relatedToFocus: true, aiAllowed: true },
+      { sourceVersionId: SV1, sourceTitle: "Client brief", text: "matte throughout", rights: "permitted", citedBy: DEC, supportReviewed: false, relatedToFocus: true, aiAllowed: true, needsDisclosureGrant: false },
     ] }), remote);
     expect(plan.rendered).toContain("support not yet reviewed");
   });
@@ -143,5 +143,19 @@ describe("a person can bar an Object from any model", () => {
     expect(barred.contextDigest).not.toBe(allowed.contextDigest);
     // The passage the barred decision cited stays in the material as a passage — rights untouched.
     expect(barred.excluded.find((e) => e.id === DEC)).toBeDefined();
+  });
+
+  /* M6 Part C — browsing is not disclosing: captured material needs its own grant to leave. */
+  it("material captured from a signed-in session does not reach a remote model without a disclosure grant", () => {
+    const captured = { sourceVersionId: SV1, sourceTitle: "Supplier portal", text: "unit price at volume", rights: "unknown" as const, citedBy: null, supportReviewed: false, relatedToFocus: true, aiAllowed: true, needsDisclosureGrant: true };
+    const refused = compileContext(material({ passages: [captured] }), remote);
+    expect(refused.included.some((i) => i.kind === "passage")).toBe(false);
+    expect(refused.excluded[0]!.why).toBe("no_disclosure_grant");
+
+    const allowed = compileContext(material({ passages: [captured] }), { ...remote, disclosureApproved: [SV1] });
+    expect(allowed.included.some((i) => i.kind === "passage")).toBe(true);
+
+    // A local model is not a disclosure: the material never left the machine.
+    expect(compileContext(material({ passages: [captured] }), local).included.some((i) => i.kind === "passage")).toBe(true);
   });
 });

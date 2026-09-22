@@ -1242,6 +1242,53 @@ CREATE TABLE work_positions (
 );
 `;
 
+/**
+ * Migration 29 — grants.
+ *
+ * Its own table, not an extension of `session_grants`: that one is checked by kind on the
+ * anonymous-only automation path, and widening it would widen that path. Every change to a
+ * grant is a new revision; every event against one is a row, so a sheet can say what happened.
+ */
+const GRANTS = `
+CREATE TABLE grants (
+  id                 TEXT PRIMARY KEY,
+  revision           INTEGER NOT NULL,
+  kind               TEXT NOT NULL,           -- website_access | observation | model_disclosure | action
+  route              TEXT,                    -- embedded_tab | service_api
+  world_id           TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+  goal_id            TEXT,
+  profile_id         TEXT,
+  tab_id             TEXT,
+  web_contents_id    INTEGER,
+  origins            TEXT NOT NULL DEFAULT '[]',
+  account_label      TEXT,
+  account_verified_by TEXT,
+  data_version_ids   TEXT NOT NULL DEFAULT '[]',
+  model_destinations TEXT NOT NULL DEFAULT '[]',
+  action_classes     TEXT NOT NULL DEFAULT '[]',
+  review_digest      TEXT,
+  payload_version_ids TEXT NOT NULL DEFAULT '[]',
+  one_use            INTEGER NOT NULL DEFAULT 0,
+  uses               INTEGER NOT NULL DEFAULT 0,
+  limits             TEXT NOT NULL DEFAULT '{}',
+  expires_at         INTEGER NOT NULL,
+  state              TEXT NOT NULL DEFAULT 'active',
+  because            TEXT NOT NULL DEFAULT '',
+  created_at         INTEGER NOT NULL,
+  superseded_by      TEXT REFERENCES grants(id) ON DELETE SET NULL
+);
+CREATE INDEX idx_grants_world ON grants(world_id, state, expires_at);
+
+CREATE TABLE grant_events (
+  id       TEXT PRIMARY KEY,
+  grant_id TEXT NOT NULL REFERENCES grants(id) ON DELETE CASCADE,
+  kind     TEXT NOT NULL,                     -- issued | revised | paused | resumed | revoked | consumed | used | refused
+  detail   TEXT NOT NULL DEFAULT '',
+  at       INTEGER NOT NULL
+);
+CREATE INDEX idx_grant_events_grant ON grant_events(grant_id, at);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: INIT },
   { version: 2, name: "object_model", sql: OBJECT_MODEL },
@@ -1271,4 +1318,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 26, name: "judging", sql: JUDGING },
   { version: 27, name: "guided_plans", sql: GUIDED_PLANS },
   { version: 28, name: "work_positions", sql: WORK_POSITIONS },
+  { version: 29, name: "grants", sql: GRANTS },
 ];

@@ -62,3 +62,5 @@ export { JudgingStore } from "./judging.js";
 export { TicketStore } from "./tickets.js";
 export { PlanStore, NotComplete } from "./plans.js";
 export { PositionStore } from "./positions.js";
+export { GrantStore } from "./grants.js";
+export type { GrantNeed } from "./grants.js";

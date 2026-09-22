@@ -44,6 +44,12 @@ export const ContextPassageSchema = z.object({
   supportReviewed: z.boolean().default(false),
   relatedToFocus: z.boolean().default(true),
   aiAllowed: z.boolean().default(true),
+  /**
+   * Captured from a signed-in browsing session. Material a person browsed to is theirs to
+   * keep and not, by that alone, theirs to disclose: it needs a model-disclosure grant that
+   * names this exact version before it may leave for a remote model.
+   */
+  needsDisclosureGrant: z.boolean().default(false),
 }).strict();
 
 export const ContextConstraintSchema = z.object({
@@ -86,11 +92,17 @@ export const ContextPolicySchema = z.object({
   includeChanges: z.boolean().default(true),
   /** Exclude passages whose citation nobody has reviewed. Off by default: material is material. */
   onlyReviewedSupport: z.boolean().default(false),
+  /**
+   * Source versions a model-disclosure grant covers, for this destination. Captured material
+   * that is not in this list does not leave — the exclusion says so by name.
+   */
+  disclosureApproved: z.array(z.string().min(1)).max(256).default([]),
 }).strict();
 export type ContextPolicy = z.infer<typeof ContextPolicySchema>;
 
 export const EXCLUSION_REASONS = [
   "restricted_rights", "over_budget", "outside_focus", "unresolved_support", "not_requested", "not_allowed_by_person",
+  "no_disclosure_grant",
 ] as const;
 export type ExclusionReason = (typeof EXCLUSION_REASONS)[number];
 
@@ -209,6 +221,9 @@ export function compileContext(materialInput: unknown, policyInput: unknown): Co
     if (p.rights === "restricted" && policy.destination === "remote") {
       excluded.push({ kind: "passage", id, label, why: "restricted_rights" }); continue;
     }
+    if (p.needsDisclosureGrant && policy.destination === "remote" && !policy.disclosureApproved.includes(p.sourceVersionId)) {
+      excluded.push({ kind: "passage", id, label, why: "no_disclosure_grant" }); continue;
+    }
     if (policy.onlyReviewedSupport && p.citedBy && !p.supportReviewed) {
       excluded.push({ kind: "passage", id, label, why: "unresolved_support" }); continue;
     }
@@ -234,4 +249,5 @@ export const EXCLUSION_WORDS: Record<ExclusionReason, string> = {
   not_allowed_by_person: "you said not to send this to AI",
   unresolved_support: "its citation has not been reviewed",
   not_requested: "not part of what you allowed",
+  no_disclosure_grant: "captured while you were signed in — you have not allowed it to be sent",
 };

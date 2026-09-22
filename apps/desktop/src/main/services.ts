@@ -241,6 +241,10 @@ export function createServices(window: BrowserWindow): Services {
     signingKeys: new SafeStorageSigningKeyStore(paths.root),
   });
 
+  // Every grant is revoked when XENIUR starts. A restored position restores no authority:
+  // what the assistant may do is decided again, by the person, in this run.
+  graph.grants.revokeAll("XENIUR restarted");
+
   /* ------------------------------------------------------------ your models
    *
    * Keys live in the OS keychain through safeStorage and never touch the graph. The renderer
