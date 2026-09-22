@@ -9,7 +9,7 @@ import { compileContext } from "@xeniur/grammar";
 import { policyFrom } from "@xeniur/models";
 import { proposeFromBound } from "@xeniur/sensemaking";
 import { SupportStatusSchema, type Tool, type PlanShape } from "@xeniur/core";
-import { ProfileKindSchema, CriterionMarkSchema, PlacingSchema, SignedDocumentEnvelopeSchema, StepDispositionSchema, StepEvidenceSchema, StepExecutionSchema, StepKindSchema, type StepWork } from "@xeniur/core";
+import { ProfileKindSchema, RightsSchema, CriterionMarkSchema, PlacingSchema, SignedDocumentEnvelopeSchema, StepDispositionSchema, StepEvidenceSchema, StepExecutionSchema, StepKindSchema, type StepWork } from "@xeniur/core";
 import { policyConstraints } from "./services.js";
 import { BrainIntentSchema, InvalidPlanError, bindProposal, resolveAsk, type BrainIntent } from "@xeniur/brain";
 import { planForProposal, proposalsFor } from "@xeniur/grammar";
@@ -47,7 +47,7 @@ const SCHEMAS = {
   }),
   "gestures:choose": z.object({
     worldId: UuidSchema, sourceId: UuidSchema, targetId: z.string().min(1).max(200),
-    targetKind: z.enum(["claim", "object", "print", "delivery", "version", "question_lane", "decision", "work"]),
+    targetKind: z.enum(["claim", "object", "print", "delivery", "version", "question_lane", "decision", "work", "requirement"]),
     label: z.string().min(1).max(100),
   }),
   "tasks:active": z.undefined(),
@@ -215,6 +215,12 @@ const SCHEMAS = {
     text: z.string().min(1).max(200_000),
     url: z.string().url().optional(),
     author: z.string().max(200).optional(),
+    /** Which visible tab this came from, and under whose account. Never a fresh public fetch. */
+    sourceIdentity: z.object({ tabId: z.string().min(1), profileLabel: z.string().max(60) }).optional(),
+    /** What the person may do with it. Unknown by default: being able to read is not a licence. */
+    permittedUse: RightsSchema.default("unknown"),
+    /** The person said not to send it to a model, at the moment of saving. */
+    aiProcessing: z.enum(["allowed", "never"]).default("allowed"),
   }),
   "sense:observe": z.object({ worldId: UuidSchema, text: z.string().min(1).max(4000), about: UuidSchema.optional() }),
   "sense:sort": z.object({ id: UuidSchema, lane: z.enum(["keep", "question", "connect", "test", "build", "ignore"]) }),
@@ -379,8 +385,14 @@ export function registerIpc(services: Services): void {
       }
       // What the target is, from the graph — not from the caller's word. A decision is a
       // decision, a claim a claim, anything else an Object; the Work zone has no Object.
+      // A requirement is something the work must satisfy: a constraint, or an Object a goal in
+      // this project named as a required output. Read from the graph, never from the caller.
+      const isRequirement = Boolean(target) && (target!.properties.semanticType === "constraint"
+        || services.graph.goals.history(worldId).some((g) => g.requiredOutputs.includes(targetId)));
       const expectedKind = target
-        ? (services.graph.decisions.get(targetId) ? "decision" : target.properties.semanticType === "claim" ? "claim" : "object")
+        ? (services.graph.decisions.get(targetId) ? "decision"
+          : isRequirement ? "requirement"
+          : target.properties.semanticType === "claim" ? "claim" : "object")
         : targetKind;
       if (target && targetKind !== expectedKind) {
         return { accepted: false, taskId: null, plan: null, error: "target kind no longer applies" };
@@ -835,11 +847,18 @@ export function registerIpc(services: Services): void {
     "sense:friction": ({ id }) => services.sense.friction(id),
     "sense:dismissFriction": ({ id, reason }) => { services.sense.dismissFriction(id, reason ?? ""); },
 
-    "sense:capture": ({ worldId, kind, title, text, url, author }) => {
-      // The copy is stored; heuristic candidates are proposed, as such. Nothing is written in as understood.
+    "sense:capture": ({ worldId, kind, title, text, url, author, sourceIdentity, permittedUse, aiProcessing }) => {
+      // The copy is stored with where it came from and what may be done with it; candidates are
+      // proposed, as such. Saving, proposing and accepting stay three separate acts.
       const source = services.sense.recordSource({
         worldId, kind, title, text, hash: sha256Hex(text), url: url ?? null, author: author ?? null,
+        rights: permittedUse,
+        metadata: sourceIdentity ? { capturedFrom: "visible_session", tabId: sourceIdentity.tabId, account: sourceIdentity.profileLabel, capturedAt: Date.now() } : {},
       });
+      if (aiProcessing === "never") {
+        const current = services.graph.currentState(source.id);
+        if (current) services.graph.commitVersion({ objectId: source.id, properties: { settings: { ...current.properties.settings, aiProcessing: "never" } }, label: "not sent to AI" });
+      }
       const version = services.sense.latestVersionOf(source.id);
       const candidates = version ? services.sense.propose(worldId, version.id, extractCandidates(text), "heuristic/1") : [];
       return { sourceId: source.id, candidates };

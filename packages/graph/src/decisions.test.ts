@@ -598,3 +598,27 @@ describe("the graph offers the context compiler everything, generously", () => {
     expect(m.passages[0]!["supportReviewed"]).toBe(false);
   });
 });
+
+/* M6 Part C — a captured passage compared against a requirement, and what a change does to it. */
+describe("comparison survives the browser and answers a change", () => {
+  it("pins the requirement's version, marks the comparison for review when it changes, and rewrites nothing", () => {
+    const requirement = g.createObject({ worldId, semanticType: "constraint", title: "Client requirement" }).object.id;
+    const rep = (t: string) => g.addRepresentation({ objectId: requirement, modality: "text", format: "md", blobHash: g.putBlob(Buffer.from(t), "text/markdown", "md"), provenance: "human" });
+    g.commitVersion({ objectId: requirement, forms: [{ role: "doc.primary", representationId: rep("matte throughout").id }] });
+    const passage = g.createObject({ worldId, semanticType: "source", title: "Supplier specification" }).object.id;
+
+    // The gesture's outcome, applied: a review_on_change link pinned to the version that exists now.
+    g.decisions.link({ fromObjectId: requirement, toObjectId: passage, relation: "review_on_change", note: '"Supplier specification" was compared against "Client requirement" at the version it had then' });
+    expect(g.decisions.reviewQueue(worldId)).toHaveLength(0);
+
+    // The requirement changes. The comparison is marked for review — and still says what it said.
+    g.commitVersion({ objectId: requirement, forms: [{ role: "doc.primary", representationId: rep("gloss on the hood").id }] });
+    const queue = g.decisions.reviewQueue(worldId);
+    expect(queue.map((r) => r.objectId)).toContain(passage);
+    const links = g.decisions.linksTo(passage);
+    expect(links[0]!.relation).toBe("review_on_change");
+    expect(links[0]!.note).toContain("was compared against");
+    // Closing the tab changes nothing: the meaning is in the graph, not in the browser.
+    expect(g.currentState(passage)!.properties.title).toBe("Supplier specification");
+  });
+});

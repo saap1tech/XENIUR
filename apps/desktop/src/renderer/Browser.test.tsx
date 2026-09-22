@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { IMPLEMENTATION_WORDS, stripTechnical } from "@xeniur/ui";
 import { Browser } from "./Browser.js";
+import { SaveToProject } from "./SaveToProject.js";
 
 /**
  * The browser surface: tabs, the person's accounts, back/forward/reload, find, downloads held.
@@ -46,5 +47,24 @@ describe("the browser surface", () => {
     const html = stripTechnical(renderToStaticMarkup(<Browser worldId={null} onBack={noop} />));
     const hit = html.match(IMPLEMENTATION_WORDS);
     expect(hit, hit ? html.slice(Math.max(0, hit.index! - 60), hit.index! + 30) : "").toBeNull();
+  });
+});
+
+/* M6 Part C — saving is the person's act, and it says what it is doing. */
+describe("Save to project", () => {
+  const snapshot = { tabId: "tab-1", url: "https://supplier.example/spec", title: "Seam specification",
+    selectionText: "Taped seams held through two winters.", pageText: "…the full readable page…", at: 1, profileLabel: "Work" };
+
+  it("says where it came from, defaults rights to unknown, and keeps saving apart from accepting", () => {
+    bridge();
+    const html = renderToStaticMarkup(<SaveToProject snapshot={snapshot} worlds={[{ id: "11111111-1111-4111-8111-111111111111", title: "Cold-weather shell", emoji: "◒", summary: "", createdAt: 1, lastOpenedAt: 1, kind: "work", publisherId: null }]}
+      worldId="11111111-1111-4111-8111-111111111111" onSaved={noop} onCancel={noop} />);
+    expect(html).toContain("in the session you are signed into as Work");
+    expect(html).toContain('<option value="unknown" selected=""');
+    expect(html).toContain("being able to read it is not a licence");
+    expect(html).toContain("Accepting a claim is a separate act");
+    expect(html).toContain("Don’t send this to AI");
+    // What the person selected is offered first when there is a selection.
+    expect(html).toMatch(/aria-checked="true"[^>]*>What you selected/);
   });
 });

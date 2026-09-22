@@ -114,6 +114,22 @@ describe("direct manipulation", () => {
     expect(proposals.map((proposal) => proposal.label)).toEqual(["Supports", "Contradicts", "Connect"]);
   });
 
+  /* M6 Part C — a passage dropped on something the work must satisfy. */
+  it("offers exactly Use as evidence, Compare with requirement and Save as reference for a requirement", () => {
+    const proposals = proposalsFor(
+      { id: FOCUS, title: "Taped seams held two winters", semanticType: "source" },
+      { id: OTHER, title: "Client requirement", kind: "requirement", versionId: "v-2" },
+    );
+    expect(proposals.map((p) => p.label)).toEqual(["Use as evidence", "Compare with requirement", "Save as reference"]);
+    const compare = proposals[1]!;
+    expect(compare.interaction).toBe("compare");
+    // Written requirement → comparison: a change to the requirement is what puts this under review.
+    expect(compare.outcome).toMatchObject({ kind: "semantic_link", relation: "review_on_change", fromObjectId: OTHER, toObjectId: FOCUS });
+    expect(compare.because).toMatch(/marked for review — it is not rewritten/);
+    // The gesture itself accepts nothing and executes nothing: every outcome is a link.
+    for (const p of proposals) expect(p.outcome.kind).toBe("semantic_link");
+  });
+
   it("proposes without mutation and guards before applying a chosen proposal", () => {
     let mutations = 0;
     const proposals = proposalsFor(

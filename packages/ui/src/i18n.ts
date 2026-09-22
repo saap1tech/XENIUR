@@ -147,6 +147,28 @@ export const EN = {
   "browser.emptytitle": "The web, inside your work.",
   "browser.emptybody": "Open a tab with one of your accounts. What you sign into stays signed in; what you save enters the project only when you say so.",
 
+  // Saving what is on screen into the project
+  "save.title": "Save to project",
+  "save.from": "From {url}, in the session you are signed into as {account}.",
+  "save.what": "What to save",
+  "save.selection": "What you selected",
+  "save.page": "The readable page",
+  "save.noselection": "nothing selected",
+  "save.characters": "characters",
+  "save.name": "Call it",
+  "save.into": "Into",
+  "save.rights": "What you may do with it",
+  "save.rights.unknown": "unknown — being able to read it is not a licence",
+  "save.rights.permitted": "permitted — you may reuse it",
+  "save.rights.restricted": "restricted — it stays on this machine",
+  "save.neverai": "Don’t send this to AI",
+  "save.note": "Saving keeps the copy and proposes suggestions. Accepting a claim is a separate act, in the tray.",
+  "save.save": "Save",
+  "save.saving": "Saving…",
+  "save.needproject": "Choose which project this belongs to.",
+  "save.nothing": "There is nothing to save here yet.",
+  "save.saved": "Saved “{title}”. {count} suggestions proposed — none accepted until you say so.",
+
   // Protected Web
   "web.explore.proposed": "{count} suggestions proposed for review — none accepted until you say so",
 

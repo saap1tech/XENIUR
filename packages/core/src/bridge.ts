@@ -16,7 +16,7 @@ import type { StepDisposition, StepEvidence, StepExecution, StepKind, StepWork, 
 import type { WorkPosition, WorkPositionInput } from "./position.js";
 import type { Standing } from "./standing.js";
 import type { SupportMap } from "./support-map.js";
-import type { CandidateRecord, ClaimSupport, SupportStatus } from "./sensemaking.js";
+import type { CandidateRecord, ClaimSupport, Rights, SupportStatus } from "./sensemaking.js";
 
 /** What the renderer learns about a package before deciding. No manifest, no rows — the shape. */
 export interface PackageInspectionView {
@@ -142,7 +142,7 @@ export interface XeniurBridge {
   gestures: {
     choose(input: {
       worldId: string; sourceId: string; targetId: string;
-      targetKind: "claim" | "object" | "print" | "delivery" | "version" | "question_lane" | "decision" | "work";
+      targetKind: "claim" | "object" | "print" | "delivery" | "version" | "question_lane" | "decision" | "work" | "requirement";
       label: string;
     }): Promise<IntentResult>;
   };
@@ -436,10 +436,16 @@ export interface XeniurBridge {
     map(worldId: string): Promise<ThinkingMap | null>;
     friction(worldId: string): Promise<FrictionState>;
     dismissFriction(worldId: string, reason?: string): Promise<void>;
-    /** Stores the copy as a Source version and proposes candidates. Accepting is a separate act. */
+    /**
+     * Stores the copy as a Source version, with where it came from and what may be done with
+     * it, and proposes candidates. Saving, proposing and accepting stay three separate acts.
+     */
     capture(input: {
       worldId: string; kind: string; title: string; text: string;
       url?: string; author?: string;
+      sourceIdentity?: { tabId: string; profileLabel: string };
+      permittedUse?: Rights;
+      aiProcessing?: "allowed" | "never";
     }): Promise<{ sourceId: string; candidates: CandidateRecord[] }>;
     observe(worldId: string, text: string, about?: string): Promise<Atom>;
     sort(objectId: string, lane: Lane): Promise<Atom | null>;

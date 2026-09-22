@@ -11,7 +11,7 @@ export interface DragSubject {
 export interface DropTarget {
   id: string;
   title: string;
-  kind: "claim" | "object" | "print" | "delivery" | "version" | "question_lane" | "decision" | "work";
+  kind: "claim" | "object" | "print" | "delivery" | "version" | "question_lane" | "decision" | "work" | "requirement";
   semanticType?: string;
   versionId?: string;
 }
@@ -104,6 +104,30 @@ export function proposalsFor(
     outcome: { kind: "next_action", questionId: source.id, text: source.title },
     reversible: true, because: `"${source.title}" becomes something to do next on this goal.`,
   }];
+  // A passage the person captured, dropped on something the work must satisfy. Three readings,
+  // and the gesture itself accepts no claim, sends nothing to a model and executes nothing.
+  if (target.kind === "requirement") return [
+    semantic(source, target, "Use as evidence", "supports"),
+    {
+      id: idFor(source, target, "Compare with requirement"), label: "Compare with requirement", interaction: "compare",
+      // The requirement is the cause and the comparison the subject: when the requirement moves
+      // on, this comparison is what needs looking at. The link is written that way round.
+      outcome: {
+        kind: "semantic_link", fromObjectId: target.id, toObjectId: source.id, relation: "review_on_change",
+        note: `"${source.title}" was compared against "${target.title}" at the version it had then`,
+      },
+      reversible: true,
+      because: `"${source.title}" is set beside "${target.title}" at the version it has now. If that requirement changes, this comparison is marked for review — it is not rewritten.`,
+    },
+    {
+      id: idFor(source, target, "Save as reference"), label: "Save as reference", interaction: "connect",
+      outcome: {
+        kind: "semantic_link", fromObjectId: source.id, toObjectId: target.id, relation: "informed_by",
+        note: `kept beside "${target.title}" as a reference`,
+      },
+      reversible: true, because: `"${source.title}" is kept beside "${target.title}". Nothing is claimed about it.`,
+    },
+  ];
   if (type === "decision" && target.kind === "object") return [
     semantic(source, target, "Propose as influence", "satisfies"),
   ];

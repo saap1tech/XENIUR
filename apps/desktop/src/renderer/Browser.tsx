@@ -3,6 +3,7 @@ import type { BrowserProfile, BrowserTab, HeldDownload, TabState } from "@xeniur
 import { BROWSER_STATE_WORDS } from "@xeniur/core";
 import { ArrowLeft, ArrowRight, Globe2, RotateCw, Search, X } from "lucide-react";
 import { t } from "@xeniur/ui";
+import { SaveToProject } from "./SaveToProject.js";
 
 export type BrowserLayout = "fill" | "wide" | "beside";
 
@@ -16,11 +17,13 @@ export type BrowserLayout = "fill" | "wide" | "beside";
  * The state word is a fact about who is driving: *You are browsing* until the person allows
  * the assistant to act, and back the moment they touch the keyboard or press Take over.
  */
-export function Browser({ worldId, goalId, stepId, layout = "fill", onLayout, onSave, onBack }: {
+export function Browser({ worldId, goalId, stepId, worlds = [], layout = "fill", onLayout, onSave, onBack }: {
   /** The project these tabs belong to. Null is unassigned browsing: it saves nothing anywhere. */
   worldId: string | null;
   goalId?: string | null;
   stepId?: string | null;
+  /** The projects a capture may go into. */
+  worlds?: readonly import("@xeniur/core").World[];
   layout?: BrowserLayout;
   onLayout?(layout: BrowserLayout): void;
   /** Save what is on screen into the project — the person's act, never automatic. */
@@ -39,6 +42,8 @@ export function Browser({ worldId, goalId, stepId, layout = "fill", onLayout, on
   const [downloads, setDownloads] = useState<HeldDownload[]>([]);
   const [newLabel, setNewLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState<import("@xeniur/core").TabSnapshot | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
   const host = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
@@ -134,9 +139,16 @@ export function Browser({ worldId, goalId, stepId, layout = "fill", onLayout, on
             onChange={(e) => { setFindText(e.target.value); if (activeId) void bridge?.browser?.find(activeId, e.target.value); }}
             onKeyDown={(e) => { if (e.key === "Escape") { setFinding(false); setFindText(""); if (activeId) void bridge?.browser?.find(activeId, ""); } }} />
         )}
-        {worldId && <button type="button" className="xr-button xr-web-browser__save" disabled={!activeId} onClick={() => activeId && onSave?.(activeId)}>{t("browser.save")}</button>}
+        {worldId && <button type="button" className="xr-button xr-web-browser__save" disabled={!activeId}
+          onClick={() => { if (!activeId) return; void bridge?.browser?.snapshot(activeId).then((s) => setSaving(s ?? null)); onSave?.(activeId); }}>{t("browser.save")}</button>}
       </div>
 
+      {saving && (
+        <SaveToProject snapshot={saving} worlds={worlds} worldId={worldId}
+          onSaved={(r) => { setSaved(t("save.saved", { title: saving.title || saving.url, count: r.candidates })); setSaving(null); }}
+          onCancel={() => setSaving(null)} />
+      )}
+      {saved && <p className="xr-web-browser__error" role="status">{saved}<button type="button" className="xr-text-action" onClick={() => setSaved(null)}>{t("keys.close")}</button></p>}
       {error && <p className="xr-web-browser__error" role="status">{error}<button type="button" className="xr-text-action" onClick={() => setError(null)}>{t("keys.close")}</button></p>}
       {state?.error && <p className="xr-web-browser__error" role="status">{state.error}</p>}
 

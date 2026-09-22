@@ -110,7 +110,7 @@ export function World({
   const [worldTrust, setWorldTrust] = useState<TrustFacts | null>(null);
   const [gestureProposals, setGestureProposals] = useState<GestureProposal[]>([]);
   const [gesturePair, setGesturePair] = useState<{
-    sourceId: string; targetId: string; targetKind: "claim" | "object" | "decision" | "work";
+    sourceId: string; targetId: string; targetKind: "claim" | "object" | "decision" | "work" | "requirement";
   } | null>(null);
   const [arrival, setArrival] = useState<{ path: string; inspection: PackageInspectionView } | null>(null);
   const [challenge, setChallenge] = useState<ChallengeRecord | null>(null);
@@ -500,7 +500,9 @@ export function World({
       const source = snapshot.states.find((state) => state.object.id === sourceId);
       const target = snapshot.states.find((state) => state.object.id === targetId);
       if (!source || !target) return;
+      // The same rule the main process applies: a constraint, or something the goal requires.
       const targetKind = decisions.some((d) => d.objectId === targetId) ? "decision"
+        : target.properties.semanticType === "constraint" || (goal?.requiredOutputs.includes(targetId) ?? false) ? "requirement"
         : target.properties.semanticType === "claim" ? "claim" : "object";
       setGesturePair({ sourceId, targetId, targetKind });
       setGestureProposals(proposalsFor(

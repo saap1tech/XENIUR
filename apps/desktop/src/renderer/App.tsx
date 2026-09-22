@@ -258,7 +258,7 @@ export function App() {
     return <Models reason={view.reason} onBack={() => setView(view.back)} />;
   }
   if (view.kind === "browser") {
-    return <Browser worldId={view.worldId} goalId={view.goalId} stepId={view.stepId} layout={browserLayout} onLayout={setBrowserLayout}
+    return <Browser worldId={view.worldId} goalId={view.goalId} stepId={view.stepId} worlds={worlds} layout={browserLayout} onLayout={setBrowserLayout}
       onBack={() => setView(view.back)} />;
   }
   if (view.kind === "availability") {
