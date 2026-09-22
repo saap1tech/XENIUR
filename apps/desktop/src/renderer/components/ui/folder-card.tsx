@@ -11,7 +11,7 @@ export interface FolderCardProps extends Omit<ButtonHTMLAttributes<HTMLButtonEle
 }
 /** The supplied folder interaction, adapted to an accessible button and XENIUR's material palette. */
 export const FolderCard = forwardRef<HTMLButtonElement, FolderCardProps>(function FolderCard({
-  title, subtitle = "Living workspace", count, countLabel = "", meta = "Open World",
+  title, subtitle = "Living workspace", count, countLabel = "", meta = "Open project",
   cover, coverAlt = "", interactive = true, index = 0, className, trust = null, ...props
 }, ref) {
   const reduced = useReducedMotion();
@@ -23,7 +23,7 @@ export const FolderCard = forwardRef<HTMLButtonElement, FolderCardProps>(functio
       <motion.span className="xr-folder__art" variants={{ rest: { scale: 1 }, hover: { scale: 1.05 } }} transition={{ type: "spring", stiffness: 260, damping: 26 }}>
         {cover ? <img src={cover} alt={coverAlt} draggable={false} /> : <><span className="xr-folder__grid" /><span className="xr-folder__glyph" aria-hidden="true">{["Aa", "◉", "↗", "[]"][index % 4]}</span></>}
       </motion.span>
-      <span className="xr-folder__number">WORLD / {String(index + 1).padStart(2, "0")}</span>
+      <span className="xr-folder__number">PROJECT / {String(index + 1).padStart(2, "0")}</span>
     </span>
     <motion.span className="xr-folder__panel" variants={{ rest: { y: 0 }, hover: { y: 12 } }} transition={{ type: "spring", stiffness: 260, damping: 26 }}>
       <span className="xr-folder__tab" /><strong>{title}</strong><span className="xr-folder__subtitle">{subtitle}</span>{trust}

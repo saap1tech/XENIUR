@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { EN, MESSAGE_KEYS, t } from "./i18n.js";
+import { EN, IMPLEMENTATION_WORDS, MESSAGE_KEYS, formRoleWord, t } from "./i18n.js";
 
 describe("the language seam", () => {
   it("fills holes from variables and leaves a missing one visible", () => {
@@ -17,5 +17,16 @@ describe("the language seam", () => {
   it("screen-reader sentences are facts: no adjectives of praise or alarm", () => {
     const forbidden = /\b(great|beautiful|amazing|powerful|smart|easy|simple|urgent|critical|important)\b/i;
     for (const key of MESSAGE_KEYS.filter((k) => k.startsWith("sr."))) expect(EN[key]).not.toMatch(forbidden);
+  });
+
+  /* M6 Part C — the implementation's nouns stay out of the words a screen says. */
+  it("no sentence outside term.* names World, Object, candidate, Hands or Brain", () => {
+    for (const key of MESSAGE_KEYS.filter((k) => !k.startsWith("term."))) expect(EN[key], key).not.toMatch(IMPLEMENTATION_WORDS);
+  });
+
+  it("form roles are said as words", () => {
+    expect(formRoleWord("doc.primary")).toBe("Document");
+    expect(formRoleWord("model.mesh")).toBe("3D model");
+    expect(formRoleWord("print.stl")).toBe("Print");
   });
 });

@@ -44,7 +44,7 @@ export function Home({ worlds, active, info, economy, today, trust, onOpen, onOp
       <div className="xr-continue">
         {today?.resume ? (
           <article className="xr-resume" aria-label={`Continue ${today.resume.worldTitle}`}>
-            <small>Last active World</small>
+            <small>{t("home.lastactive")}</small>
             <h2>{today.resume.worldTitle}</h2>
             <p className="xr-resume__text">
               {today.resume.fragments.map((f, i) => f.objectId
@@ -54,7 +54,7 @@ export function Home({ worlds, active, info, economy, today, trust, onOpen, onOp
             <button type="button" className="xr-button xr-button--primary" onClick={() => onContinue(today.resume!)}>Continue this work</button>
           </article>
         ) : today === null ? (
-          <article className="xr-resume xr-resume--empty"><small>Last active World</small><p className="xr-resume__text">Reading your Worlds…</p></article>
+          <article className="xr-resume xr-resume--empty"><small>{t("home.lastactive")}</small><p className="xr-resume__text">{t("home.reading")}</p></article>
         ) : (
           <article className="xr-resume xr-resume--empty"><small>Nothing to pick up yet</small><p className="xr-resume__text">Start with something you want to accomplish, or bring in material you already have.</p></article>
         )}
@@ -73,16 +73,16 @@ export function Home({ worlds, active, info, economy, today, trust, onOpen, onOp
           </article>
           <article className="xr-begin__card">
             <h3>Bring something in</h3>
-            <p>Add a document, image, link, project or other material. XENIUR turns it into a recognizable Object.</p>
-            <div className="xr-begin__actions"><button type="button" className="xr-button" onClick={() => onCreate("import")}><Plus size={15} /> New World from material</button><button type="button" className="xr-text-action" onClick={onExplore}>Bring in a source <ArrowRight size={15} /></button></div>
+            <p>{t("home.bringbody")}</p>
+            <div className="xr-begin__actions"><button type="button" className="xr-button" onClick={() => onCreate("import")}><Plus size={15} /> {t("home.newfrommaterial")}</button><button type="button" className="xr-text-action" onClick={onExplore}>Bring in a source <ArrowRight size={15} /></button></div>
           </article>
         </div>
       </div>
       {/* Blockers first: what needs a person, from the record. Then the projects, most recent first. */}
       <div className="xr-home-workbench__grid">
         <aside className="xr-today" aria-labelledby="today-title"><header><Workflow size={19} /><div><small>{t("home.needsyou")}</small><h2 id="today-title">{t("home.today")}</h2></div><span className="xr-today__date xr-mono">{today?.date ?? ""}</span></header>
-          {today === null ? <div className="xr-today__quiet"><p>Reading your Worlds…</p></div>
-            : today.quiet ? <div className="xr-today__quiet"><strong>Nothing needs you.</strong><p>Open a World when you want to; nothing here is waiting.</p></div>
+          {today === null ? <div className="xr-today__quiet"><p>{t("home.reading")}</p></div>
+            : today.quiet ? <div className="xr-today__quiet"><strong>Nothing needs you.</strong><p>{t("home.quiet")}</p></div>
             : <ol className="xr-today__rows">{today.rows.map((row) => {
               const taskId = parkedTaskId(row);
               return <li key={row.id} className={`xr-today__row is-${row.kind}`}>
@@ -97,7 +97,7 @@ export function Home({ worlds, active, info, economy, today, trust, onOpen, onOp
                 </span>
               </li>;
             })}</ol>}
-          {today && !today.quiet && <p className="xr-today__rest">{today.more > 0 ? `${today.more} more behind these, in the Worlds they belong to.` : "Nothing else needs you."}</p>}
+          {today && !today.quiet && <p className="xr-today__rest">{today.more > 0 ? t("home.morebehind", { count: today.more }) : "Nothing else needs you."}</p>}
           <footer><span>{t("home.languagehint")}</span><kbd>⌘ K</kbd></footer>
         </aside>
         <section className="xr-project-section"><header><div><small>{t("home.recent")}</small><h2>{t("home.projects")}</h2></div><span>{t("home.count", { count: shown.length })}{worlds.length > recent.length ? ` · ${t("home.more", { count: worlds.length - recent.length })}` : ""}</span></header>

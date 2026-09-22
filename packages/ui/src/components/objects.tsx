@@ -74,7 +74,7 @@ export function Inspector({ node, bindings }: { node: Node<"Inspector">; binding
         <dt>Type</dt><dd>{state.properties.semanticType}</dd>
         <dt>Forms</dt><dd>{forms.length}</dd>
         <dt>Version</dt><dd>{state.seq}{state.branchName ? ` · ${state.branchName}` : ""}</dd>
-        <dt>Object id</dt><dd className="xr-mono">{state.object.id}</dd>
+        <dt><span className="xr-technical">Object</span> id</dt><dd className="xr-mono xr-technical">{state.object.id}</dd>
       </dl>
 
       {node.showProvenance && head && (

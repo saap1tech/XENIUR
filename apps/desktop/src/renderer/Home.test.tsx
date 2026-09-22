@@ -115,7 +115,7 @@ describe("Continue Work", () => {
         { text: " One new source was added.", objectId: null }],
     } });
     expect(html.indexOf("Pick up where you left off")).toBeLessThan(html.indexOf("Your projects"));
-    expect(html).toContain("Last active World");
+    expect(html).toContain("Last active project");
     expect(html).toContain("Continue this work");
     expect(html).toContain("xr-resume__link");
     expect(html).toContain("One new source was added.");

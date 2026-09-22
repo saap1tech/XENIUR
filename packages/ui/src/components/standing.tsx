@@ -3,7 +3,7 @@ import type { LeafSceneNode } from "@xeniur/core";
 import { GOAL_STATUS_WORDS, KNOWLEDGE_GLYPHS, KNOWLEDGE_STATES, describeStanding } from "@xeniur/core";
 import type { SceneBindings } from "../bindings.js";
 import { Button } from "./primitives.jsx";
-import { t } from "../i18n.js";
+import { formRoleWord, t } from "../i18n.js";
 
 type Node<T extends LeafSceneNode["component"]> = Extract<LeafSceneNode, { component: T }>;
 
@@ -103,7 +103,7 @@ export function Standing({ node, bindings }: { node: Node<"Standing">; bindings:
             <ul>
               {s.needed.map((n) => (
                 <li key={n.output} className={n.satisfied ? "is-satisfied" : "is-missing"}>
-                  <span aria-hidden="true">{n.satisfied ? "●" : "○"}</span> {n.output}{n.satisfied ? "" : " — not yet made"}
+                  <span aria-hidden="true">{n.satisfied ? "●" : "○"}</span> {/^[a-z]+\.[a-z0-9]+$/.test(n.output) ? formRoleWord(n.output) : n.output}{n.satisfied ? "" : " — not yet made"}
                 </li>
               ))}
             </ul>

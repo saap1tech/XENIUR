@@ -1,6 +1,7 @@
 import type { ChallengeRecord, Compliance, EntryRecord, LeafSceneNode } from "@xeniur/core";
 import { AI_POLICY_WORDS, COMPLIANCE_GLYPHS, CANNOT_ESTABLISH } from "@xeniur/core";
 import type { SceneBindings } from "../bindings.js";
+import { t } from "../i18n.js";
 import { Button, Tag } from "./primitives.jsx";
 
 type Node<T extends LeafSceneNode["component"]> = Extract<LeafSceneNode, { component: T }>;
@@ -54,7 +55,7 @@ export function ChallengeBoard({ node, bindings }: { node: Node<"ChallengeBoard"
           <Block label="Entry">
             <p>By ticket from the organizer{c.rules.entryNote ? ` — ${c.rules.entryNote}` : ""}. XENIUR verifies the ticket; it sees nothing of how it was obtained.</p>
             <p className="xr-challenge__ticket">
-              {bindings.ticketHeld === undefined || bindings.ticketHeld === null ? "No ticket is held here yet. Drop the organizer's ticket file on this World."
+              {bindings.ticketHeld === undefined || bindings.ticketHeld === null ? t("challenge.ticketnone")
                 : bindings.ticketHeld.usedAt !== null ? "Your ticket was used to enter."
                 : bindings.ticketHeld.valid ? `Your ticket verifies, good until ${date(bindings.ticketHeld.expiresAt)}.`
                 : "Your ticket has expired."}

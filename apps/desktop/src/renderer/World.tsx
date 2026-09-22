@@ -440,7 +440,7 @@ export function World({
         try {
           if (doc.endsWith(".xeniur-challenge.json")) {
             const r = await bridge?.arena?.adoptChallengeFile(doc);
-            setNotice(r?.alreadyHere ? "That challenge is already here." : `“${r?.title}” arrived and verified. It is a World now.`);
+            setNotice(r?.alreadyHere ? "That challenge is already here." : t("world.arrived", { title: r?.title ?? "" }));
             if (r?.worldId) onImported?.({ objectId: "", worldId: r.worldId });
           } else if (doc.endsWith(".xeniur-ticket.json")) {
             const t = await bridge?.arena?.adoptTicketFile(doc);
@@ -855,7 +855,7 @@ export function World({
           )}
           <label htmlFor="world-language">{askingForGoal ? "What are you trying to accomplish?" : "Use language for this"}</label>
           <input id="world-language" value={utterance}
-            placeholder={askingForGoal ? "One sentence, in your words" : `Ask about ${selected?.properties.title ?? "this World"}, or say what to do — “compare these two”, “make a delivery preview”`}
+            placeholder={askingForGoal ? "One sentence, in your words" : t("world.askabout", { title: selected?.properties.title ?? t("world.thisproject") })}
             onChange={(e) => setUtterance(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") submit(); if (e.key === "Escape") setUtterance(""); }} />
           <button type="button" className={`xr-button ${busy ? "xr-button--running" : "xr-button--primary"}`}

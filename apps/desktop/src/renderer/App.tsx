@@ -8,6 +8,7 @@ import { FocusMode } from "./FocusMode.js";
 import { FirstRun } from "./FirstRun.js";
 import { Models } from "./Models.js";
 import { Availability } from "./Availability.js";
+import { t } from "@xeniur/ui";
 import { BrandMark } from "./BrandMark.js";
 import { ComputeReview } from "./ComputeReview.js";
 import { WebLayer } from "./WebLayer.js";
@@ -163,10 +164,10 @@ export function App() {
   /** Commands follow what is on screen, so nothing is offered that would fail. */
   const commands: Command[] = [
     ...worlds.map((w): Command => ({
-      id: `open-${w.id}`, group: "Worlds", label: `Open ${w.title}`, hint: w.emoji,
+      id: `open-${w.id}`, group: t("palette.projects"), label: `Open ${w.title}`, hint: w.emoji,
       run: () => openWorld(w.id),
     })),
-    { id: "home", group: "Go", label: "Back to Worlds", run: () => setView({ kind: "home" }) },
+    { id: "home", group: "Go", label: t("palette.home"), run: () => setView({ kind: "home" }) },
     { id: "models", group: "Settings", label: "Your models", hint: "keys stay in your keychain",
       run: () => setView((current) => ({ kind: "models", reason: null, back: current })) },
     { id: "availability", group: "Settings", label: "What works here", hint: "available · needs setup · disabled · not implemented",

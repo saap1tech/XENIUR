@@ -5,6 +5,7 @@ import { SituationSchema, compileSituation, layoutScene } from "@xeniur/grammar"
 import { BrandMark } from "./BrandMark.js";
 import { ProcessShare } from "./ProcessShare.js";
 import { reviewSupportBinding } from "./lib/reviewSupport.js";
+import { t } from "@xeniur/ui";
 
 export interface ObjectViewProps {
   detail: ObjectDetail;
@@ -137,10 +138,10 @@ export function ObjectView({ detail, busy, onRefresh, onBack }: ObjectViewProps)
   return (
     <main className="xr-object" data-paper={paper && hasText ? "" : undefined}>
       <header className="xr-object__head">
-        <button type="button" className="xr-back" onClick={onBack}>← World</button>
+        <button type="button" className="xr-back" onClick={onBack}>{t("object.back")}</button>
         <BrandMark compact />
         <h1>{detail.state.properties.title}</h1>
-        <span className="xr-object__type">{detail.state.properties.semanticType}</span>
+        <span className="xr-object__type xr-technical">{detail.state.properties.semanticType}</span>
         <span className="xr-object__version">
           v{detail.state.seq}{detail.state.branchName ? ` · ${detail.state.branchName}` : ""}
         </span>

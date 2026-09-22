@@ -1,6 +1,7 @@
 import type { IngredientKind, LeafSceneNode, Lane, MapEntry } from "@xeniur/core";
 import { LANES, MAP_QUESTIONS } from "@xeniur/core";
 import type { SceneBindings } from "../bindings.js";
+import { t } from "../i18n.js";
 import { Button, Empty, Panel } from "./primitives.jsx";
 
 type Node<T extends LeafSceneNode["component"]> = Extract<LeafSceneNode, { component: T }>;
@@ -24,7 +25,7 @@ const LANE_LABEL: Record<Lane, string> = {
  */
 export function ThinkingMapView({ node, bindings }: { node: Node<"ThinkingMap">; bindings: SceneBindings }) {
   const map = bindings.thinkingMap?.[node.worldId];
-  if (!map) return <Empty>Nothing has been captured in this World yet.</Empty>;
+  if (!map) return <Empty>{t("thinking.empty")}</Empty>;
 
   const friction = bindings.friction?.[node.worldId];
 

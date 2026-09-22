@@ -9,6 +9,7 @@ import { PermissionBroker } from "@xeniur/permissions";
 import { loadProvidersConfig, type ProviderEnv } from "@xeniur/providers";
 import { CapabilityRouter } from "@xeniur/router";
 import { World } from "./World.js";
+import { IMPLEMENTATION_WORDS, stripTechnical } from "@xeniur/ui";
 
 /**
  * The World screen rendered against real router output — the same graph rows the desktop
@@ -115,7 +116,7 @@ describe("the World shows what the loop produced", () => {
   it("shows forms by their human names, and no filenames", () => {
     const html = render(snapshot.states[0]!.object.id);
     expect(html).toContain("Artwork");
-    expect(html).toContain("Model");
+    expect(html).toContain("3D model");
     // The addresses exist in the graph and stay there until somebody asks for them.
     expect(html).not.toContain("art.illustration");
     expect(html).not.toContain("model.mesh");
@@ -267,5 +268,22 @@ describe("the guided shell", () => {
     expect(out).toContain("xr-orbit__core");
     expect(out).toContain("xr-stage__need");
     expect(out).toContain("I need to make something");                        // from the step's kind
+  });
+});
+
+/* M6 Part C — the World says project, item, suggestion; never World, Object, candidate. */
+describe("terminology in the World", () => {
+  it("says none of the implementation's nouns outside the technical detail", () => {
+    for (const selected of [null, snapshot.states[0]!.object.id]) {
+      const html = renderToStaticMarkup(
+        <World snapshot={snapshot} tasks={[]} busy={false} initialSelection={selected}
+          initialGoal={{ id: "77777777-7777-4777-8777-777777777777", worldId: snapshot.world.id, outcome: "Ship the rocket", status: "making",
+            focusObjectId: snapshot.states[0]!.object.id, requiredOutputs: ["model.mesh"], openQuestionIds: [], nextActions: [], createdAt: 1, updatedAt: 1, lastActiveAt: 1 }}
+          onBack={() => {}} onOpenObject={() => {}} onSubmit={() => {}} onApprove={() => {}} onReject={() => {}} />,
+      );
+      const text = stripTechnical(html);
+      const hit = text.match(IMPLEMENTATION_WORDS);
+      expect(hit, hit ? text.slice(Math.max(0, hit.index! - 80), hit.index! + 40) : "").toBeNull();
+    }
   });
 });

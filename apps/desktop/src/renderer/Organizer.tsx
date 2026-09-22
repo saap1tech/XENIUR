@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Assessment, ChallengeRecord, EntryRecord, Placing, PublisherRef, Results, SignedDocument } from "@xeniur/core";
 import { RECORD_LIMITS } from "@xeniur/core";
+import { t } from "@xeniur/ui";
 
 /**
  * The organizer console — for the challenge's publisher, beside the board.
@@ -113,7 +114,7 @@ export function Organizer({ challenge, entries, titles, onChanged }: {
             <small>saw: {a.inspected.verdict}{a.inspected.density ? ` · ${a.inspected.density}` : ""} · {a.inspected.modelEvents} model events</small>
           </li>
         ))}
-        {assessments.length === 0 && <li className="xr-organizer__quiet">None yet. A judge's file dropped on this World is verified and added here.</li>}
+        {assessments.length === 0 && <li className="xr-organizer__quiet">{t("organizer.noassessments")}</li>}
       </ul>
 
       <h3>Results <small>placings as you write them, in your order</small></h3>

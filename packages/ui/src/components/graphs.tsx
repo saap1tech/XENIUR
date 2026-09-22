@@ -1,5 +1,6 @@
 import type { LeafSceneNode } from "@xeniur/core";
 import type { SceneBindings } from "../bindings.js";
+import { t } from "../i18n.js";
 import { Empty, Panel, ProvenanceBadge } from "./primitives.jsx";
 
 type Node<T extends LeafSceneNode["component"]> = Extract<LeafSceneNode, { component: T }>;
@@ -41,7 +42,7 @@ export function LineageGraph({ node, bindings }: { node: Node<"LineageGraph">; b
 
 const POLICY_LABEL: Record<string, string> = {
   deterministic: "re-runs free",
-  candidate_generation: "produces a candidate",
+  candidate_generation: t("recipe.candidate"),
   manual: "yours to do",
 };
 
@@ -51,7 +52,7 @@ const POLICY_LABEL: Record<string, string> = {
  */
 export function RecipeGraph({ node, bindings }: { node: Node<"RecipeGraph">; bindings: SceneBindings }) {
   const steps = bindings.stepStates?.[node.objectId] ?? [];
-  if (steps.length === 0) return <Empty>No recipe on this Object yet.</Empty>;
+  if (steps.length === 0) return <Empty>{t("recipe.empty")}</Empty>;
 
   return (
     <Panel title="Recipe">

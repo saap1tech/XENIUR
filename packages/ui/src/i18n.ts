@@ -1,3 +1,5 @@
+import { formRoleName } from "@xeniur/core";
+
 /**
  * The language seam.
  *
@@ -12,11 +14,20 @@
  * `inline-end`) so that switching `dir` is the whole of the RTL work.
  */
 export const EN = {
+  // The nouns a person sees. Code, tables and IPC keep World / Object; these are the words.
+  "term.project": "project",
+  "term.projects": "projects",
+  "term.item": "item",
+  "term.items": "items",
+  "term.suggestion": "suggestion",
+  "term.suggestions": "suggestions",
+  "term.activity": "Activity",
+
   // First run
   "firstrun.title": "What would you like to work on?",
   "firstrun.lead": "Everything here works without a model key. When a task can use cloud AI, XENIUR says so at that moment — never before.",
   "firstrun.have.title": "I already have something to work with",
-  "firstrun.have.body": "A document, an image, a link, a .blend, an article. XENIUR turns it into a recognizable Object.",
+  "firstrun.have.body": "A document, an image, a link, a .blend, an article. XENIUR turns it into a recognizable item.",
   "firstrun.have.verb": "Bring it in",
   "firstrun.new.title": "I want to start something new",
   "firstrun.new.body": "A question, an idea, a task or an outcome — one sentence, in your words.",
@@ -24,9 +35,9 @@ export const EN = {
   "firstrun.new.placeholder": "One sentence, in your words",
   "firstrun.new.verb": "Begin",
   "firstrun.continue.title": "I want to continue an existing project",
-  "firstrun.continue.body": "Open a World already on this machine, or a .xeniur package someone sent you.",
+  "firstrun.continue.body": "Open a project already on this machine, or a .xeniur package someone sent you.",
   "firstrun.continue.package": "Open a .xeniur package",
-  "firstrun.continue.none": "No Worlds on this machine yet.",
+  "firstrun.continue.none": "No projects on this machine yet.",
   "firstrun.example": "Or open the example — Rainwear 2027, marked as an example, safe to change.",
   "firstrun.skip": "Skip",
   "firstrun.notnow": "Not now",
@@ -44,6 +55,26 @@ export const EN = {
   "home.projectsubtitle": "Research, decisions, outcomes",
   "home.empty": "Begin with a source, a thought, or a thing.",
   "home.languagehint": "Language is available inside each project as a shortcut.",
+  "home.lastactive": "Last active project",
+  "home.reading": "Reading your projects…",
+  "home.quiet": "Open a project when you want to; nothing here is waiting.",
+  "home.morebehind": "{count} more behind these, in the projects they belong to.",
+  "home.bringbody": "Add a document, image, link, project or other material. XENIUR turns it into a recognizable item.",
+  "home.newfrommaterial": "New project from material",
+  "palette.projects": "Projects",
+  "palette.home": "Back to projects",
+  "object.back": "← Project",
+  "arrival.critique": "Their work opens read-only, in its own project, for you to review. Your claims sit beside it.",
+  "world.arrived": "“{title}” arrived and verified. It is a project now.",
+  "world.askabout": "Ask about {title}, or say what to do — “compare these two”, “make a delivery preview”",
+  "world.thisproject": "this project",
+  "web.chooseproject": "Choose a project",
+  "moves.connect": "Find relationships with other items in this project.",
+  "thinking.empty": "Nothing has been captured in this project yet.",
+  "recipe.empty": "No recipe on this item yet.",
+  "recipe.candidate": "produces a suggestion",
+  "challenge.ticketnone": "No ticket is held here yet. Drop the organizer's ticket file on this project.",
+  "organizer.noassessments": "None yet. A judge's file dropped on this project is verified and added here.",
 
   // The plan
   "plan.title": "Plan",
@@ -130,6 +161,19 @@ export function t(key: MessageKey, vars?: Vars): string {
   const template: string = EN[key];
   if (!vars) return template;
   return template.replace(/\{(\w+)\}/g, (hole, name: string) => name in vars ? String(vars[name]) : hole);
+}
+
+/** A form role as a person would say it: Document, 3D model, Print — never "doc.primary". */
+export function formRoleWord(role: string): string { return formRoleName(role); }
+
+/**
+ * The implementation's nouns. They stay in code, tables, IPC and the technical detail a
+ * person can open; they do not appear in the words a screen says. A test holds every
+ * rendered surface to it, outside `.xr-technical`.
+ */
+export const IMPLEMENTATION_WORDS = /\b(World|Worlds|Object|Objects|candidate|candidates|Hands|Brain)\b/;
+export function stripTechnical(html: string): string {
+  return html.replace(/<span class="xr-technical">[\s\S]*?<\/span>/g, "").replace(/<[^>]+>/g, " ");
 }
 
 /** Every key, for tests that walk the table. */

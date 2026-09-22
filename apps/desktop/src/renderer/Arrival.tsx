@@ -1,3 +1,4 @@
+import { t } from "@xeniur/ui";
 import type { PackageInspectionView } from "@xeniur/core";
 
 /**
@@ -63,7 +64,7 @@ export function Arrival({ path, inspection, onOpen, onBlock, onDismiss }: {
           <p className="xr-arrival__note">
             {isCritique
               ? "Their claims and decisions will sit beside yours and link to them. Nothing of yours changes."
-              : "Their work opens read-only, in its own World, for you to review. Your claims sit beside it."}
+              : t("arrival.critique")}
           </p>
           <div className="xr-arrival__actions">
             {isCritique || isOwn

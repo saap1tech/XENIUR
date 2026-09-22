@@ -296,7 +296,7 @@ export function ReviewSheet({ node, bindings }: { node: Node<"ReviewSheet">; bin
     <article className="xr-review-sheet" aria-label={node.title}>
       <header><span>Ready for your decision</span><h2>{node.title}</h2></header>
       <dl>
-        <div><dt>Object</dt><dd>{state?.properties.title ?? "Unknown"}</dd></div>
+        <div><dt>Item</dt><dd>{state?.properties.title ?? "Unknown"}</dd></div>
         <div><dt>Current forms</dt><dd>{state?.forms.map((form) => formRoleName(form.role)).join(", ") || "None"}</dd></div>
         <div><dt>Process</dt><dd>{proof?.summary ?? "No process proof published"}</dd></div>
       </dl>

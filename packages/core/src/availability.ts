@@ -28,7 +28,7 @@ export const FEATURES = [
 export type Feature = (typeof FEATURES)[number];
 
 export const FEATURE_WORDS: Record<Feature, string> = {
-  "brain.live": "Live model calls from the Brain",
+  "brain.live": "Live model calls from the assistant",
   "models.cloud": "Cloud models on your own keys",
   "browser.manual": "Browsing inside XENIUR",
   "browser.delegated": "The assistant acting in a tab you can see",

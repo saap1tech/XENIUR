@@ -6,7 +6,7 @@ import type {
   DecisionDetail, ImpactReport, ObjectState, Representation, Scene,
 } from "@xeniur/core";
 import { describeEnvelope, planDigest, type CandidateRecord, type ChallengeRecord, type Compliance, type EntryRecord, type JudgingSheetData, type ModeRecord, type Standing as StandingData, type StepWork, type SupportMap as SupportMapData, type TrailRow, type WorkPlan } from "@xeniur/core";
-import { SceneRenderer, emptyBindings, presentBindings, type SceneBindings } from "./index.js";
+import { SceneRenderer, emptyBindings, presentBindings, IMPLEMENTATION_WORDS, stripTechnical, type SceneBindings } from "./index.js";
 
 const OBJ = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const DEC = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
@@ -993,5 +993,21 @@ describe("PlanBoard and StepFocus", () => {
     expect(compare).toContain("is not complete: it needs");
     expect(compare).not.toContain("xr-stepfocus__confirm");
     expect(compare).toContain(">Mark complete<");
+  });
+});
+
+/* M6 Part C — the components say project, item, suggestion. */
+describe("terminology in the components", () => {
+  it("Standing, ProposalsTray, ThinkingMoves, PlanBoard and ChallengeBoard say none of the implementation's nouns", () => {
+    const outs: string[] = [];
+    const GOAL = "77777777-7777-4777-8777-777777777777";
+    outs.push(render({ id: "p", component: "PlanBoard", goalId: GOAL, editable: true }, bindings({ plans: { [GOAL]: { plan: { id: "88888888-8888-4888-8888-888888888888", goalId: GOAL, worldId: WORLD, revision: 1, origin: "template", createdAt: 1, supersededBy: null,
+      steps: [{ id: "t.g", kind: "gather", purpose: "Bring in what there is to know", inputs: [], expectedResult: "", completionRule: { kind: "person_confirms" }, dependsOn: [], disposition: "proposed" }] }, work: [] } } })));
+    outs.push(render({ id: "m", component: "ThinkingMoves", objectId: OBJ }, bindings({ states: { [OBJ]: { ...state, properties: { ...state.properties, semanticType: "claim" } } } })));
+    for (const html of outs) {
+      const text = stripTechnical(html);
+      const hit = text.match(IMPLEMENTATION_WORDS);
+      expect(hit, hit ? text.slice(Math.max(0, hit.index! - 80), hit.index! + 40) : "").toBeNull();
+    }
   });
 });

@@ -36,7 +36,7 @@ export function ThinkingMoves({ node, bindings }: { node: Node<"ThinkingMoves">;
           onClick={() => bindings.onThinkingMove?.("basis", node.objectId)} />
         <Move label="Challenge it" means="Surface counterarguments, conflicting evidence or assumptions — as proposals."
           disabled={!brain} why={needsModel} onClick={() => bindings.onThinkingMove?.("challenge", node.objectId)} />
-        <Move label="Connect it" means="Find relationships with other Objects in this World."
+        <Move label="Connect it" means={t("moves.connect")}
           onClick={() => bindings.onThinkingMove?.("connect", node.objectId)} />
         <Move label="Test it" means="Propose a way to investigate the uncertainty. A plan, not a result."
           disabled={!brain} why={needsModel} onClick={() => bindings.onThinkingMove?.("test", node.objectId)} />

@@ -37,15 +37,15 @@ describe("first run — what would you like to work on?", () => {
   });
 
   it("lists Worlds already here under Continue, and says so when there are none", () => {
-    expect(render()).toContain("No Worlds on this machine yet.");
+    expect(render()).toContain("No projects on this machine yet.");
     const html = render([world("a", "Water reuse"), world("s", "__settings__")]);
     expect(html).toContain("Water reuse");
-    expect(html).not.toContain("No Worlds on this machine yet.");
+    expect(html).not.toContain("No projects on this machine yet.");
   });
 
   it("hides the settings World from Continue", () => {
     const settings = { ...world("s", "Settings"), summary: "__xeniur_settings__" };
-    expect(render([settings])).toContain("No Worlds on this machine yet.");
+    expect(render([settings])).toContain("No projects on this machine yet.");
   });
 });
 
