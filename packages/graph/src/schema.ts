@@ -1223,6 +1223,25 @@ CREATE TABLE step_work (
 );
 `;
 
+/**
+ * Migration 28 — the exact work position, one row per World. Restoring it puts the same
+ * things in front of the person and grants nothing; there is no column for authority.
+ */
+const WORK_POSITIONS = `
+CREATE TABLE work_positions (
+  world_id          TEXT PRIMARY KEY REFERENCES worlds(id) ON DELETE CASCADE,
+  goal_id           TEXT,
+  plan_revision     INTEGER,
+  step_id           TEXT,
+  object_id         TEXT,
+  form_role         TEXT,
+  zone              TEXT,
+  tab_ids           TEXT NOT NULL DEFAULT '[]',
+  pending_review_id TEXT,
+  saved_at          INTEGER NOT NULL
+);
+`;
+
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "init", sql: INIT },
   { version: 2, name: "object_model", sql: OBJECT_MODEL },
@@ -1251,4 +1270,5 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 25, name: "seal", sql: SEAL },
   { version: 26, name: "judging", sql: JUDGING },
   { version: 27, name: "guided_plans", sql: GUIDED_PLANS },
+  { version: 28, name: "work_positions", sql: WORK_POSITIONS },
 ];

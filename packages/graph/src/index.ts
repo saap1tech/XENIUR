@@ -61,3 +61,4 @@ export { SealStore } from "./seal.js";
 export { JudgingStore } from "./judging.js";
 export { TicketStore } from "./tickets.js";
 export { PlanStore, NotComplete } from "./plans.js";
+export { PositionStore } from "./positions.js";

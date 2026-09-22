@@ -158,6 +158,10 @@ const SCHEMAS = {
   "goals:doneNextAction": z.object({ id: UuidSchema, actionId: z.string().min(1) }),
   "goals:relevant": Uuid,
   "goals:setRequiredOutputs": z.object({ id: UuidSchema, outputs: z.array(z.string().min(1)).max(12) }),
+  "position:save": z.object({ worldId: UuidSchema, goalId: UuidSchema.nullable().default(null), planRevision: z.number().int().positive().nullable().default(null),
+    stepId: z.string().nullable().default(null), objectId: UuidSchema.nullable().default(null), formRole: z.string().nullable().default(null),
+    zone: z.enum(["sources", "decisions", "work", "deliveries"]).nullable().default(null), tabIds: z.array(z.string().min(1)).max(32).default([]), pendingReviewId: z.string().nullable().default(null) }),
+  "position:get": Uuid,
   "plans:current": Uuid,
   "plans:propose": Uuid,
   "plans:adoptAll": Uuid,
@@ -662,6 +666,8 @@ export function registerIpc(services: Services): void {
       for (const output of outputs) if (services.graph.getObject(output)) services.graph.plans.onRequirementChanged(id, output);
       return goal;
     },
+    "position:save": (input) => services.graph.positions.save(input),
+    "position:get": ({ id }) => services.graph.positions.get(id),
     "plans:current": ({ id }) => services.graph.plans.current(id),
     "plans:propose": ({ id }) => services.graph.plans.propose(id),
     "plans:adoptAll": ({ id }) => services.graph.plans.adoptAll(id),

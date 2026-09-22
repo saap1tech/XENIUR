@@ -163,6 +163,10 @@ contextBridge.exposeInMainWorld("xeniur", {
     results: (worldId: string) => call("judging:results", { id: worldId }),
     exportResults: (worldId: string) => call("judging:exportResults", { id: worldId }),
   },
+  position: {
+    save: (input: Record<string, unknown>) => call("position:save", input),
+    get: (worldId: string) => call("position:get", { id: worldId }),
+  },
   plans: {
     current: (goalId: string) => call("plans:current", { id: goalId }),
     propose: (goalId: string) => call("plans:propose", { id: goalId }),

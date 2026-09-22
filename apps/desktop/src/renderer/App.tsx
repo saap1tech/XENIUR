@@ -23,7 +23,7 @@ const NEW_WORLD: Record<HomeEntry, { title: string; emoji: string }> = {
 
 type View =
   | { kind: "home" }
-  | { kind: "world"; snapshot: WorldSnapshot; selection?: string | null; zone?: "sources" | "decisions" | "work" | "deliveries" }
+  | { kind: "world"; snapshot: WorldSnapshot; selection?: string | null; zone?: "sources" | "decisions" | "work" | "deliveries"; step?: string | null }
   | { kind: "object"; detail: ObjectDetail; worldSnapshot: WorldSnapshot }
   | { kind: "focus"; objectId: string; minutes: number; worldId: string }
   | { kind: "web" }
@@ -216,7 +216,7 @@ export function App() {
         economy={{ local: { metered: false, label: "Unlimited Local" }, intelligence: { configured: true, rollingRemaining: 938, rollingLimit: 1000, reserveRemaining: 4800, reserveLimit: 5000, resetsAt: now }, compute: { configured: true, balance: 524, usdPerCompute: .02, held: 0 } }}
         today={{ date: "2026-09-16", quiet: false, more: 0, resume: {
           worldId: "11111111-1111-4111-8111-111111111111", worldTitle: "Rainwear 2027", goalId: null, focusObjectId: null, lastActiveAt: now,
-          fragments: [{ text: "You were weighing ", objectId: null }, { text: "\"two jacket finishes\"", objectId: "11111111-1111-4111-8111-111111111111" }, { text: " before preparing the next client delivery.", objectId: null }, { text: " One decision needs review after something it rested on changed.", objectId: null }],
+          position: null, fragments: [{ text: "You were weighing ", objectId: null }, { text: "\"two jacket finishes\"", objectId: "11111111-1111-4111-8111-111111111111" }, { text: " before preparing the next client delivery.", objectId: null }, { text: " One decision needs review after something it rested on changed.", objectId: null }],
         }, rows: [
           { id: "task:1", kind: "parked_approval", glyph: "▲", text: "Delivery 02 parked — $0.12 quote awaiting you", worldId: "22222222-2222-4222-8222-222222222222", worldTitle: "Launch prop", objectId: null, zone: "work", verb: "Look at it" },
           { id: "decision:1", kind: "decision_review", glyph: "◌", text: "Decision \"orange finish\" — brief changed", worldId: "11111111-1111-4111-8111-111111111111", worldTitle: "Rainwear 2027", objectId: null, zone: "decisions", verb: "Review" },
@@ -302,7 +302,7 @@ export function App() {
         />
       ) : view.kind === "world" ? (
         <World
-          snapshot={view.snapshot} tasks={tasks} busy={busy} initialSelection={view.selection ?? null} initialZone={view.zone ?? "work"}
+          snapshot={view.snapshot} tasks={tasks} busy={busy} initialSelection={view.selection ?? null} initialZone={view.zone ?? "work"} initialStep={view.step ?? null}
           onBack={() => setView({ kind: "home" })}
           onOpenObject={(id) => { void openObject(id, view.snapshot); }}
           onSubmit={submit} onApprove={approve} onReject={reject}
@@ -319,8 +319,10 @@ export function App() {
           economy={economy} today={today} trust={worldTrust}
           onOpen={(id) => { void openWorld(id); }}
           onContinue={(card, objectId) => {
+            // The saved position, exactly: item, zone, step. Never a grant — there is no field for one.
+            const p = card.position;
             void bridge?.worlds.open(card.worldId).then((snapshot) => {
-              if (snapshot) setView({ kind: "world", snapshot, selection: objectId ?? card.focusObjectId ?? null });
+              if (snapshot) setView({ kind: "world", snapshot, selection: objectId ?? p?.objectId ?? card.focusObjectId ?? null, zone: p?.zone ?? undefined, step: p?.stepId ?? null });
             });
           }}
           onStart={(outcome) => { void startFromGoal(outcome); }}

@@ -12,6 +12,7 @@ import type { TrailRow } from "./trail.js";
 import type { Today } from "./today.js";
 import type { FinishResult, GoalStatus, WorkGoal } from "./goal.js";
 import type { StepDisposition, StepEvidence, StepExecution, StepKind, StepWork, WorkPlan } from "./plan.js";
+import type { WorkPosition, WorkPositionInput } from "./position.js";
 import type { Standing } from "./standing.js";
 import type { SupportMap } from "./support-map.js";
 import type { CandidateRecord, ClaimSupport, SupportStatus } from "./sensemaking.js";
@@ -310,6 +311,11 @@ export interface XeniurBridge {
     publishResults(worldId: string, placings: Placing[], note: string): Promise<SignedDocument<Results>>;
     results(worldId: string): Promise<SignedDocument<Results> | null>;
     exportResults(worldId: string): Promise<{ path: string }>;
+  };
+  /* Where the person was, exactly. Restoring it grants nothing. */
+  position?: {
+    save(input: Omit<WorkPositionInput, "savedAt">): Promise<WorkPosition>;
+    get(worldId: string): Promise<WorkPosition | null>;
   };
   /* The plan — a versioned proposal of steps, and the work recorded against them, apart */
   plans?: {

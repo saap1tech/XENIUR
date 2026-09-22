@@ -54,6 +54,8 @@ export interface WorldProps {
   initialGoal?: WorkGoal | null;
   /** The plan and its work as already known (a test); undefined means read them from the bridge. */
   initialPlan?: { plan: WorkPlan; work: StepWork[] } | null;
+  /** The step that was in the centre when the person left, from the saved position. */
+  initialStep?: string | null;
   /** A request resolved to a remote model and no key exists: the host offers Your models. */
   onNeedsKey?(reason: string): void;
 }
@@ -71,14 +73,16 @@ export interface WorldProps {
  * only way to them.
  */
 export function World({
-  snapshot, tasks, busy, initialSelection = null, initialZone = "work",
+  snapshot, tasks, busy, initialSelection = null, initialZone = "work", initialStep = null,
   onBack, onOpenObject, onSubmit, onApprove, onReject, onImported, initialGoal, initialPlan, onNeedsKey,
 }: WorldProps) {
   const [zone, setZone] = useState<Zone>(initialZone);
   const [showKeys, setShowKeys] = useState(false);
   // The rail shows the plan; Material reveals the four zones. Keys 1–4 still reach the zones.
   const [showMaterial, setShowMaterial] = useState(false);
-  const [focusStepId, setFocusStepId] = useState<string | null>(null);
+  const [focusStepId, setFocusStepId] = useState<string | null>(initialStep);
+  // One sentence after something happened — what was added, what to do next. Dismissible; never a summary.
+  const [afterLine, setAfterLine] = useState<string | null>(null);
   const [stepRefusals, setStepRefusals] = useState<Record<string, string>>({});
   // The Sealed Session: the sheet being read, and the mode once it runs. Read from the store, never remembered.
   const [sealSheet, setSealSheet] = useState<{ sheet: EnvelopeSheet; envelope: ModeEnvelopeInput } | null>(null);
@@ -176,6 +180,17 @@ export function World({
   }, [bridge, worldId, refreshPlan]);
   useEffect(() => { void refreshGoal(); }, [refreshGoal]);
   const currentStep = useMemo(() => plan ? currentStepOf(plan, work) : null, [plan, work]);
+
+  // The exact position, saved as it changes. It carries no authority: restoring it puts the
+  // same things in front of the person and grants nothing.
+  useEffect(() => {
+    if (!bridge?.position || snapshot.world.kind !== "work") return;
+    const focus = snapshot.states.find((st) => st.object.id === selectedId);
+    void bridge.position.save({
+      worldId, goalId: goal?.id ?? null, planRevision: plan?.revision ?? null, stepId: focusStepId ?? currentStep?.id ?? null,
+      objectId: selectedId, formRole: focus?.forms[0]?.role ?? null, zone: zoneChosen ? zone : null, tabIds: [], pendingReviewId: tasks.find((t) => t.status === "needs_approval")?.id ?? null,
+    });
+  }, [bridge, worldId, snapshot, goal?.id, plan?.revision, focusStepId, currentStep?.id, selectedId, zone, zoneChosen, tasks]);
   const refreshStanding = useCallback(async () => {
     if (!goal || !bridge?.goals) return;
     setStanding((await bridge.goals.standing(goal.id)) ?? null);
@@ -371,7 +386,7 @@ export function World({
       // The check decides. Refusals are shown in words; finishing anyway records a Decision.
       const result = await bridge?.goals?.finish(goalId, anyway);
       if (!result) return;
-      if (result.finished) { setFinishRefusals((r) => ({ ...r, [goalId]: [] })); setGoal(result.goal); }
+      if (result.finished) { setFinishRefusals((r) => ({ ...r, [goalId]: [] })); setGoal(result.goal); setAfterLine(t("after.complete", { outcome: result.goal.outcome })); }
       else setFinishRefusals((r) => ({ ...r, [goalId]: result.missing }));
       await refreshStanding();
     },
@@ -453,7 +468,9 @@ export function World({
         await refreshChallenge();
       }
       if (files.length > 0) {
-        await bridge?.living.importFiles(files, { worldId, objectId });
+        const added = await bridge?.living.importFiles(files, { worldId, objectId });
+        const first = added?.[0]?.properties.title ?? files[0]?.split("/").pop() ?? "material";
+        setAfterLine(currentStep ? t("after.import", { title: first, next: currentStep.purpose }) : t("after.importonly", { title: first }));
         onImported?.({ objectId: objectId ?? "", worldId });
       }
       if (packages[0]) {
@@ -844,6 +861,9 @@ export function World({
         )}
 
         <footer className={`xr-language-dock${goal && plan ? " has-step" : ""}`}>
+          {afterLine && (
+            <p className="xr-dock__after" role="status">{afterLine}<button type="button" className="xr-text-action" onClick={() => setAfterLine(null)}>{t("keys.close")}</button></p>
+          )}
           {goal && plan && (
             <div className="xr-dock">
               <span className="xr-dock__k">{t("dock.step")}</span>

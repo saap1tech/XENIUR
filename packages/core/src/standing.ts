@@ -1,3 +1,4 @@
+import type { WorkPosition } from "./position.js";
 import type { NextAction, WorkGoal } from "./goal.js";
 
 /**
@@ -79,6 +80,8 @@ export interface ResumeCard {
   /** Where Continue lands: the goal's focus. */
   focusObjectId: string | null;
   lastActiveAt: number;
+  /** The exact position, when one was saved. Never carries authority. */
+  position: WorkPosition | null;
 }
 
 /** The verb for a move, in the past continuous the card speaks in. */

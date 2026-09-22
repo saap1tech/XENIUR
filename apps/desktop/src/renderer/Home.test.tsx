@@ -111,7 +111,7 @@ describe("Continue Work", () => {
   it("leads with the last active World and a sentence built from fragments, each a link", () => {
     const html = home({ date: "d", quiet: true, more: 0, rows: [], resume: {
       worldId: world.id, worldTitle: "Rainwear 2027", goalId: "g", focusObjectId: "o", lastActiveAt: 1,
-      fragments: [{ text: "You were weighing ", objectId: null }, { text: "\"Jacket shell\"", objectId: "o" }, { text: ".", objectId: null },
+      position: null, fragments: [{ text: "You were weighing ", objectId: null }, { text: "\"Jacket shell\"", objectId: "o" }, { text: ".", objectId: null },
         { text: " One new source was added.", objectId: null }],
     } });
     expect(html.indexOf("Pick up where you left off")).toBeLessThan(html.indexOf("Your projects"));

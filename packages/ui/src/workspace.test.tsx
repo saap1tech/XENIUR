@@ -1003,7 +1003,7 @@ describe("terminology in the components", () => {
     const GOAL = "77777777-7777-4777-8777-777777777777";
     outs.push(render({ id: "p", component: "PlanBoard", goalId: GOAL, editable: true }, bindings({ plans: { [GOAL]: { plan: { id: "88888888-8888-4888-8888-888888888888", goalId: GOAL, worldId: WORLD, revision: 1, origin: "template", createdAt: 1, supersededBy: null,
       steps: [{ id: "t.g", kind: "gather", purpose: "Bring in what there is to know", inputs: [], expectedResult: "", completionRule: { kind: "person_confirms" }, dependsOn: [], disposition: "proposed" }] }, work: [] } } })));
-    outs.push(render({ id: "m", component: "ThinkingMoves", objectId: OBJ }, bindings({ states: { [OBJ]: { ...state, properties: { ...state.properties, semanticType: "claim" } } } })));
+    outs.push(render({ id: "m", component: "ThinkingMoves", objectId: OBJ }, bindings({ states: { [OBJ]: (() => { const st = state(OBJ, "Taped seams hold", ["source.primary"]); return { ...st, properties: { ...st.properties, semanticType: "claim" } }; })() } })));
     for (const html of outs) {
       const text = stripTechnical(html);
       const hit = text.match(IMPLEMENTATION_WORDS);

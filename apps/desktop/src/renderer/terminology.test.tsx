@@ -19,7 +19,7 @@ const worlds: WorldRow[] = [{ id: "11111111-1111-4111-8111-111111111111", title:
 describe("the implementation's nouns stay out of the words a screen says", () => {
   it("Home", () => {
     const html = renderToStaticMarkup(<Home worlds={worlds} active={[]} info={null} economy={null}
-      today={{ date: "2026-09-21", quiet: false, more: 2, resume: { worldId: worlds[0]!.id, worldTitle: "Rainwear 2027", goalId: null, focusObjectId: null, lastActiveAt: 1, fragments: [{ text: "You were in Rainwear 2027.", objectId: null }] },
+      today={{ date: "2026-09-21", quiet: false, more: 2, resume: { worldId: worlds[0]!.id, worldTitle: "Rainwear 2027", goalId: null, focusObjectId: null, lastActiveAt: 1, position: null, fragments: [{ text: "You were in Rainwear 2027.", objectId: null }] },
         rows: [{ id: "task:1", kind: "parked_approval", glyph: "▲", text: "Delivery 02 parked", worldId: worlds[0]!.id, worldTitle: "Rainwear 2027", objectId: null, zone: "work", verb: "Look at it" }] }}
       trust={{}} onOpen={noop} onOpenSituation={noop} onContinue={noop} onStart={noop} onCreate={noop} onReject={noop} onDismissArrival={noop} onExplore={noop} onWorkflows={noop} />);
     expect(stripTechnical(html)).not.toMatch(IMPLEMENTATION_WORDS);

@@ -107,7 +107,7 @@ export function resumeCard(graph: ObjectGraph, worldId: string): ResumeCard | nu
     const verb = MOVE_VERBS[standing.lastMove.kind] ?? "working on";
     const subject = standing.lastMove.object ?? focus;
     fragments.push({ text: `You were ${verb} `, objectId: null });
-    fragments.push({ text: subject ? `"${subject.title}"` : "this World", objectId: subject?.id ?? null });
+    fragments.push({ text: subject ? `"${subject.title}"` : "this project", objectId: subject?.id ?? null });
   } else if (focus) {
     fragments.push({ text: "You were working on ", objectId: null });
     fragments.push({ text: `"${focus.title}"`, objectId: focus.id });
@@ -138,6 +138,7 @@ export function resumeCard(graph: ObjectGraph, worldId: string): ResumeCard | nu
     worldId, worldTitle: world.title, goalId: goal?.id ?? null, fragments,
     focusObjectId: goal?.focusObjectId ?? null,
     lastActiveAt: goal?.lastActiveAt ?? world.lastOpenedAt ?? world.createdAt,
+    position: graph.positions.get(worldId),
   };
 }
 
