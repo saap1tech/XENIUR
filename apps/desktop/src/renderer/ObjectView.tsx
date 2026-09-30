@@ -6,12 +6,15 @@ import { BrandMark } from "./BrandMark.js";
 import { ProcessShare } from "./ProcessShare.js";
 import { reviewSupportBinding } from "./lib/reviewSupport.js";
 import { t } from "@xeniur/ui";
+import { ArrowLeft, BookOpen, GitCompareArrows, History, Layers3, Route, Share2 } from "lucide-react";
+import { Sharpen } from "./Sharpen.js";
 
 export interface ObjectViewProps {
   detail: ObjectDetail;
   busy: boolean;
   onRefresh(): void;
   onBack(): void;
+  onOpenObject?(id: string): void;
 }
 
 type Tab = "forms" | "compare" | "evidence" | "history" | "how";
@@ -23,6 +26,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
   { id: "history", label: "History" },
   { id: "how", label: "Show how this happened" },
 ];
+const TAB_ICONS = { forms: Layers3, compare: GitCompareArrows, evidence: BookOpen, history: History, how: Route };
 
 const TAB_INTENT = {
   forms: { meaning: "relationship", interaction: "choose", layer: 2, goal: "transform" },
@@ -43,7 +47,7 @@ const TAB_INTENT = {
  * the interface and became the evidence you can ask for, which is the right relationship:
  * a person wants to know why their print is out of date, not to read a DAG.
  */
-export function ObjectView({ detail, busy, onRefresh, onBack }: ObjectViewProps) {
+export function ObjectView({ detail, busy, onRefresh, onBack, onOpenObject }: ObjectViewProps) {
   const [tab, setTab] = useState<Tab>("forms");
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
   const [impact, setImpact] = useState<ImpactReport | null>(null);
@@ -56,6 +60,13 @@ export function ObjectView({ detail, busy, onRefresh, onBack }: ObjectViewProps)
 
   const bridge = window.xeniur;
   const objectId = detail.state.object.id;
+  const [goalId, setGoalId] = useState<string | null>(null);
+  useEffect(() => {
+    let current = true;
+    setGoalId(null);
+    void bridge?.goals?.current(detail.state.object.worldId).then((goal) => { if (current) setGoalId(goal?.id ?? null); });
+    return () => { current = false; };
+  }, [bridge, detail.state.object.worldId]);
   const stale = detail.steps.filter((s) => s.state !== "fresh");
 
   const bindings: SceneBindings = useMemo(() => ({
@@ -138,7 +149,7 @@ export function ObjectView({ detail, busy, onRefresh, onBack }: ObjectViewProps)
   return (
     <main className="xr-object" data-paper={paper && hasText ? "" : undefined}>
       <header className="xr-object__head">
-        <button type="button" className="xr-back" onClick={onBack}>{t("object.back")}</button>
+        <button type="button" className="xr-back" onClick={onBack}><ArrowLeft size={15} />{t("object.back")}</button>
         <BrandMark compact />
         <h1>{detail.state.properties.title}</h1>
         <span className="xr-object__type xr-technical">{detail.state.properties.semanticType}</span>
@@ -158,7 +169,7 @@ export function ObjectView({ detail, busy, onRefresh, onBack }: ObjectViewProps)
             </button>
           )}
           <button type="button" className="xr-button" disabled={!proof} onClick={() => setSharing(true)}>
-            View / share process
+            <Share2 size={15} /> View / share process
           </button>
           <button type="button" className="xr-button" disabled={busy}
             onClick={() => { void bridge?.living.exportPackage(objectId); }}>
@@ -168,16 +179,17 @@ export function ObjectView({ detail, busy, onRefresh, onBack }: ObjectViewProps)
       </header>
 
       <nav className="xr-tabs">
-        {TABS.map((t) => (
+        {TABS.map((t) => { const Icon = TAB_ICONS[t.id]; return (
           <button
             key={t.id} type="button"
             className={`xr-tab${tab === t.id ? " is-active" : ""}`}
             onClick={() => setTab(t.id)}
-          >{t.label}</button>
-        ))}
+          ><Icon size={16} aria-hidden="true" />{t.label}</button>
+        ); })}
       </nav>
 
       {notice && <p className="xr-centre__notice" role="status">{notice}<button type="button" className="xr-button" onClick={() => setNotice(null)}>Close</button></p>}
+      {goalId && onOpenObject && !detail.state.properties.tags.includes("sharpen") && <div className="xr-object__strength"><Sharpen goalId={goalId} objectId={objectId} revision={detail} onOpen={onOpenObject} onSaved={onRefresh} /></div>}
       <SceneRenderer scene={scene} bindings={bindings} />
       {sharing && proof && <ProcessShare objectId={objectId} title={detail.state.properties.title} proof={proof} onClose={() => setSharing(false)} />}
     </main>

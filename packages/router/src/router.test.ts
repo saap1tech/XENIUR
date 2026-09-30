@@ -1,3 +1,4 @@
+import { sampleProvidersConfig } from "../../providers/src/test-config.js";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,7 +25,7 @@ beforeEach(() => {
   };
   router = new CapabilityRouter({
     graph: g, broker: new PermissionBroker(g.db),
-    registry: new ProviderRegistry(), config: loadProvidersConfig(ROOT), env,
+    registry: new ProviderRegistry(), config: sampleProvidersConfig(ROOT), env,
   });
   worldId = g.createWorld({ title: "Test", emoji: "🧪" }).id;
   objectId = g.createObject({ worldId, semanticType: "rocket", title: "Rocket" }).object.id;
@@ -58,7 +59,7 @@ describe("deterministic first, cheap model second, expensive generation last", (
       available: async () => ({ ok: true }),
       execute: async () => { throw new Error("should never be reached"); },
     });
-    const config = loadProvidersConfig(ROOT);
+    const config = sampleProvidersConfig(ROOT);
     config.capabilities["transform"] = { order: ["someones.image.api", "local.sharp"] };
 
     const misconfigured = new CapabilityRouter({
@@ -69,7 +70,7 @@ describe("deterministic first, cheap model second, expensive generation last", (
   });
 
   it("reports the tool as unavailable when nothing configured supports it", async () => {
-    const config = loadProvidersConfig(ROOT);
+    const config = sampleProvidersConfig(ROOT);
     config.capabilities["transform"] = { order: ["openai.image"] };  // wrong tool entirely
     const empty = new CapabilityRouter({
       graph: g, broker: new PermissionBroker(g.db), registry: new ProviderRegistry(), config,
@@ -163,7 +164,7 @@ describe("the permission gate sits in front of every side effect", () => {
 
 describe("budget ceilings", () => {
   it("refuses an action that would exceed the per-action cap", async () => {
-    const config = loadProvidersConfig(ROOT);
+    const config = sampleProvidersConfig(ROOT);
     config.budget.perActionUsdMax = 0.0001;
     config.providers["mock.image"] = { enabled: true, kind: "generative", price: { perImageUsd: 5 } };
 

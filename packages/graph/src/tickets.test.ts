@@ -102,7 +102,7 @@ describe("entry tickets", () => {
     expect(() => participant.tickets.adopt(forged)).toThrow(/does not verify/);
     const someoneElse = organizer.tickets.issue(c.worldId, { publicKey: "X".repeat(43), displayName: "Else" }, Date.now() + DAY);
     expect(() => participant.tickets.adopt(someoneElse)).toThrow(/someone else/);
-    const expired = organizer.tickets.issue(c.worldId, me, Date.now() + 1);
+    const expired = organizer.tickets.issue(c.worldId, me, Date.now() + 1000);
     participant.tickets.adopt(expired);
     participant.db.prepare(`UPDATE entry_tickets SET expires_at = ? WHERE challenge_world_id = ?`).run(Date.now() - 1, here.worldId);
     expect(participant.tickets.held(here.worldId)!.valid).toBe(false);

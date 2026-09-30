@@ -27,6 +27,24 @@ describe("privacy-filtered proof of process", () => {
     expect(shared.events).toHaveLength(1); expect(shared.events[0]!.label).toBe("Human work"); expect(shared.events[0]!.outputHashes).toEqual([]); expect(verifySharedProcess(shared)).toBe(true);
     const { html } = renderProofPage(graph.process.proof(object.object.id), options); expect(html).not.toContain("Private customer"); expect(html).not.toContain("private-model"); expect(html).toContain("Made with XENIUR");
   });
+
+  it("binds the creator's review into the shared record and escapes it in the page", () => {
+    const world = graph.createWorld({ title: "Garden", emoji: "G" });
+    const object = graph.createObject({ worldId: world.id, title: "Plan", semanticType: "object" });
+    const event = graph.process.record({ objectId: object.object.id, versionId: object.versionId,
+      kind: "manual_edit", actor: "human", label: "A note", tool: null, model: null,
+      inputHashes: [], outputHashes: [], durationMs: 0 });
+    const options = { title: "Garden plan", eventIds: [event.id], discloseHashes: false, discloseTiming: false,
+      humanPass: { changed: "I revised the layout", standBehind: "I measured the beds",
+        checkNext: "<script>alert(1)</script>" } };
+    const shared = shareProcess(graph.process.proof(object.object.id), options);
+    expect(verifySharedProcess(shared)).toBe(true);
+    expect(verifySharedProcess({ ...shared, humanPass: { ...shared.humanPass!, changed: "Untrue" } })).toBe(false);
+    const { html } = renderProofPage(graph.process.proof(object.object.id), options);
+    expect(html).toContain("What I stand behind");
+    expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html).not.toContain("<script>alert(1)</script>");
+  });
 });
 
 describe("data-only workflow exchange", () => {

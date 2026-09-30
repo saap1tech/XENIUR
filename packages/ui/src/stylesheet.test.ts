@@ -82,9 +82,11 @@ describe("the stylesheet is one generation", () => {
     expect(physical, [...new Set(physical)].join(", ")).toEqual([]);
   });
 
-  it("moves only in opacity: every transition and keyframe, plus one 240 ms settle", () => {
+  it("moves only in paint and small lifts: every transition, opacity-only keyframes, plus one 240 ms settle", () => {
+    // Hover and press may ease colour, depth and a small translate; nothing animates layout.
+    const allowed = /^(opacity|color|background-color|border-color|box-shadow|transform)\b/;
     const transitions = [...css.matchAll(/transition:\s*([^;}]+)/g)].map((m) => m[1]!.trim());
-    for (const value of transitions) expect(value, value).toMatch(/^opacity\b/);
+    for (const value of transitions) for (const part of value.split(",")) expect(part.trim(), value).toMatch(allowed);
     const keyframes = [...css.matchAll(/@keyframes\s+[\w-]+\s*\{([\s\S]*?)\}\s*\}/g)].map((m) => m[1]!);
     for (const body of keyframes) {
       const props = [...body.matchAll(/([a-z-]+)\s*:/g)].map((m) => m[1]!);

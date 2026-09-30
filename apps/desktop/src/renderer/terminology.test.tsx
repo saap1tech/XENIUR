@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { IMPLEMENTATION_WORDS, stripTechnical } from "@xeniur/ui";
 import type { AvailabilityReport, World as WorldRow } from "@xeniur/core";
 import { Home } from "./Home.js";
-import { FirstRun } from "./FirstRun.js";
+import { Models } from "./Models.js";
 import { KeyboardMap } from "./KeyboardMap.js";
 import { Availability } from "./Availability.js";
 
@@ -25,9 +25,11 @@ describe("the implementation's nouns stay out of the words a screen says", () =>
     expect(stripTechnical(html)).not.toMatch(IMPLEMENTATION_WORDS);
   });
 
-  it("first run, the keyboard map, and what works here", () => {
-    const first = renderToStaticMarkup(<FirstRun worlds={worlds} onDone={noop} onImport={noop} onStart={noop} onContinue={noop} onImportPackage={noop} onOpenExample={noop} />);
-    expect(stripTechnical(first)).not.toMatch(IMPLEMENTATION_WORDS);
+  it("model setup, the keyboard map, and what works here", () => {
+    (globalThis as { window?: unknown }).window = { xeniur: { models: { list: async () => [], budget: async () => ({ perActionUsdMax: 1, monthlyUsdMax: 100, monthlySpentUsd: 0 }) } } };
+    const setup = renderToStaticMarkup(<Models firstRun onBack={noop} />);
+    delete (globalThis as { window?: unknown }).window;
+    expect(stripTechnical(setup)).not.toMatch(IMPLEMENTATION_WORDS);
     expect(stripTechnical(renderToStaticMarkup(<KeyboardMap onClose={noop} />))).not.toMatch(IMPLEMENTATION_WORDS);
     const report: AvailabilityReport = { at: 1, features: Object.fromEntries(["brain.live", "models.cloud", "browser.manual", "browser.delegated", "browser.route.service_api", "outreach.send", "web.risk_lookup", "hands.playwright", "capabilities.registry"].map((f) => [f, { state: "not_implemented", because: "x" }])) as AvailabilityReport["features"] };
     expect(stripTechnical(renderToStaticMarkup(<Availability report={report} onBack={noop} onModels={noop} />))).not.toMatch(IMPLEMENTATION_WORDS);

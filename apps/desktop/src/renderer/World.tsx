@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ConstraintRecord, DecisionDetail, FrictionState, ImpactReport, Lane, ObjectState, ProcessProof,
   CandidateRecord, ChallengeRecord, EntryRecord, EnvelopeSheet, GoalStatus, JudgingSheetData, ModeEnvelopeInput, ModeRecord, PackageInspectionView, Representation, Scene, Standing, StepWork, SupportMap, Task, WorkPlan,
-  ThinkingMap, TrailRow, TrustFacts, WorkGoal, WorldSnapshot,
+  ThinkingMap, TrailRow, TrustFacts, WorkGoal, WorldSnapshot, Reward,
 } from "@xeniur/core";
 import { SceneRenderer, presentBindings, t, type SceneBindings } from "@xeniur/ui";
 import {
@@ -16,13 +16,15 @@ import { Ask } from "./Ask.js";
 import { KeyboardMap } from "./KeyboardMap.js";
 import { reviewSupportBinding } from "./lib/reviewSupport.js";
 import { Organizer } from "./Organizer.js";
+import { DecisionWorkbench } from "./DecisionWorkbench.js";
+import { Sharpen } from "./Sharpen.js";
 
 /** The project's meaningful things, not XENIUR's subsystems. */
 const ZONES = [
-  { key: "sources", label: "Sources" },
-  { key: "decisions", label: "Decisions" },
-  { key: "work", label: "Work" },
-  { key: "deliveries", label: "Deliveries" },
+  { key: "sources", label: "Sources", glyph: "◫" },
+  { key: "decisions", label: "Decisions", glyph: "⑂" },
+  { key: "work", label: "Work", glyph: "◇" },
+  { key: "deliveries", label: "Deliveries", glyph: "↗" },
 ] as const;
 
 /** The four zones are four of the six needs: what the rail names is the question the centre answers. */
@@ -59,7 +61,7 @@ export interface WorldProps {
   /** A request resolved to a remote model and no key exists: the host offers Your models. */
   onNeedsKey?(reason: string): void;
   /** Browse for this project and step: tabs opened there belong to it. */
-  onBrowse?(stepId: string | null): void;
+  onBrowse?(context: { goalId: string | null; goalTitle: string | null; stepId: string | null; stepTitle: string | null }): void;
 }
 
 /**
@@ -85,6 +87,12 @@ export function World({
   const [focusStepId, setFocusStepId] = useState<string | null>(initialStep);
   // One sentence after something happened — what was added, what to do next. Dismissible; never a summary.
   const [afterLine, setAfterLine] = useState<string | null>(null);
+  const [showDecisionComposer, setShowDecisionComposer] = useState(false);
+  const [discovery, setDiscovery] = useState<{ id: string; reward: Reward } | null>(null);
+  const discoveryPending = useRef(false);
+  const [discoveriesOn, setDiscoveriesOn] = useState(() => {
+    try { return window.localStorage.getItem(`xeniur.discovery.${snapshot.world.id}`) !== "off"; } catch { return true; }
+  });
   const [stepRefusals, setStepRefusals] = useState<Record<string, string>>({});
   // The Sealed Session: the sheet being read, and the mode once it runs. Read from the store, never remembered.
   const [sealSheet, setSealSheet] = useState<{ sheet: EnvelopeSheet; envelope: ModeEnvelopeInput } | null>(null);
@@ -145,6 +153,22 @@ export function World({
 
   const bridge = window.xeniur;
   const worldId = snapshot.world.id;
+  const reachBreakpoint = useCallback(async (focusId: string | null) => {
+    if (!bridge?.rhythm || !discoveriesOn || discoveryPending.current) return;
+    discoveryPending.current = true;
+    try { const offer = await bridge.rhythm.breakpoint(worldId, focusId); if (offer) setDiscovery(offer); }
+    finally { discoveryPending.current = false; }
+  }, [bridge, discoveriesOn, worldId]);
+  const resolveDiscovery = useCallback(async (outcome: "taken" | "skipped") => {
+    if (!discovery) return;
+    await bridge?.rhythm.resolve(discovery.id, outcome);
+    setDiscovery(null);
+    if (outcome === "taken") {
+      const state = await bridge?.objects.get(discovery.reward.objectId);
+      if (state?.object.worldId === worldId) onOpenObject(discovery.reward.objectId);
+      else if (state) onImported?.({ worldId: state.object.worldId, objectId: state.object.id });
+    }
+  }, [bridge, discovery, worldId, onOpenObject, onImported]);
 
   const refreshThinking = useCallback(async () => {
     setMap((await bridge?.sense.map(worldId)) ?? null);
@@ -208,7 +232,7 @@ export function World({
       if ((e.metaKey || e.ctrlKey) && ["1", "2", "3"].includes(e.key)) { e.preventDefault(); chooseDensity(Number(e.key) as 1 | 2 | 3); return; }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "?") { setShowKeys((v) => !v); return; }
-      if (["1", "2", "3", "4"].includes(e.key)) { const z = ZONES[Number(e.key) - 1]!; setZone(z.key); setZoneChosen(true); setShowMaterial(true); return; }
+      if (["1", "2", "3", "4"].includes(e.key)) { const z = ZONES[Number(e.key) - 1]!; setZone(z.key); setZoneChosen(true); setShowMaterial(true); setShowDecisionComposer(false); return; }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         if (present) return;
         e.preventDefault();
@@ -301,7 +325,9 @@ export function World({
     // The lenses: the claims behind it, and what any agent saw, decided, was allowed and did.
     void bridge?.trust?.supportMap(selectedId).then((m) => setSupportMap(m ?? null));
     void bridge?.brain?.trail(selectedId).then((rows) => setTrailRows(rows ?? []));
-  }, [bridge, selectedId, snapshot, decisions, proof?.counts]);
+  // The returned proof is a result, not a refresh trigger: depending on its counts
+  // would re-fetch forever because IPC returns a new object each time.
+  }, [bridge, selectedId, snapshot, decisions]);
 
   const byId = useMemo(
     () => new Map(snapshot.representations.map((r: Representation) => [r.id, r])),
@@ -382,17 +408,18 @@ export function World({
       setStepRefusals((prev) => { const next = { ...prev }; if (r.refused) next[stepId] = r.refused; else delete next[stepId]; return next; });
       setWork((await bridge?.plans?.work(goalId)) ?? work);
       await refreshStanding();
+      if (execution === "complete" && !r.refused) void reachBreakpoint(selectedId);
     },
     finishRefusals,
     onFinish: async (goalId, anyway) => {
       // The check decides. Refusals are shown in words; finishing anyway records a Decision.
       const result = await bridge?.goals?.finish(goalId, anyway);
       if (!result) return;
-      if (result.finished) { setFinishRefusals((r) => ({ ...r, [goalId]: [] })); setGoal(result.goal); setAfterLine(t("after.complete", { outcome: result.goal.outcome })); }
+      if (result.finished) { setFinishRefusals((r) => ({ ...r, [goalId]: [] })); setGoal(result.goal); setAfterLine(t("after.complete", { outcome: result.goal.outcome })); void reachBreakpoint(selectedId); }
       else setFinishRefusals((r) => ({ ...r, [goalId]: result.missing }));
       await refreshStanding();
     },
-    onNextActionDone: async (goalId, actionId) => { await bridge?.goals?.doneNextAction(goalId, actionId); await refreshStanding(); await refreshGoal(); },
+    onNextActionDone: async (goalId, actionId) => { await bridge?.goals?.doneNextAction(goalId, actionId); await refreshStanding(); await refreshGoal(); void reachBreakpoint(selectedId); },
     onAddNextAction: async (goalId, text) => { await bridge?.goals?.addNextAction(goalId, text, selectedId); await refreshStanding(); await refreshGoal(); },
     agentTrail: selectedId ? { [selectedId]: trailRows } : {},
     challenges: challenge ? { [challenge.worldId]: challenge } : {},
@@ -527,7 +554,7 @@ export function World({
   }), [snapshot, byId, tasks, map, friction, decisions, impact, worldId, bridge,
        onApprove, onReject, onImported, refreshThinking, refreshChallenge, refreshStanding, refreshGoal, constraints, proof, trust, supportMap, trailRows,
        standing, candidates, refreshCandidates, connections, brainAvailable, challenge, entries, selfKey, selectedId,
-       gestureProposals, gesturePair, zone, sealSheet, sealMode, judgingSheet, entries, ticket, finishRefusals, plan, work, goal, stepRefusals]);
+       gestureProposals, gesturePair, zone, sealSheet, sealMode, judgingSheet, entries, ticket, finishRefusals, plan, work, goal, stepRefusals, reachBreakpoint]);
   bindingsRef.current = bindings;
 
   /** One thing at a time in the centre, chosen by the zone and what is selected. */
@@ -765,7 +792,6 @@ export function World({
               {/* Finished is not chosen here: it is the outcome of Finish, under Where I stand. */}
               {GOAL_STATUSES.filter((st) => st !== "finished" || goal.status === "finished").map((st) => <option key={st} value={st} disabled={st === "finished"}>{GOAL_STATUS_WORDS[st].label}</option>)}
             </select>
-            {plan && <span className="xr-goalbar__progress xr-mono" title="Adopted steps, as the record says">{planProgress(plan, work).sentence}</span>}
           </div>
         )}
         <div className="xr-focusbar" aria-live="polite">
@@ -781,6 +807,26 @@ export function World({
           ))}
         </div>
       </header>
+
+      {goal && plan && <div className="xr-journey" aria-label="Project path and progress">
+        <nav className="xr-journey__places" aria-label="Project path">{ZONES.map((place, index) =>
+          <button key={place.key} type="button" className={`xr-journey__place${zone === place.key ? " is-current" : ""}${counts[place.key] ? " has-material" : ""}`}
+            aria-current={zone === place.key ? "step" : undefined}
+            onClick={() => { setZone(place.key); setZoneChosen(true); setShowMaterial(true); setShowHow(null); setShowDecisionComposer(false); }}>
+            <span className="xr-journey__place-mark" aria-hidden="true">{place.glyph}</span><span>{place.label}</span>
+            <small>{counts[place.key] || "·"}</small>{index < ZONES.length - 1 && <i aria-hidden="true" />}
+          </button>)}</nav>
+        <div className="xr-journey__work"><div className="xr-journey__track" aria-hidden="true">{plan.steps.filter((step) => step.disposition === "adopted").map((step) => {
+          const state = work.find((item) => item.stepId === step.id)?.execution ?? "not_started";
+          return <span key={step.id} className={`is-${state}`} title={step.purpose} />;
+        })}</div>
+        <span className="xr-journey__count">{planProgress(plan, work).sentence}</span></div>
+        <button type="button" className={`xr-journey__discovery${discoveriesOn ? " is-on" : ""}`} aria-pressed={discoveriesOn}
+          title="Project-relevant discoveries appear only after completed work, at most twice a day"
+          onClick={() => { const next = !discoveriesOn; setDiscoveriesOn(next); try { window.localStorage.setItem(`xeniur.discovery.${worldId}`, next ? "on" : "off"); } catch { /* optional preference */ } if (!next && discovery) void resolveDiscovery("skipped"); }}>
+          ◌ Discoveries {discoveriesOn ? "on" : "off"}
+        </button>
+      </div>}
 
       <nav className="xr-rail">
         {goal && plan && snapshot.world.kind === "work" && (
@@ -810,10 +856,10 @@ export function World({
               ));
             } : undefined}
             onClick={() => {
-              setZone(z.key); setZoneChosen(true); setShowHow(null); setGestureProposals([]);
+              setZone(z.key); setZoneChosen(true); setShowHow(null); setGestureProposals([]); setShowDecisionComposer(false);
               if (z.key === "decisions" && decisions[0]) setSelectedId(decisions[0].objectId);
             }}>
-            <span className="xr-rail__label">{z.label}<span className="xr-rail__count">{counts[z.key] || ""}</span></span>
+            <span className="xr-rail__label"><span className="xr-rail__glyph" aria-hidden="true">{z.glyph}</span>{z.label}<span className="xr-rail__count">{counts[z.key] || ""}</span></span>
             {zoneState[z.key] && <span className={`xr-rail__state is-${z.key}`}>{zoneState[z.key]}</span>}
           </button>
         ))}
@@ -829,6 +875,8 @@ export function World({
       </nav>
 
       <main className="xr-centre">
+        {goal && snapshot.world.kind === "work" && <Sharpen goalId={goal.id} objectId={selectedId} revision={snapshot}
+          onOpen={onOpenObject} onSaved={() => { void refreshThinking(); void refreshGoal(); void refreshStanding(); onImported?.({ worldId, objectId: selectedId ?? "" }); }} />}
         {arrival && (
           <Arrival path={arrival.path} inspection={arrival.inspection}
             onOpen={async (as) => {
@@ -841,6 +889,11 @@ export function World({
               if (p) await bridge?.publishers?.setTrust(p.publicKey, p.displayName, "blocked");
               setArrival(null);
             }}
+            onReport={async (reason, note) => {
+              const p = arrival.inspection.publisher;
+              if (!p || !bridge?.publishers) throw new Error("Reports are unavailable here.");
+              await bridge.publishers.report(p.publicKey, p.displayName, reason, note);
+            }}
             onDismiss={() => setArrival(null)} />
         )}
         {ask && (
@@ -852,10 +905,15 @@ export function World({
         )}
         {notice && <p className="xr-centre__notice" role="status">{notice}<button type="button" className="xr-button" onClick={() => setNotice(null)}>Close</button></p>}
         <div className="xr-centre__solo">
+          {zone === "decisions" && snapshot.world.kind === "work" && !showDecisionComposer && <button type="button" className="xr-choice-start" onClick={() => setShowDecisionComposer(true)}><span>⑂</span> Compare paths <span>＋</span></button>}
+          {showDecisionComposer && bridge ? <DecisionWorkbench bridge={bridge} worldId={worldId} onClose={() => setShowDecisionComposer(false)} onSaved={(objectId) => {
+            setShowDecisionComposer(false); setSelectedId(objectId); void refreshThinking(); onImported?.({ worldId, objectId });
+          }} /> : <>
           {scene.reason && snapshot.world.kind === "work" && !showStanding && (
             <p className="xr-stage__need"><span>{scene.reason}</span>{selected && <em> · {selected.properties.title}</em>}</p>
           )}
           <SceneRenderer scene={scene} bindings={bindings} />
+          </>}
         </div>
         {candidates.length > 0 && snapshot.world.kind === "work" && (
           <div className="xr-centre__tray">
@@ -865,6 +923,12 @@ export function World({
         )}
 
         <footer className={`xr-language-dock${goal && plan ? " has-step" : ""}`}>
+          {discovery && <aside className="xr-discovery" aria-label="Project discovery">
+            <span className="xr-discovery__symbol" aria-hidden="true">✳</span>
+            <div><small>AT A STOPPING POINT · FROM YOUR PROJECT</small><strong>{discovery.reward.label}</strong><p>{discovery.reward.whyItMayConnect}</p></div>
+            <button type="button" className="xr-discovery__open" onClick={() => void resolveDiscovery("taken")}>Explore</button>
+            <button type="button" className="xr-discovery__skip" onClick={() => void resolveDiscovery("skipped")}>Later</button>
+          </aside>}
           {afterLine && (
             <p className="xr-dock__after" role="status">{afterLine}<button type="button" className="xr-text-action" onClick={() => setAfterLine(null)}>{t("keys.close")}</button></p>
           )}
@@ -875,7 +939,7 @@ export function World({
                 ? <button type="button" className="xr-dock__step" onClick={() => setFocusStepId(currentStep.id)}>{currentStep.purpose}{currentStep.expectedResult ? <small> — {currentStep.expectedResult}</small> : null}</button>
                 : <span className="xr-dock__quiet">{t("dock.nothing")}</span>}
               {goal.nextActions.find((a) => !a.doneAt) && <><span className="xr-dock__k">{t("dock.next")}</span><span className="xr-dock__next">{goal.nextActions.find((a) => !a.doneAt)!.text}</span></>}
-              {onBrowse && <button type="button" className="xr-text-action xr-dock__browse" onClick={() => onBrowse(currentStep?.id ?? null)}>{t("dock.browse")}</button>}
+              {onBrowse && <button type="button" className="xr-text-action xr-dock__browse" onClick={() => onBrowse({ goalId: goal.id, goalTitle: goal.outcome, stepId: currentStep?.id ?? null, stepTitle: currentStep?.purpose ?? null })}>{t("dock.browse")}</button>}
             </div>
           )}
           <label htmlFor="world-language">{askingForGoal ? "What are you trying to accomplish?" : "Use language for this"}</label>

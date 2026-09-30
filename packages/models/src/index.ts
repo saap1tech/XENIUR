@@ -15,3 +15,4 @@ export {
   DEFAULT_POLICY, ROUTED_INTENTS, STRENGTH_CONSTRAINT, RESTRICTED_CONSTRAINT,
 } from "./policy.js";
 export type { RoutingPolicy, RoutedIntent, Route, RouteContext, AcceptanceRow } from "./policy.js";
+export { routerTextModels, routerImageModel, recommendRouterModels } from "./openrouter.js";

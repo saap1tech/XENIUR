@@ -171,7 +171,7 @@ export interface Reward {
 }
 
 export interface RhythmConfig {
-  /** Off by default. A person turns rhythm on by starting a mode that carries it. */
+  /** Whether the fixed cadence may offer anything; project UI controls breakpoint offers. */
   enabled: boolean;
   /** Minutes between offers when nothing has been skipped. Predictable, never tuned. */
   cadenceMinutes: number;

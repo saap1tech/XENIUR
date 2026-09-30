@@ -1,3 +1,4 @@
+import { sampleProvidersConfig } from "../../../../packages/providers/src/test-config.js";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -39,7 +40,7 @@ beforeAll(async () => {
     },
   };
   const router = new CapabilityRouter({
-    graph, broker: new PermissionBroker(graph.db), config: loadProvidersConfig(ROOT), env,
+    graph, broker: new PermissionBroker(graph.db), config: sampleProvidersConfig(ROOT), env,
   });
 
   const world = graph.createWorld({ title: "Asteroid Game", emoji: "🚀" });
@@ -252,7 +253,9 @@ describe("the guided shell", () => {
     expect(out).toContain("xr-plan");
     expect(out).toContain("Bring in what there is to know");
     expect(out).toContain(">Material<");
-    expect(out).not.toContain(">Sources<");                                  // behind the toggle, not gone
+    const rail = out.split('<nav class="xr-rail">')[1]!.split("</nav>")[0]!;
+    expect(rail).not.toContain(">Sources<");                           // behind Material in the rail
+    expect(out).toContain('aria-label="Project path"');                // reachable above the work
   });
 
   it("the header counts the record, excluding skipped; the dock names the current step and the next action", () => {

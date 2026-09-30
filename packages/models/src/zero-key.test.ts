@@ -14,12 +14,12 @@ import { MemoryKeyStore, ModelRegistry } from "./index.js";
  * here rather than remembered.
  */
 describe("XENIUR is complete with zero keys", () => {
-  it("offers no remote model and every local one when no key is stored", () => {
+  it("offers no live model before the OpenRouter connection", () => {
     const registry = ModelRegistry.load(process.cwd());
     const keys = new MemoryKeyStore();
     const callable = registry.callable((p) => keys.has(p));
     expect(callable.every((m) => m.tags.includes("local"))).toBe(true);
-    expect(callable.length).toBeGreaterThan(0);
+    expect(callable).toEqual([]);
   });
 
   it("runs the whole local loop — object, version, recipe, staleness, readiness, decision — with no key", () => {

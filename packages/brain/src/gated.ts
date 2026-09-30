@@ -70,7 +70,7 @@ export interface GatedBrainOptions {
   /**
    * The switch. False means no request is made under any circumstances — not "no key
    * configured", not "not enabled": the code path that would call a provider is not taken.
-   * This milestone ships with it false and no key handling at all.
+   * The host enables it only with a resolver that checks stored keys and selected models.
    */
   liveCallsEnabled: boolean;
   maxOutputTokens?: number;
@@ -88,14 +88,12 @@ export type GatedResult =
 /**
  * The Brain, behind every gate that matters.
  *
- * Built, tested and shipped switched off. Nothing here needs a key to run, and with
- * `liveCallsEnabled: false` the branch that would reach a provider is never taken — which
- * is a stronger statement than "no key is configured", because it does not depend on the
- * environment being what somebody expected.
+ * The host may enable this only with a resolver that refuses unselected or unverified models.
+ * When `liveCallsEnabled` is false, the provider branch is not reached at all.
  *
  * The order of the gates is the design:
  *
- *   1. **live calls enabled?** — off, and it stops here
+ *   1. **live calls enabled?** — if not, stop here
  *   2. **is the price verified?** — an unknown price is refused, never assumed to be zero
  *   3. **reserve the money** — before dispatch, so two tasks cannot both spend the last of it
  *   4. **dispatch, and settle whatever it cost** — including repairs and failures
@@ -121,10 +119,10 @@ export class GatedBrain {
   get model(): string | null { return this.client.model; }
   get enabled(): boolean { return this.opts.liveCallsEnabled; }
 
-  /** What one attempt would cost at a price, before it is made. */
   /** The resolver, so a host can probe the route before compiling a context for its destination. */
   resolverFor(): ModelResolver | null { return this.opts.resolver ?? null; }
 
+  /** What one attempt would cost at a price, before it is made. */
   estimateUsd(pricing: Pricing = this.opts.pricing): number {
     // A generous ceiling on input rather than a guess at it: an estimate that turns out
     // to be low is a reservation that did not reserve enough.
@@ -166,8 +164,7 @@ export class GatedBrain {
     if (!this.opts.liveCallsEnabled) {
       return {
         status: "gated",
-        reason: "The Brain is built and tested but switched off. No request has been made, " +
-                "and XENIUR is not holding a key.",
+                reason: "AI requests are switched off. No request has been made.",
       };
     }
 

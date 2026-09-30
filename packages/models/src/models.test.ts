@@ -1,19 +1,36 @@
 import { describe, it, expect } from "vitest";
 import {
   MemoryKeyStore, ModelRegistry, findKeyShaped, isPriceVerified, looksLikeKey, verifyKey,
-  type Fetcher,
+  ModelsConfigSchema, type Fetcher,
 } from "./index.js";
 
-const registry = ModelRegistry.load(process.cwd());
+// Compatibility fixtures exercise historical stored providers without enabling them in the app.
+const registry = new ModelRegistry(ModelsConfigSchema.parse({
+  providers:[
+    {id:"openai",label:"OpenAI",keyName:"OPENAI_API_KEY",verifyUrl:"https://api.openai.com/v1/models",auth:"bearer"},
+    {id:"google",label:"Google",keyName:"GEMINI_API_KEY",verifyUrl:"https://generativelanguage.googleapis.com/v1beta/models",auth:"google-key"},
+    {id:"anthropic",label:"Anthropic",keyName:"ANTHROPIC_API_KEY",verifyUrl:"https://api.anthropic.com/v1/models",auth:"x-api-key"},
+    {id:"ollama",label:"Ollama",keyName:null,verifyUrl:"http://localhost:11434/api/tags",auth:"none",local:true},
+    {id:"meshy",label:"Meshy",keyName:"MESHY_API_KEY",verifyUrl:"https://api.meshy.ai/openapi/v1/balance",auth:"bearer"}
+  ],
+  models:[
+    {id:"openai.luna",provider:"openai",model:"historical-text",label:"Historical text",contextWindow:32000,tags:[],price:{inputPerMTok:1,outputPerMTok:2,verifiedOn:"2026-09-28"}},
+    {id:"google.text",provider:"google",model:"historical-text",label:"Historical text",contextWindow:32000,tags:[],price:{inputPerMTok:1,outputPerMTok:2,verifiedOn:"2026-09-28"}},
+    {id:"anthropic.fable",provider:"anthropic",model:"historical-unpriced",label:"Historical unpriced",contextWindow:32000,tags:[],price:{inputPerMTok:0,outputPerMTok:0,verifiedOn:null}},
+    {id:"ollama.local",provider:"ollama",model:"historical-local",label:"Historical local",contextWindow:32000,tags:["local"],price:{inputPerMTok:0,outputPerMTok:0,verifiedOn:null}}
+  ]
+}));
 
 /* ------------------------------------------------------------ registry === */
 
 describe("the registry is data with dates on its prices", () => {
-  it("ships every price unverified, and refuses to call any of them", () => {
-    // Nobody has checked these numbers against a provider's page yet, and the config says so.
-    const remote = registry.models().filter((m) => !m.tags.includes("local"));
-    expect(remote.length).toBeGreaterThan(0);
-    for (const m of remote) expect(isPriceVerified(m)).toBe(false);
+  it("dates supported prices and keeps unpriced providers unavailable", () => {
+    for (const provider of ["openai", "google"] as const) {
+      const models = registry.models().filter((m) => m.provider === provider);
+      expect(models.length).toBeGreaterThan(0);
+      for (const model of models) expect(isPriceVerified(model)).toBe(true);
+    }
+    expect(isPriceVerified(registry.model("anthropic.fable")!)).toBe(false);
   });
 
   it("treats a local zero-price model as verified by construction", () => {
@@ -32,8 +49,9 @@ describe("the registry is data with dates on its prices", () => {
     expect(registry.available(() => keys.has("openai")).filter((m) => m.provider === "openai")).toHaveLength(0);
     keys.write("openai", "sk-test-000000000000000000000000000");
     expect(registry.available((p) => keys.has(p)).some((m) => m.provider === "openai")).toBe(true);
-    // Available is not callable: the price is still unverified.
-    expect(registry.callable((p) => keys.has(p)).some((m) => m.provider === "openai")).toBe(false);
+    // A checked price is one gate; the runtime separately requires live access and selection.
+    expect(registry.callable((p) => keys.has(p)).some((m) => m.provider === "openai")).toBe(true);
+    expect(registry.callable((p) => keys.has(p)).some((m) => m.provider === "anthropic")).toBe(false);
     // Local is callable with no key at all.
     expect(registry.callable(() => false).some((m) => m.provider === "ollama")).toBe(true);
   });
@@ -75,6 +93,32 @@ describe("verification never spends anything", () => {
     const r = await verifyKey("anthropic", registry, keys, fetcherThat(401, {}));
     expect(r.ok).toBe(false);
     expect(r.reason).toContain("rejected this key");
+  });
+
+  it("checks every Google models page before listing available models", async () => {
+    const keys = new MemoryKeyStore();
+    keys.write("google", "AIzaSyA-abcdefghijklmnopqrstuvwxyz0123456789");
+    const urls: string[] = [];
+    const result = await verifyKey("google", registry, keys, async (url, init) => {
+      urls.push(url);
+      expect(init.headers["x-goog-api-key"]).toBeTruthy();
+      return { ok: true, status: 200, json: async () => urls.length === 1
+        ? { models: [{ name: "models/gemini-2.5-flash" }], nextPageToken: "next-1" }
+        : { models: [{ name: "models/gemini-2.5-pro" }] } };
+    });
+    expect(result.models).toEqual(["models/gemini-2.5-flash", "models/gemini-2.5-pro"]);
+    expect(urls[1]).toContain("pageToken=next-1");
+  });
+
+  it("checks Meshy access through the free balance endpoint", async () => {
+    const keys = new MemoryKeyStore();
+    keys.write("meshy", "msy-test-000000000000000000000000000");
+    const result = await verifyKey("meshy", registry, keys, async (url, init) => {
+      expect(url).toContain("/openapi/v1/balance");
+      expect(init.headers["Authorization"]).toMatch(/^Bearer msy-test/);
+      return { ok: true, status: 200, json: async () => ({ balance: 42 }) };
+    });
+    expect(result).toMatchObject({ ok: true, models: [], balanceCredits: 42, billable: false });
   });
 
   it("says plainly when there is no key to verify", async () => {

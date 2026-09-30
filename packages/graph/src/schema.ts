@@ -1413,4 +1413,29 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 29, name: "grants", sql: GRANTS },
   { version: 30, name: "browser", sql: BROWSER },
   { version: 31, name: "delegated_actions", sql: DELEGATED_ACTIONS },
+  { version: 32, name: "work_strengthening", sql: `
+    CREATE TABLE sharpen_sessions (
+      id TEXT PRIMARY KEY,
+      goal_id TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+      world_id TEXT NOT NULL REFERENCES worlds(id) ON DELETE CASCADE,
+      object_id TEXT NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+      session TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX idx_sharpen_goal ON sharpen_sessions(goal_id, created_at);
+    CREATE TABLE work_understanding_checks (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sharpen_sessions(id) ON DELETE CASCADE,
+      move_id TEXT NOT NULL,
+      target_object_id TEXT NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+      target_version_id TEXT NOT NULL REFERENCES versions(id),
+      subject_key TEXT NOT NULL,
+      basis_digest TEXT NOT NULL,
+      effect TEXT NOT NULL,
+      reflection_object_id TEXT NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+      checked_at INTEGER NOT NULL,
+      UNIQUE(session_id, move_id)
+    );
+    CREATE INDEX idx_work_checks_target ON work_understanding_checks(target_object_id, subject_key, checked_at);
+  ` },
 ];

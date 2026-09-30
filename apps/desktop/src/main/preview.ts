@@ -55,7 +55,7 @@ export class PreviewRuntime {
           // Generated code gets no network of its own. It renders; it does not phone out.
           "content-security-policy":
             "default-src 'self' 'unsafe-inline'; connect-src 'none'; " +
-            "img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'",
+            "img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'",
         },
       });
     });

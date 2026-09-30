@@ -195,8 +195,6 @@ export function DecisionCard({ node, bindings }: { node: Node<"DecisionCard">; b
   const decision = bindings.decisions?.[node.objectId];
   if (!decision) return <Empty>No decision recorded here.</Empty>;
 
-  const chosen = decision.options.find((o) => o.key === decision.chosenOption);
-
   return (
     <article className={`xr-decision xr-decision--${decision.state}`}>
       <header className="xr-decision__head">
@@ -204,10 +202,14 @@ export function DecisionCard({ node, bindings }: { node: Node<"DecisionCard">; b
         <Tag variant={decision.state === "needs_review" ? "review" : decision.state === "superseded" ? "faint" : "neutral"}>{STATE_LABEL[decision.state]}</Tag>
       </header>
 
-      <p className="xr-decision__chosen">
-        <span className="xr-decision__label">Chosen</span>
-        <span className="xr-decision__value">{chosen?.label ?? decision.chosenOption ?? "None"}</span>
-      </p>
+      <div className="xr-decision__fork" aria-label="Options considered">
+        {decision.options.map((option, index) => <div key={option.key} className={`xr-decision__path${option.key === decision.chosenOption ? " is-chosen" : ""}`}>
+          <span className="xr-decision__path-index">{index + 1}</span>
+          <strong>{option.label}</strong>
+          {option.note && <small>{option.note}</small>}
+          {option.key === decision.chosenOption && <em>Chosen</em>}
+        </div>)}
+      </div>
 
       {decision.rationale && <p className="xr-decision__why">{decision.rationale}</p>}
 

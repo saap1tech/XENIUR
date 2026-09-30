@@ -12,7 +12,7 @@ const base: PackageInspectionView = {
     importsToday: 1, dailyLimit: 3, self: false },
 };
 const render = (i: PackageInspectionView) =>
-  renderToStaticMarkup(<Arrival path="/x/critique.xeniur" inspection={i} onOpen={noop} onBlock={noop} onDismiss={noop} />);
+  renderToStaticMarkup(<Arrival path="/x/critique.xeniur" inspection={i} onOpen={noop} onBlock={noop} onReport={noop} onDismiss={noop} />);
 
 describe("Arrival — a package is here and nothing is written", () => {
   it("names the sender with a glyph and a word, never a colour alone, and shows the daily count", () => {
@@ -22,6 +22,7 @@ describe("Arrival — a package is here and nothing is written", () => {
     expect(html).toContain("unknown here — you have not judged them");
     expect(html).toContain("1 of 3 today");
     expect(html).toContain("QQQQQQQQ…");
+    expect(html).toContain("Report this sender");
   });
 
   it("someone else's work opens for review; a critique opens beside your work; Not now is always there", () => {

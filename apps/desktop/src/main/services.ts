@@ -19,7 +19,7 @@ import { CapabilityRouter, RebuildRunner } from "@xeniur/router";
 import { ValidationRunner } from "@xeniur/validators";
 import { SensemakingStore, buildThinkingMap } from "@xeniur/sensemaking";
 import {
-  Brain, GatedBrain, MockLlmClient, OllamaClient, OpenAiClient,
+  Brain, GatedBrain, MockLlmClient, OpenRouterClient, routerRequest,
   type LlmClient, type ModelResolver,
 } from "@xeniur/brain";
 import {
@@ -28,25 +28,31 @@ import {
 import type { ImpactReport, ResolvedPassage } from "@xeniur/core";
 import {
   ModelRegistry, RESTRICTED_CONSTRAINT, STRENGTH_CONSTRAINT, DEFAULT_POLICY, policyFrom, routeModel,
-  verifyKey, type KeyStore, type ModelEntry, type ModelProvider, type RoutedIntent,
+  routerTextModels, routerImageModel, recommendRouterModels, ModelsConfigSchema, type KeyStore, type ModelEntry, type ModelProvider, type RoutedIntent,
 } from "@xeniur/models";
 import type { ModelProviderView } from "@xeniur/core";
 import { appPaths, BINARIES } from "./paths.js";
 import { SafeStorageKeyStore, SafeStorageRouteTokens, SafeStorageSigningKeyStore } from "./keys.js";
 import { TabManager } from "./web/tabs.js";
 import { HttpsJsonAdapter, type RouteEndpoint } from "./routes/https-json.js";
+import { JourneyStore } from "./journey/store.js";
+import { downloadResource } from "./journey/resources.js";
 import { PreviewRuntime } from "./preview.js";
 
 export interface Services {
   graph: ObjectGraph;
-  /** Your models: the registry, the keychain-backed key store, and the first-run flag. */
+  journey: JourneyStore;
+  /** Your models: registry, keychain-backed keys, verified selection and spend limits. */
   models: {
     registry: ModelRegistry;
     keys: KeyStore;
     list(): ModelProviderView[];
     add(provider: ModelProvider, key: string): ModelProviderView[];
     remove(provider: ModelProvider): ModelProviderView[];
-    verify(provider: ModelProvider): Promise<{ ok: boolean; models: string[]; reason: string | null }>;
+    verify(provider: ModelProvider): Promise<{ ok: boolean; models: string[]; balanceCredits?: number; reason: string | null }>;
+    select(modelId: string, selected: boolean): ModelProviderView[];
+    budget(): { perActionUsdMax: number; monthlyUsdMax: number; monthlySpentUsd: number };
+    setBudget(perActionUsdMax: number, monthlyUsdMax: number): { perActionUsdMax: number; monthlyUsdMax: number; monthlySpentUsd: number };
     firstRun(): boolean;
     finishFirstRun(): void;
   };
@@ -83,13 +89,7 @@ export interface Services {
   mail: OutreachTransport;
   router: CapabilityRouter;
   brain: Brain;
-  /**
-   * The bounded Brain, built and switched off.
-   *
-   * `liveCallsEnabled` is false and there is no key handling on this path, so the branch
-   * that would reach a provider is not taken. It is here so it can be exercised, not so it
-   * can run.
-   */
+  /** The bounded Brain; a live call still needs a verified, selected model and consent. */
   gatedBrain: GatedBrain;
   spend: SpendLedger;
   config: ProvidersConfig;
@@ -104,32 +104,14 @@ export interface Services {
   dispose(): Promise<void>;
 }
 
-/**
- * Chooses the Brain's client. The mock is the default and the only one that can run
- * today: the OpenAI client stays inert until a key is present and the model id in
- * config/providers.json has actually been verified against live pricing.
- */
+/** The legacy task planner; project Ask uses the separately consented GatedBrain. */
 function makeBrain(config: ProvidersConfig): Brain {
   const entry = config.brain.providers[config.brain.default];
   let client: LlmClient = new MockLlmClient();
 
-  if (config.brain.default === "openai" && entry?.enabled) {
-    client = new OpenAiClient({
-      apiKey: process.env["OPENAI_API_KEY"],
-      model: entry.model ?? "unset",
-      modelVerified: entry.modelVerified === true,
-    });
-  }
   return new Brain(client, { maxOutputTokens: entry?.maxOutputTokens ?? 1200, maxRepairs: 1 });
 }
 
-/**
- * The bounded Brain, assembled from configuration and left switched off.
- *
- * Two independent gates, either of which alone stops a call: the model must be enabled in
- * config *and* its price must be marked verified. Both are false in the shipped config, so
- * this milestone makes no request under any circumstances and holds no key.
- */
 /**
  * The routing policy as two Constraint Objects in a settings World, and a resolver that
  * applies them.
@@ -140,7 +122,7 @@ function makeBrain(config: ProvidersConfig): Brain {
  * lists them, the model view says "transport not wired yet", and routing never pretends.
  */
 const SETTINGS_WORLD = "__xeniur_settings__";
-const WIRED_PROVIDERS: ReadonlySet<ModelProvider> = new Set<ModelProvider>(["openai", "ollama"]);
+const WIRED_PROVIDERS: ReadonlySet<ModelProvider> = new Set<ModelProvider>(["openrouter"]);
 
 function settingsWorldId(graph: ObjectGraph): string {
   const existing = graph.listWorlds().find((w) => w.summary === SETTINGS_WORLD);
@@ -170,13 +152,13 @@ export function policyConstraints(graph: ObjectGraph): { strengthId: string; res
   return { strengthId, restrictedId };
 }
 
-function makeResolver(graph: ObjectGraph, registry: ModelRegistry, keys: KeyStore): ModelResolver {
+function makeResolver(graph: ObjectGraph, registry: ModelRegistry, keys: KeyStore,
+                      usable: (model: ModelEntry) => boolean): ModelResolver {
   const clientFor = (m: ModelEntry): LlmClient | null => {
-    if (m.provider === "ollama") return new OllamaClient({ model: m.model });
-    if (m.provider === "openai") {
-      // The key comes from the keychain, never from the environment.
-      return new OpenAiClient({ apiKey: keys.read("openai") ?? undefined, model: m.model, modelVerified: m.modelVerified });
-    }
+    if (m.provider === "openrouter" && m.output !== "image") return new OpenRouterClient({
+      apiKey: keys.read("openrouter") ?? undefined, model: m.model,
+      inputPerMTok: m.price.inputPerMTok, outputPerMTok: m.price.outputPerMTok,
+    });
     return null;
   };
   return {
@@ -186,7 +168,7 @@ function makeResolver(graph: ObjectGraph, registry: ModelRegistry, keys: KeyStor
         graph.constraints.get(strengthId)?.value, graph.constraints.get(restrictedId)?.value,
       );
       const wired = new ModelRegistry({
-        ...registry.config, models: registry.config.models.filter((m) => WIRED_PROVIDERS.has(m.provider)),
+        ...registry.config, models: registry.config.models.filter((m) => WIRED_PROVIDERS.has(m.provider) && usable(m)),
       });
       const route = routeModel(intent as RoutedIntent, policy, wired, (p) => keys.has(p), ctx);
       if (!route) return null;
@@ -211,13 +193,7 @@ function makeGatedBrain(config: ProvidersConfig, ledger: SpendLedger, resolver?:
     inputPerMTok?: number; outputPerMTok?: number; unverified?: boolean; verifiedOn?: string;
   };
 
-  const client: LlmClient = config.brain.default === "openai" && entry?.enabled
-    ? new OpenAiClient({
-        apiKey: process.env["OPENAI_API_KEY"],
-        model: entry.model ?? "unset",
-        modelVerified: entry.modelVerified === true,
-      })
-    : new MockLlmClient();
+  const client: LlmClient = new MockLlmClient();
 
   return new GatedBrain(client, {
     ledger,
@@ -229,9 +205,9 @@ function makeGatedBrain(config: ProvidersConfig, ledger: SpendLedger, resolver?:
       verified: price.unverified === false && typeof price.verifiedOn === "string",
       verifiedOn: price.verifiedOn ?? null,
     },
-    // The switch, held closed for this milestone. Turning it on is a deliberate edit here
-    // and a verified price in config, not an environment variable somebody exports.
-    liveCallsEnabled: false,
+    // The resolver is the live gate: without a selected, verified, priced model it returns
+    // no client. The renderer still presents the exact request and estimate for consent.
+    liveCallsEnabled: true,
     maxOutputTokens: entry?.maxOutputTokens ?? 1200,
     maxRepairs: 1,
   });
@@ -253,24 +229,47 @@ export function createServices(window: BrowserWindow): Services {
    *
    * Keys live in the OS keychain through safeStorage and never touch the graph. The renderer
    * learns only whether a key is present; the bytes are read here, for verification and for a
-   * model call, and nowhere else. First-run is a marker file rather than a database row, so
-   * a person who wipes their data sees the scenes again — which is the right behaviour.
+   * model call, and nowhere else. A non-secret choices file stores the selected model ids;
+   * setup returns on launch until one is usable. A local-only dismissal lasts one session.
    */
   const modelRegistry = ModelRegistry.load(paths.projectRoot);
+  const catalogFile = join(paths.root, "openrouter-catalog.json");
+  try {
+    const cached = ModelsConfigSchema.parse(JSON.parse(readFileSync(catalogFile, "utf8")));
+    modelRegistry.config.models = cached.models.filter(m => m.provider === "openrouter");
+  } catch { /* A missing or invalid cache requires a fresh connection check. */ }
+  const freshPrice = (m: ModelEntry) => !!m.price.verifiedOn && Date.now() - Date.parse(m.price.verifiedOn) < 7 * 86400_000;
+
   const keyStore = new SafeStorageKeyStore(paths.root);
   const routeTokens = new SafeStorageRouteTokens(keyStore);
-  const firstRunMarker = join(paths.root, ".first-run-done");
+  const modelChoicesFile = join(paths.root, "model-choices.json");
+  const budgetFile = join(paths.root, "model-budget.json");
+  const Choices = z.object({ selected: z.array(z.string()), verified: z.record(z.array(z.string())) });
+  let choices: z.infer<typeof Choices> = { selected: [], verified: {} };
+  try { if (existsSync(modelChoicesFile)) choices = Choices.parse(JSON.parse(readFileSync(modelChoicesFile, "utf8"))); }
+  catch { choices = { selected: [], verified: {} }; }
+  const saveChoices = () => writeFileSync(modelChoicesFile, JSON.stringify(choices));
+  let dismissedThisRun = false;
+  const accessConfirmed = (m: ModelEntry) => Boolean(modelRegistry.provider(m.provider)?.local || keyStore.has(m.provider)) &&
+    (choices.verified[m.provider] ?? []).some((id) =>
+    id === m.model || id === `models/${m.model}` || (m.provider === "ollama" && id.startsWith(`${m.model}:`)));
+  const modelUsable = (m: ModelEntry) => choices.selected.includes(m.id) &&
+    accessConfirmed(m) &&
+    WIRED_PROVIDERS.has(m.provider) && m.modelVerified && freshPrice(m) &&
+    (m.output === "image" ? m.imagePriceUsd !== undefined && !!m.imageProvider : modelRegistry.callable((p) => p === m.provider && keyStore.has(p)).some((candidate) => candidate.id === m.id));
 
   const providerView = (): ModelProviderView[] => modelRegistry.providers().map((p) => {
     const keyPresent = p.local || keyStore.has(p.id);
     return {
       id: p.id, label: p.label, local: p.local, keyPresent,
       canStore: p.local || SafeStorageKeyStore.available(),
+      verified: keyPresent && (choices.verified[p.id]?.length ?? 0) > 0,
       unlocks: modelRegistry.unlocks(p.id),
       models: modelRegistry.models().filter((m) => m.provider === p.id).map((m) => ({
         id: m.id, label: m.label, priceVerifiedOn: m.price.verifiedOn,
-        callable: keyPresent && modelRegistry.callable((q) => q === p.id ? keyPresent : keyStore.has(q))
-          .some((c) => c.id === m.id),
+        inputPerMTok: m.price.inputPerMTok, outputPerMTok: m.price.outputPerMTok,
+        callable: modelUsable(m), selected: choices.selected.includes(m.id),
+        accessible: accessConfirmed(m), output: m.output, imagePriceUsd: m.imagePriceUsd,
       })),
     };
   });
@@ -278,18 +277,60 @@ export function createServices(window: BrowserWindow): Services {
   const models: Services["models"] = {
     registry: modelRegistry, keys: keyStore,
     list: providerView,
-    add: (provider, key) => { keyStore.write(provider, key); return providerView(); },
-    remove: (provider) => { keyStore.remove(provider); return providerView(); },
+    add: (provider, key) => { if (provider !== "openrouter") throw new Error("Use OpenRouter for AI connections."); keyStore.write(provider, key); delete choices.verified[provider]; saveChoices(); return providerView(); },
+    remove: (provider) => { keyStore.remove(provider); delete choices.verified[provider]; choices.selected = choices.selected.filter((id) => modelRegistry.model(id)?.provider !== provider); saveChoices(); return providerView(); },
     verify: async (provider) => {
-      // A free call, and only that: the models-list endpoint, never a completion.
-      const r = await verifyKey(provider, modelRegistry, keyStore, async (url, init) => {
-        const res = await fetch(url, { headers: init.headers, method: "GET" });
-        return { ok: res.ok, status: res.status, json: () => res.json() as Promise<unknown> };
-      });
-      return { ok: r.ok, models: r.models, reason: r.reason };
+      if (provider !== "openrouter") throw new Error("Use OpenRouter for AI connections.");
+      try {
+        const key = keyStore.read("openrouter") ?? undefined;
+        const account = await routerRequest(key, "/key");
+        if (!account.data || account.data.is_management_key || account.data.is_provisioning_key) throw new Error("Use an inference API key from OpenRouter.");
+        const date = new Date().toISOString().slice(0, 10);
+        const text = routerTextModels(await routerRequest(key, "/models/user"), date);
+        let images: ModelEntry[] = [];
+        try {
+          const list = await routerRequest(key, "/images/models");
+          const candidates = (list.data ?? []).filter((m: any) => m.architecture?.output_modalities?.includes("image"));
+          candidates.sort((a: any,b: any) => Number(!/seedream|flux|recraft/.test(a.id)) - Number(!/seedream|flux|recraft/.test(b.id)));
+          for (const candidate of candidates.slice(0, 12)) {
+            if (!/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._:/-]+$/.test(candidate.id)) continue;
+            const image = routerImageModel(candidate, await routerRequest(key, `/images/models/${candidate.id}/endpoints`), date);
+            if (image) images.push(image);
+            if (images.length >= 4) break;
+          }
+        } catch { /* Text still works; unavailable/unpriced image models stay unavailable. */ }
+        modelRegistry.config.models = [...text, ...images];
+        choices.verified.openrouter = modelRegistry.models().map(m=>m.model);
+        choices.selected = choices.selected.filter(id=>modelRegistry.models().some(m=>m.id === id));
+        if (!choices.selected.some(id=>modelRegistry.model(id)?.output !== "image")) choices.selected.push(...recommendRouterModels(modelRegistry.models()).filter(id=>!choices.selected.includes(id)));
+        writeFileSync(catalogFile, JSON.stringify(modelRegistry.config));
+        saveChoices();
+        return { ok: true, models: choices.verified.openrouter, reason: images.length ? null : "Text is ready. No image endpoint with a fixed, verified price was available." };
+      } catch (error) {
+        choices.verified.openrouter = []; saveChoices();
+        return { ok: false, models: [], reason: error instanceof Error ? error.message : "Could not check OpenRouter." };
+      }
     },
-    firstRun: () => !existsSync(firstRunMarker),
-    finishFirstRun: () => { writeFileSync(firstRunMarker, String(Date.now())); },
+    select: (modelId, selected) => {
+      const m = modelRegistry.model(modelId);
+      if (!m || !WIRED_PROVIDERS.has(m.provider) || !m.modelVerified || (!m.price.verifiedOn && !m.tags.includes("local"))) throw new Error("This model cannot run here yet.");
+      if (selected && !accessConfirmed(m)) throw new Error("Verify access to this model first.");
+      choices.selected = choices.selected.filter((id) => id !== modelId);
+      if (selected) choices.selected.push(modelId);
+      saveChoices();
+      return providerView();
+    },
+    budget: () => ({ perActionUsdMax: spend.limits().perActionUsdMax,
+      monthlyUsdMax: spend.limits().monthlyUsdMax ?? config.budget.totalUsdMax,
+      monthlySpentUsd: spend.monthlySpent() }),
+    setBudget: (perActionUsdMax, monthlyUsdMax) => {
+      const limits = { ...spend.limits(), perActionUsdMax, monthlyUsdMax };
+      spend.setLimits(limits);
+      writeFileSync(budgetFile, JSON.stringify({ perActionUsdMax, monthlyUsdMax }));
+      return models.budget();
+    },
+    firstRun: () => !dismissedThisRun && !modelRegistry.models().some(m => m.output !== "image" && modelUsable(m)),
+    finishFirstRun: () => { dismissedThisRun = true; },
   };
   const broker = new PermissionBroker(graph.db);
   const sessions = new SessionBroker(graph.db);
@@ -310,8 +351,13 @@ export function createServices(window: BrowserWindow): Services {
     settle: (id, usd) => compute.settle(id, usd),
   } });
   const brain = makeBrain(config);
-  const spend = new SpendLedger(graph.db, config.budget);
-  const gatedBrain = makeGatedBrain(config, spend, makeResolver(graph, modelRegistry, keyStore));
+  const savedBudget = (() => {
+    try { return z.object({ perActionUsdMax: z.number().positive().max(5), monthlyUsdMax: z.number().positive().max(10000) })
+      .parse(JSON.parse(readFileSync(budgetFile, "utf8"))); }
+    catch { return { perActionUsdMax: config.budget.perActionUsdMax, monthlyUsdMax: config.budget.totalUsdMax }; }
+  })();
+  const spend = new SpendLedger(graph.db, { ...config.budget, totalUsdMax: 1_000_000, ...savedBudget });
+  const gatedBrain = makeGatedBrain(config, spend, makeResolver(graph, modelRegistry, keyStore, modelUsable));
   const queue = new TaskQueue(graph.db, { concurrency: 3 });
   const rebuild = new RebuildRunner(graph, router);
   const validation = new ValidationRunner(graph, env);
@@ -343,6 +389,7 @@ export function createServices(window: BrowserWindow): Services {
 
   const browser = new TabManager(window, webRisk, graph, join(paths.scratchDir, "downloads"),
     (tabId) => { try { window.webContents.send("xeniur:browser-event", { tabId }); } catch { /* the window may be gone */ } });
+  if(!browser.profiles().some(p=>p.kind==="ephemeral"))browser.createProfile("Public browsing","ephemeral");
   const preview = new PreviewRuntime(window);
 
   // Every tool the queue can run. A task that names anything else fails loudly rather
@@ -394,7 +441,8 @@ export function createServices(window: BrowserWindow): Services {
       };
     }));
     return {
-      version: "0.1.0", brainIsMock: brain.isMock, brainModel: brain.model, capabilities,
+      version: "0.1.0", brainIsMock: !modelRegistry.models().some(m => m.output !== "image" && modelUsable(m)),
+      brainModel: modelRegistry.models().find(m => m.output !== "image" && modelUsable(m))?.label ?? null, capabilities,
       firstRun: models.firstRun(),
     };
   };
@@ -503,8 +551,13 @@ export function createServices(window: BrowserWindow): Services {
     },
   };
 
+  const journey = new JourneyStore({ graph, sense, spend, projectRoot:paths.projectRoot,
+    models: () => modelRegistry.models().filter(modelUsable), key: () => keyStore.read("openrouter"),
+    download: (url) => downloadResource(url, webRisk),
+    reference: () => `data:image/png;base64,${readFileSync(join(paths.projectRoot,"brand/illustrations/research-path.png")).toString("base64")}`,
+  });
   return {
-    graph, models, queue, broker, sessions, metrics, compute, workflows, webRisk, arena,
+    graph, journey, models, queue, broker, sessions, metrics, compute, workflows, webRisk, arena,
     routes: { adapter: httpsJson, endpoints: routeEndpoints, tokens: routeTokens }, mail: new DisabledTransport(), router, brain, gatedBrain, spend, config, env, browser, preview,
     rebuild, validation, readiness, rhythm, sense,
     detailOf, historyOf, thinkingMap,

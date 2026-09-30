@@ -13,7 +13,7 @@ import { z } from "zod";
  * The one rule that is enforced rather than hoped for: **an unverified price is not free.**
  * It is unknown, and XENIUR refuses to call a model whose price nobody has checked.
  */
-export const MODEL_PROVIDERS = ["anthropic", "openai", "google", "ollama"] as const;
+export const MODEL_PROVIDERS = ["openrouter", "anthropic", "openai", "google", "ollama", "meshy", "runway"] as const;
 export const ModelProviderSchema = z.enum(MODEL_PROVIDERS);
 export type ModelProvider = z.infer<typeof ModelProviderSchema>;
 
@@ -41,6 +41,10 @@ export const ModelEntrySchema = z.object({
   price: ModelPriceSchema,
   /** Whether the model id itself has been confirmed to exist at the provider. */
   modelVerified: z.boolean().default(false),
+  output: z.enum(["text", "image"]).default("text"),
+  imagePriceUsd: z.number().nonnegative().optional(),
+  imageProvider: z.string().optional(),
+  imageParameters: z.record(z.unknown()).optional(),
 });
 export type ModelEntry = z.infer<typeof ModelEntrySchema>;
 
@@ -52,7 +56,7 @@ export const ProviderEntrySchema = z.object({
   /** A free endpoint that lists models — verification never makes a billable call. */
   verifyUrl: z.string().url().nullable(),
   /** Which header carries the key, and how. */
-  auth: z.enum(["bearer", "x-api-key", "query", "none"]).default("bearer"),
+  auth: z.enum(["bearer", "x-api-key", "google-key", "query", "none"]).default("bearer"),
   /** Local providers need no key and cost nothing; that is verified by construction. */
   local: z.boolean().default(false),
 });
@@ -92,7 +96,7 @@ export class ModelRegistry {
 
   /** Available *and* priced. The set the router may actually choose from. */
   callable(keyPresent: (provider: ModelProvider) => boolean): ModelEntry[] {
-    return this.available(keyPresent).filter(isPriceVerified);
+    return this.available(keyPresent).filter((m) => m.output !== "image" && isPriceVerified(m));
   }
 
   /**
@@ -102,10 +106,7 @@ export class ModelRegistry {
    * Intelligence (the bounded Brain) and, for providers that generate, Metered Generation.
    */
   unlocks(provider: ModelProvider): { intelligence: string[]; generation: string[] } {
-    // Every entry in this registry is a language model, so a key unlocks all of them for
-    // Included Intelligence. Image, video and 3D generation stay behind the providers config
-    // and its own two locks — they are a different tier with a different price.
     const mine = this.config.models.filter((m) => m.provider === provider);
-    return { intelligence: mine.map((m) => m.label), generation: [] };
+    return { intelligence: mine.filter(m=>m.output!=="image").map(m=>m.label), generation: mine.filter(m=>m.output==="image").map(m=>m.label) };
   }
 }

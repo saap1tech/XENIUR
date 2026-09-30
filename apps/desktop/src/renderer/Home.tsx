@@ -1,125 +1,124 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { EconomySnapshot, ResumeCard, SystemInfo, Task, Today, TodayRow, TrustFacts, World } from "@xeniur/core";
-import { SUPPORT_GLYPHS, describeTrust, resumeText } from "@xeniur/core";
-import { ArrowRight, Globe2, Layers3, Plus, Workflow } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Check, FolderOpen, Globe2, Layers3, Plus, Search, Settings2, Sparkles } from "lucide-react";
 import { BrandMark } from "./BrandMark.js";
-import { t } from "@xeniur/ui";
-import { FolderCard } from "./components/ui/folder-card.js";
+import { ProjectIllustration } from "./ProjectIllustration.js";
 
-const ENTRIES = [{ key: "import", label: "Bring something in" }, { key: "continue", label: "Continue work" }, { key: "review", label: "Review changes" }] as const;
-export type HomeEntry = typeof ENTRIES[number]["key"];
+export type HomeEntry = "import" | "continue" | "review";
 
-export function Home({ worlds, active, info, economy, today, trust, onOpen, onOpenSituation, onContinue, onStart, onCreate, onReject, onDismissArrival, onExplore, onWorkflows }: {
-  worlds: World[]; active: Task[]; info: SystemInfo | null; economy: EconomySnapshot | null;
-  /** At most seven situations that need a person. Null while loading; quiet when nothing does. */
-  today: Today | null;
-  /** Each World's Trust Strip, summed over its Objects. */
-  trust: Readonly<Record<string, TrustFacts>>;
-  onOpen(worldId: string): void;
-  /** A Today row opens its World with focus already on the Object and the zone selected. */
-  onOpenSituation(row: TodayRow): void;
-  /** Continue the last active World, landing on the goal's focus. */
-  onContinue(card: ResumeCard, objectId?: string | null): void;
-  /** Start something: a question, idea, task or outcome in the person's words → a World with that goal. */
-  onStart(outcome: string): void;
-  onCreate(entry: HomeEntry): void;
-  /** Decline a parked task from Home. Approval never happens here: Review opens the exact plan in its World. */
-  onReject(taskId: string): void;
-  onDismissArrival(challengeWorldId: string): void;
-  onExplore(): void; onWorkflows(): void;
-}) {
-  const parkedTaskId = (row: TodayRow) => row.id.startsWith("task:") ? row.id.slice(5) : null;
-  const [starting, setStarting] = useState(false);
-  const [outcome, setOutcome] = useState("");
-  void active; void economy;
-  // Projects, most recently opened first; six on Home, the rest one palette away.
-  const shown = worlds.filter((w) => w.summary !== "__xeniur_settings__");
-  const recent = [...shown].sort((a, b) => (b.lastOpenedAt ?? b.createdAt) - (a.lastOpenedAt ?? a.createdAt)).slice(0, 6);
-  return <main className="xr-home xr-home--next">
-    <nav className="xr-site-nav"><BrandMark /><p>The visual interface between humans<br />and digital capability.</p><div><button type="button" onClick={onExplore}><Globe2 size={15} /> Protected Web</button><button type="button" onClick={onWorkflows}><Layers3 size={15} /> Workflows</button></div></nav>
-    <section className="xr-home-workbench" aria-labelledby="workbench-title">
-      <header className="xr-home-workbench__head"><div><small>{t("home.eyebrow")}</small><h1 id="workbench-title">{t("home.title")}</h1><p>{t("home.lead")}</p></div></header>
-
-      {/* Continue Work: the last active World, from durable state. Then the two ways to begin. */}
-      <div className="xr-continue">
-        {today?.resume ? (
-          <article className="xr-resume" aria-label={`Continue ${today.resume.worldTitle}`}>
-            <small>{t("home.lastactive")}</small>
-            <h2>{today.resume.worldTitle}</h2>
-            <p className="xr-resume__text">
-              {today.resume.fragments.map((f, i) => f.objectId
-                ? <button key={i} type="button" className="xr-resume__link" onClick={() => onContinue(today.resume!, f.objectId)}>{f.text}</button>
-                : <span key={i}>{f.text}</span>)}
-            </p>
-            <button type="button" className="xr-button xr-button--primary" onClick={() => onContinue(today.resume!)}>Continue this work</button>
-          </article>
-        ) : today === null ? (
-          <article className="xr-resume xr-resume--empty"><small>{t("home.lastactive")}</small><p className="xr-resume__text">{t("home.reading")}</p></article>
-        ) : (
-          <article className="xr-resume xr-resume--empty"><small>Nothing to pick up yet</small><p className="xr-resume__text">Start with something you want to accomplish, or bring in material you already have.</p></article>
-        )}
-        <div className="xr-begin">
-          <article className="xr-begin__card">
-            <h3>Start something</h3>
-            {starting ? (
-              <form className="xr-begin__form" onSubmit={(e) => { e.preventDefault(); if (outcome.trim()) { onStart(outcome.trim()); setOutcome(""); setStarting(false); } }}>
-                <label htmlFor="begin-outcome">What are you trying to accomplish?</label>
-                <input id="begin-outcome" autoFocus value={outcome} onChange={(e) => setOutcome(e.target.value)} placeholder="One sentence, in your words" />
-                <div className="xr-begin__actions"><button type="submit" className="xr-button xr-button--primary">Begin</button><button type="button" className="xr-button" onClick={() => setStarting(false)}>Not now</button></div>
-              </form>
-            ) : (
-              <><p>Begin with a question, idea, task or desired outcome.</p><button type="button" className="xr-button" onClick={() => setStarting(true)}>Start something</button></>
-            )}
-          </article>
-          <article className="xr-begin__card">
-            <h3>Bring something in</h3>
-            <p>{t("home.bringbody")}</p>
-            <div className="xr-begin__actions"><button type="button" className="xr-button" onClick={() => onCreate("import")}><Plus size={15} /> {t("home.newfrommaterial")}</button><button type="button" className="xr-text-action" onClick={onExplore}>Bring in a source <ArrowRight size={15} /></button></div>
-          </article>
-        </div>
-      </div>
-      {/* Blockers first: what needs a person, from the record. Then the projects, most recent first. */}
-      <div className="xr-home-workbench__grid">
-        <aside className="xr-today" aria-labelledby="today-title"><header><Workflow size={19} /><div><small>{t("home.needsyou")}</small><h2 id="today-title">{t("home.today")}</h2></div><span className="xr-today__date xr-mono">{today?.date ?? ""}</span></header>
-          {today === null ? <div className="xr-today__quiet"><p>{t("home.reading")}</p></div>
-            : today.quiet ? <div className="xr-today__quiet"><strong>Nothing needs you.</strong><p>{t("home.quiet")}</p></div>
-            : <ol className="xr-today__rows">{today.rows.map((row) => {
-              const taskId = parkedTaskId(row);
-              return <li key={row.id} className={`xr-today__row is-${row.kind}`}>
-                <span className="xr-today__glyph" aria-hidden="true">{row.glyph}</span>
-                <button type="button" className="xr-today__text" onClick={() => onOpenSituation(row)} disabled={row.worldId === null && row.objectId === null && row.kind !== "rhythm"}>
-                  <strong>{row.text}</strong>{row.worldTitle && <small>{row.worldTitle}</small>}
-                </button>
-                <span className="xr-today__verb">
-                  {taskId ? <><button type="button" className="xr-button xr-button--primary" onClick={() => onOpenSituation(row)}>Review</button><button type="button" className="xr-button" onClick={() => onReject(taskId)}>Decline</button></>
-                    : row.kind === "challenge_arrival" ? <><button type="button" className="xr-button" onClick={() => onOpenSituation(row)}>{row.verb}</button><button type="button" className="xr-button" onClick={() => onDismissArrival(row.worldId!)}>Not for me</button></>
-                    : row.verb ? <button type="button" className="xr-button" onClick={() => onOpenSituation(row)}>{row.verb}</button> : null}
-                </span>
-              </li>;
-            })}</ol>}
-          {today && !today.quiet && <p className="xr-today__rest">{today.more > 0 ? t("home.morebehind", { count: today.more }) : "Nothing else needs you."}</p>}
-          <footer><span>{t("home.languagehint")}</span><kbd>⌘ K</kbd></footer>
-        </aside>
-        <section className="xr-project-section"><header><div><small>{t("home.recent")}</small><h2>{t("home.projects")}</h2></div><span>{t("home.count", { count: shown.length })}{worlds.length > recent.length ? ` · ${t("home.more", { count: worlds.length - recent.length })}` : ""}</span></header>
-          <div className="xr-folder-grid">{recent.map((world, index) => <FolderCard key={world.id} index={index} title={world.title} subtitle={world.summary || t("home.projectsubtitle")} count={world.emoji} countLabel="" trust={trust[world.id] ? <FolderTrust facts={trust[world.id]!} /> : null} onClick={() => onOpen(world.id)} />)}
-            {shown.length === 0 && <button type="button" className="xr-empty-world" onClick={() => onCreate("import")}><b>+</b><span>{t("home.empty")}</span></button>}</div></section>
-      </div>
-    </section>
-    <footer className="xr-home-footer"><span>MADE WITH JUDGMENT</span><h2>Shape meaning.<br />Keep the history.</h2><p>XENIUR records research, choices, manual work, revisions, and model-touched steps. It does not estimate unrecorded effort or claim originality.</p>{info?.brainIsMock && <small>Deterministic Brain / no model requests are being made</small>}</footer>
-  </main>;
+/** How long ago, in the words a person would use; exact dates only once it is more than a week. */
+export function sinceWords(at: number, now = Date.now()): string {
+  const minutes = Math.round((now - at) / 60_000);
+  if (minutes < 2) return "Just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h ago`;
+  const days = Math.round(hours / 24);
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days} days ago`;
+  return new Date(at).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
-/**
- * A World's Trust Strip at Layer 1: five numerals in one line, glyph and count for every
- * state, lime only when every fact is settled. It does not animate into lime; it settles.
- */
-function FolderTrust({ facts }: { facts: TrustFacts }) {
-  const s = facts.support; const g = SUPPORT_GLYPHS;
-  return <span className={`xr-folder__trust${facts.settled ? " is-settled" : ""}`} role="img" aria-label={describeTrust(facts)}>
-    <span>{g.supported.glyph} {s.supported}</span><span>{g.ambiguous.glyph} {s.ambiguous}</span>
-    <span>{g.unresolved.glyph} {s.unresolved}</span><span>{g.contradicted.glyph} {s.contradicted}</span>
-    <span className="xr-folder__trust-sep">·</span><span>{facts.evidence.current}/{facts.evidence.total} current</span>
-    <span className="xr-folder__trust-sep">·</span><span>${facts.cost.usd.toFixed(2)}</span>
-    {facts.settled && <span className="xr-folder__trust-word">settled</span>}
-  </span>;
+/** Three honest ways to put a goal into words, so an empty field is never the first obstacle. */
+const GOAL_EXAMPLES = ["Plan a week in Lisbon", "Compare two laptops", "Write up my experiment"];
+const PROJECTS_SHOWN = 6;
+
+export function Home({ worlds, active, info, economy, today, trust, onOpen, onOpenSituation, onContinue, onStart, onCreate, onReject, onDismissArrival, onExplore, onWorkflows, onModels, onCommand }: {
+  worlds: World[]; active: Task[]; info: SystemInfo | null; economy: EconomySnapshot | null; today: Today | null;
+  trust: Readonly<Record<string, TrustFacts>>;
+  onOpen(worldId: string): void; onOpenSituation(row: TodayRow): void;
+  onContinue(card: ResumeCard, objectId?: string | null): void;
+  onStart(outcome: string): void; onCreate(entry: HomeEntry): void;
+  onReject(taskId: string): void; onDismissArrival(challengeWorldId: string): void;
+  onExplore(): void; onWorkflows(): void; onModels?(): void;
+  /** Opens the command palette: every project and action, by name. */
+  onCommand?(): void;
+}) {
+  void active; void economy;
+  const [starting, setStarting] = useState(false);
+  const [outcome, setOutcome] = useState("");
+  const [showAll, setShowAll] = useState(false);
+  const [allProjects, setAllProjects] = useState(false);
+  const goalInput = useRef<HTMLInputElement>(null);
+  const [covers, setCovers] = useState<Record<string, string>>({});
+  const projects = [...worlds.filter((w) => w.summary !== "__xeniur_settings__")]
+    .sort((a, b) => (b.lastOpenedAt ?? b.createdAt) - (a.lastOpenedAt ?? a.createdAt));
+  useEffect(() => {
+    let current = true;
+    const ids = projects.map((project) => project.id);
+    void window.xeniur?.worlds.covers?.(ids).then((found) => { if (current) setCovers(found); }).catch(() => { if (current) setCovers({}); });
+    return () => { current = false; };
+    // The cover list follows changes to the project list, not changes to local UI controls.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [worlds]);
+  const situations = today?.rows ?? [];
+  const visibleSituations = showAll ? situations : situations.slice(0, 3);
+  const resume = today?.resume;
+  const shownProjects = allProjects ? projects : projects.slice(0, PROJECTS_SHOWN);
+  const closeStart = () => { setStarting(false); setOutcome(""); };
+  useEffect(() => {
+    if (!starting) return;
+    const key = (event: KeyboardEvent) => { if (event.key === "Escape") closeStart(); };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, [starting]);
+  const pending = situations.length + (today?.more ?? 0);
+  return <main className="xr-haven">
+    <header className="xr-haven__nav"><BrandMark />
+      <nav aria-label="Workspace">{onCommand && <button type="button" className="xr-haven__find" title="Find a project or action" onClick={onCommand}><Search size={17} /><span>Find anything</span><kbd>⌘K</kbd></button>}<button type="button" title="Explore the web" onClick={onExplore}><Globe2 size={18} /><span>Explore</span></button>
+        <button type="button" title="Workflows" onClick={onWorkflows}><Layers3 size={18} /><span>Workflows</span></button>
+        <button type="button" title="AI connections" onClick={onModels}><Settings2 size={18} /><span>Settings</span></button></nav>
+    </header>
+    <div className="xr-haven__body">
+      <section className="xr-haven__hero" aria-label="Continue your work">
+        <div className="xr-haven__copy"><small>Your workspace</small>
+          <h1>{resume ? <>Your next<br /><em>move.</em></> : <>Make room<br /><em>for your work.</em></>}</h1>
+          {resume ? <><p className="xr-haven__resume-name">{resume.worldTitle}<small>{sinceWords(resume.lastActiveAt)}</small></p><p className="xr-haven__resume-detail">{resume.fragments.map((fragment, index) => fragment.objectId
+            ? <button key={index} type="button" className="xr-haven__resume-link" onClick={() => onContinue(resume, fragment.objectId)}>{fragment.text}</button>
+            : <span key={index}>{fragment.text}</span>)}</p>
+            <button type="button" className="xr-haven__primary" onClick={() => onContinue(resume)}>Continue project <ArrowRight size={18} /></button></>
+            : <><p className="xr-haven__resume-detail">Start with a goal. Build at your pace.</p>
+              <button type="button" className="xr-haven__primary" onClick={() => setStarting(true)}>Start a project <ArrowRight size={18} /></button></>}
+        </div>
+        <div className="xr-haven__landscape"><ProjectIllustration /></div>
+        <span className="xr-haven__hero-index">Think · Make · Grow</span>
+      </section>
+
+      <section className="xr-haven__now" aria-labelledby="haven-now"><div className="xr-haven__section-head"><div><small>Today</small><h2 id="haven-now">Your next steps</h2></div>{pending > 0 && <span>{pending} waiting on you</span>}</div>
+        {today === null ? <p className="xr-haven__quiet">Reading your projects…</p>
+          : situations.length === 0 ? <div className="xr-haven__allclear"><span><Check size={23} /></span><div><strong>All clear</strong><small>Your work is ready when you are.</small></div></div>
+          : <div className="xr-haven__situations">{visibleSituations.map((row) => {
+            const taskId = row.id.startsWith("task:") ? row.id.slice(5) : null;
+            return <article key={row.id} className="xr-haven__situation"><span className="xr-haven__situation-glyph" aria-hidden="true">{row.glyph}</span>
+              <button type="button" className="xr-haven__situation-main" onClick={() => onOpenSituation(row)} disabled={row.worldId === null && row.objectId === null && row.kind !== "rhythm"}><strong>{row.text}</strong>{row.worldTitle && <small>{row.worldTitle}</small>}</button>
+              {row.verb && <button type="button" className="xr-haven__situation-action" onClick={() => onOpenSituation(row)}>{taskId ? "Review" : row.verb}<ArrowRight size={15} /></button>}
+              {taskId && <button type="button" className="xr-haven__situation-secondary" onClick={() => onReject(taskId)}>Decline</button>}
+              {row.kind === "challenge_arrival" && row.worldId && <button type="button" className="xr-haven__situation-secondary" onClick={() => onDismissArrival(row.worldId!)}>Not for me</button>}
+            </article>;
+          })}</div>}
+        {situations.length > 3 && <button type="button" className="xr-haven__more" onClick={() => setShowAll((value) => !value)}>{showAll ? "Show less" : `See ${situations.length - 3} more`}</button>}
+        {!!today?.more && <p className="xr-haven__quiet">{today.more} more in your projects</p>}
+      </section>
+
+      <section className="xr-haven__projects" aria-labelledby="haven-projects"><div className="xr-haven__section-head"><div><small>Your work</small><h2 id="haven-projects">Projects</h2></div>{projects.length > 0 && <span>{projects.length} {projects.length === 1 ? "project" : "projects"}</span>}</div>
+        <div className="xr-haven__project-grid">
+          <button type="button" className="xr-haven__new" onClick={() => setStarting(true)}><span className="xr-haven__new-icon"><Plus size={29} /></span><strong>Start something</strong><small>An idea or goal</small></button>
+          <button type="button" className="xr-haven__new xr-haven__new--import" onClick={() => onCreate("import")}><span className="xr-haven__new-icon"><FolderOpen size={27} /></span><strong>Add material</strong><small>Files, notes, or links</small></button>
+          {shownProjects.map((project, index) => <button type="button" key={project.id} className={`xr-haven__project xr-haven__project--${index % 4}`} onClick={() => onOpen(project.id)} aria-label={`Open ${project.title}`}>
+            <span className="xr-haven__project-art" aria-hidden="true"><i /><i /><i />{covers[project.id] &&
+              <img src={window.xeniur?.blobs.url(covers[project.id]!) ?? ""} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} />}</span>
+            <span className="xr-haven__project-meta"><small>{project.lastOpenedAt ? `Opened ${sinceWords(project.lastOpenedAt).toLowerCase()}` : "Not opened yet"}</small><ArrowUpRight size={17} /></span>
+            <strong>{project.title}</strong><span className="xr-haven__project-bottom"><span>{project.summary || "Make the next move"}</span>{trust[project.id]?.settled && <Check size={17} />}</span>
+          </button>)}
+        </div>
+        {projects.length > PROJECTS_SHOWN && <button type="button" className="xr-haven__more" onClick={() => setAllProjects((value) => !value)}>{allProjects ? "Show fewer projects" : `Show all ${projects.length} projects`}</button>}
+      </section>
+      <footer className="xr-haven__foot"><span><Sparkles size={15} /> Your judgment stays in the loop.</span>{info?.brainModel ? <span>AI thinking is ready</span>
+        : <button type="button" className="xr-haven__foot-action" onClick={onModels}>Working locally · Connect AI<ArrowRight size={14} /></button>}</footer>
+    </div>
+    {starting && <div className="xr-haven__modal" role="dialog" aria-modal="true" aria-labelledby="haven-new-title" onMouseDown={(event) => { if (event.target === event.currentTarget) closeStart(); }}><form onSubmit={(event) => { event.preventDefault(); if (outcome.trim()) { onStart(outcome.trim()); closeStart(); } }}><button type="button" className="xr-haven__modal-close" onClick={closeStart} aria-label="Close">×</button><small>NEW PROJECT</small><h2 id="haven-new-title">What are you working toward?</h2><input ref={goalInput} autoFocus aria-label="Your goal" value={outcome} onChange={(event) => setOutcome(event.target.value)} placeholder="In your own words…" maxLength={300} />
+      <ul className="xr-haven__examples" aria-label="Examples">{GOAL_EXAMPLES.map((example) => <li key={example}><button type="button" onClick={() => { setOutcome(example); goalInput.current?.focus(); }}>{example}</button></li>)}</ul>
+      <p className="xr-haven__modal-hint">One sentence is enough. You can change it later; the project is named after it.</p>
+      <div><button type="button" onClick={closeStart}>Not now</button><button type="submit" disabled={!outcome.trim()}>Begin <ArrowRight size={16} /></button></div></form></div>}
+  </main>;
 }

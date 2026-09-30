@@ -16,16 +16,24 @@ use the mark alone. At larger sizes, pair it with the XENIUR name in a compact c
 
 ## Color
 
-- Intent lime: `#C6F939`
-- Graphite: `#0B0D0C`
-- Work surface: `#121513`
-- Raised surface: `#202521`
-- Soft ink: `#EEF0E9`
-- Secondary ink: `#A2A89E`
-- Structural line: `#303630`
+The application is light: warm paper, white cards, graphite ink.
 
-Lime identifies the selected Living Object, a current trustworthy state, or work actively in
-flight. Rebuild blue and review amber remain semantic status colors and never borrow the lime.
+- Intent lime: `#C6F939` — a fill only, always carrying dark ink (`#14180A`)
+- Accent ink: `#3F6212` — the brand as text, icons and focus rings (lime is too pale to read on paper)
+- Graphite ink: `#171B18`
+- Page: `#F3F2EC`
+- Card surface: `#FFFFFF`
+- Inset surface: `#F7F6F1`
+- Raised surface: `#ECEBE3`
+- Secondary ink: `#474E48`
+- Structural line: `#DCDAD0`; control border: `#85827A`
+
+The logo mark sits on a small graphite tile so its lime stays true on a light page.
+Every ink holds WCAG AA (4.5:1) on every surface it can sit on; control borders hold 3:1.
+
+The state signal is lime's deep ink (`#3F6B0B`). It identifies the selected Living Object, a
+current trustworthy state, or work actively in flight. Rebuild blue and review amber remain
+semantic status colors and never borrow the lime.
 
 ## Typography
 

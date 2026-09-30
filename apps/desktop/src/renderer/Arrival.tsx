@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { t } from "@xeniur/ui";
-import type { PackageInspectionView } from "@xeniur/core";
+import type { PackageInspectionView, ReportReason } from "@xeniur/core";
 
 /**
  * A package arrived. Nothing has been written.
@@ -10,13 +11,19 @@ import type { PackageInspectionView } from "@xeniur/core";
  * lands **beside** it. An unsigned, altered or blocked package shows its refusal and nothing
  * else. "Not now" has the same weight as either verb.
  */
-export function Arrival({ path, inspection, onOpen, onBlock, onDismiss }: {
+export function Arrival({ path, inspection, onOpen, onBlock, onReport, onDismiss }: {
   path: string;
   inspection: PackageInspectionView;
   onOpen(as: "work" | "critique"): void;
   onBlock(): void;
+  onReport(reason: ReportReason, note: string): Promise<void>;
   onDismiss(): void;
 }) {
+  const [reporting, setReporting] = useState(false);
+  const [reason, setReason] = useState<ReportReason>("spam");
+  const [note, setNote] = useState("");
+  const [reportStatus, setReportStatus] = useState<string | null>(null);
+  const [reportBusy, setReportBusy] = useState(false);
   const p = inspection.publisher;
   const name = path.split("/").pop() ?? path;
   const isCritique = inspection.intent === "critique";
@@ -44,6 +51,30 @@ export function Arrival({ path, inspection, onOpen, onBlock, onDismiss }: {
         <div className="xr-arrival__publisher is-unsigned">
           <span className="xr-arrival__glyph" aria-hidden="true">○</span>
           <span className="xr-arrival__who">Nobody vouches for this</span>
+        </div>
+      )}
+      {p && !isOwn && (
+        <div className="xr-arrival__report">
+          <button type="button" className="xr-text-action" aria-expanded={reporting} onClick={() => setReporting((open) => !open)}>
+            {reporting ? "Close report" : "Report this sender"}
+          </button>
+          {reporting && <form onSubmit={async (event) => {
+            event.preventDefault();
+            setReportBusy(true); setReportStatus(null);
+            try { await onReport(reason, note.trim()); setReportStatus("Report saved on this device. You can also block this sender."); setReporting(false); }
+            catch (error) { setReportStatus(error instanceof Error ? error.message : "Could not save the report."); }
+            finally { setReportBusy(false); }
+          }}>
+            <label>Reason<select value={reason} onChange={(event) => setReason(event.target.value as ReportReason)}>
+              <option value="spam">Spam</option><option value="misrepresented">Misrepresented work</option>
+              <option value="harmful">Harmful content</option><option value="impersonation">Impersonation</option>
+              <option value="other">Other</option>
+            </select></label>
+            <label>What happened? <span>(optional)</span><textarea value={note} maxLength={500} onChange={(event) => setNote(event.target.value)} /></label>
+            <button type="submit" className="xr-button" disabled={reportBusy}>{reportBusy ? "Saving…" : "Save report"}</button>
+            <small>Reports stay on this device. No moderator receives them yet.</small>
+          </form>}
+          {reportStatus && <p role="status">{reportStatus}</p>}
         </div>
       )}
 

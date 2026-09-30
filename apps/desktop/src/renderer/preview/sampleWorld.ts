@@ -1,7 +1,9 @@
+import { sampleJourneyBridge, previewBlob } from "./sampleJourney.js";
 import type {
   Atom, DecisionDetail, ObjectState, Representation, Standing, StepWork, ThinkingMap, TrustFacts, WorkGoal, WorkPlan, WorldSnapshot, XeniurBridge,
 } from "@xeniur/core";
 import { PlanStepSchema, templatePlanFor } from "@xeniur/core";
+import { sampleWorkStateBridge } from "./sampleSharpen.js";
 
 /**
  * A realistic World for looking at the Studio without Electron: the Rainwear 2027 fixture —
@@ -104,13 +106,21 @@ const trust = (objectId: string, over: Partial<TrustFacts> = {}): TrustFacts => 
   provenance: { human: 4, tool: 3, model: 1 }, actions: { receipted: 1, unknown: 0 }, cost: { usd: 0.04, escalations: 1 }, decisionsNeedingReview: 1, settled: false, ...over,
 });
 
-/** The bridge a preview needs, and nothing more. Every write is a no-op. */
-export function sampleBridge(opts: { firstRun?: boolean } = {}): XeniurBridge {
+/** The localhost preview. Writes are no-ops or in-memory demonstrations, never persisted. */
+export function sampleBridge(opts: { firstRun?: boolean; research?:boolean } = {}): XeniurBridge {
   const noop = async () => undefined;
+  const snapshot=opts.research?{...sampleSnapshot,world:{...sampleSnapshot.world,title:"CO₂ electrolysis · sample",summary:"A research review"},states:[],representations:[]}:sampleSnapshot;
   return {
-    blobs: { url: (h: string) => `xeniur-blob://asset/${h}` },
+    journey: sampleJourneyBridge(),
+    code:{files:async()=>({}),run:async()=>{throw new Error("Run this project in the desktop app. This is a sample preview.");},stop:noop,setBounds:noop},
+    blobs: { url: (h: string) => previewBlob(h) || `xeniur-blob://asset/${h}` },
     system: { info: async () => ({ version: "0.1", brainIsMock: true, brainModel: null, capabilities: [], firstRun: opts.firstRun ?? false }) },
-    worlds: { list: async () => [sampleSnapshot.world], open: async () => sampleSnapshot, create: async () => sampleSnapshot.world },
+    workState: sampleWorkStateBridge(),
+    models: { list: async () => [{ id:"openrouter", label:"OpenRouter", local:false, keyPresent:false, canStore:true,
+      verified:false, unlocks:{intelligence:["Thinking"],generation:["Drawing"]}, models:[] }],
+      budget:async()=>({perActionUsdMax:1,monthlyUsdMax:100,monthlySpentUsd:0}),finishFirstRun:noop,
+      add:async()=>{throw new Error("Add your OpenRouter key in the desktop app. This is a sample preview.");} },
+    worlds: { list: async () => [snapshot.world], open: async () => snapshot, create: async () => snapshot.world },
     sense: {
       map: async () => sampleMap,
       friction: async () => ({ worldId: W, intakeSinceMove: 1, threshold: 5, active: false, prompt: null, dismissable: true }),
@@ -132,9 +142,19 @@ export function sampleBridge(opts: { firstRun?: boolean } = {}): XeniurBridge {
     metrics: { record: noop }, publishers: { self: async () => ({ publicKey: "P".repeat(43), displayName: "You" }) },
     tasks: { active: async () => [], approve: noop, reject: noop, onEvent: () => () => undefined },
     economy: { snapshot: async () => ({ local: { metered: false, label: "Unlimited Local" }, intelligence: { configured: false, rollingRemaining: 0, rollingLimit: 0, reserveRemaining: 0, reserveLimit: 0, resetsAt: now }, compute: { configured: false, balance: 0, usdPerCompute: 0, held: 0 } }), cancel: noop },
-    today: { get: async () => ({ date: "2026-09-20", resume: null, rows: [], more: 0, quiet: true }) },
+    today: { get: async () => ({ date: "2026-09-28", resume: { worldId: W, worldTitle: sampleSnapshot.world.title, goalId: sampleGoal.id, fragments: [{ text: "You were comparing seam construction. One choice needs review.", objectId: null }], focusObjectId: ids.jacket, lastActiveAt: now, position: null }, rows: [], more: 0, quiet: true }) },
+    workflows: { list: async () => [
+      { id: "preview-research", name: "An evidence-led choice", author: "Studio Adrar", summary: "Gather sources, compare your options, and record a reason you can return to.", source: "installed", steps: 5, delivers: ["Decision record", "Finished document"] },
+      { id: "asset3d", name: "3D asset", author: "XENIUR", summary: "A model you own, kept deliverable as you keep working on it.", source: "bundled", steps: 4, emoji: "🚀", expects: "a .blend, .glb, .stl or .obj", delivers: ["Game-ready model", "3D-print file", "Preview image", "Turntable video"] },
+      { id: "brand", name: "Brand identity", author: "XENIUR", summary: "A logo, and every size and surface it has to survive.", source: "bundled", steps: 4, emoji: "🎨", expects: "a logo as PNG or SVG", delivers: ["Web logo", "App icon", "One-colour logo", "Print-ready logo"] },
+      { id: "figure", name: "Scientific figure", author: "XENIUR", summary: "A figure a journal will accept, and that says where its numbers came from.", source: "bundled", steps: 1, emoji: "📊", expects: "a chart or plot as PNG or SVG", delivers: ["Journal-ready figure"] },
+      { id: "onepager", name: "Document one-pager", author: "XENIUR", summary: "A plan or proposal, kept honest about what is in it before it goes out.", source: "bundled", steps: 1, emoji: "📄", expects: "a Markdown or text draft", delivers: ["Finished document"] },
+    ], apply: async () => W },
+    web: { settings: async () => ({ riskMode: "local_only", lookupConfigured: false, disclosure: "Saved pages remain available in your project." }) },
+    arena: { feeds: async () => [] },
+    browser: { setFullscreen:async()=>false, onShortcut:()=>()=>{}, profiles: async () => [{ id: "preview-public", label: "Public browsing", kind: "signed_out", createdAt: now }], tabs: async () => [], downloads: async () => [], onEvent: () => () => undefined },
     intent: { submit: async () => ({ accepted: false, taskId: null, plan: null, error: "preview" }) },
-    challenges: { get: async () => null, entries: async () => [] }, objects: { setAiProcessing: async () => null },
+    challenges: { get: async () => null, entries: async () => [] }, objects: { readText: async (id:string) => ({text:sampleStates.find(s=>s.object.id===id)?.properties.title??"Sample resource. Open a saved source in the desktop app to read its captured text.",format:"txt",partial:true}), setAiProcessing: async () => null },
     gestures: { choose: async () => ({ accepted: false, taskId: null, plan: null, error: "preview" }) },
   } as unknown as XeniurBridge;
 }

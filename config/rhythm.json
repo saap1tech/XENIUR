@@ -1,5 +1,5 @@
 {
-  "enabled": false,
+  "enabled": true,
   "cadenceMinutes": 90,
   "skipLengthens": 1.5,
   "maxCadenceMinutes": 480,

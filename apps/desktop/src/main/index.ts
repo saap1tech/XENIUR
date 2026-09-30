@@ -24,7 +24,7 @@ let services: Services | null = null;
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1360, height: 900, minWidth: 960, minHeight: 640,
-    backgroundColor: "#0b0d12",
+    backgroundColor: "#f3f2ec",
     titleBarStyle: "hiddenInset",
     show: false,
     webPreferences: {

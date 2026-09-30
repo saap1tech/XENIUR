@@ -5,6 +5,7 @@ export interface SpendCaps {
   perActionUsdMax: number;
   perTaskUsdMax: number;
   totalUsdMax: number;
+  monthlyUsdMax?: number;
 }
 
 export interface Hold {
@@ -41,7 +42,17 @@ export const HOLD_TTL_MS = 10 * 60 * 1000;
  * unusable JSON twice still cost money.
  */
 export class SpendLedger {
-  constructor(private readonly db: Db, private readonly caps: SpendCaps) {}
+  constructor(private readonly db: Db, private caps: SpendCaps) {}
+
+  limits(): SpendCaps { return { ...this.caps }; }
+  setLimits(caps: SpendCaps): void { this.caps = { ...caps }; }
+  monthlySpent(at = now()): number {
+    const month = new Date(at); month.setDate(1); month.setHours(0, 0, 0, 0);
+    const row = this.db.prepare(`SELECT COALESCE(SUM(CASE WHEN status = 'settled' THEN actual_usd ELSE reserved_usd END), 0) usd
+      FROM spend WHERE (status = 'settled' OR (status = 'held' AND expires_at > ?)) AND held_at >= ?`)
+      .get(at, month.getTime()) as { usd: number };
+    return row.usd;
+  }
 
   /**
    * Claims headroom for a call that has not been made yet.
@@ -70,6 +81,10 @@ export class SpendLedger {
       if (committed + estimate > this.caps.totalUsdMax) {
         throw new BudgetRefused("total", committed + estimate, this.caps.totalUsdMax,
           `this would take total spending to $${(committed + estimate).toFixed(2)}, over the $${this.caps.totalUsdMax.toFixed(2)} cap`);
+      }
+      if (this.caps.monthlyUsdMax !== undefined && this.monthlySpent() + estimate > this.caps.monthlyUsdMax) {
+        throw new BudgetRefused("total", this.monthlySpent() + estimate, this.caps.monthlyUsdMax,
+          `this would exceed the $${this.caps.monthlyUsdMax.toFixed(2)} monthly AI limit`);
       }
       if (input.taskId) {
         const onTask = this.#committed(input.taskId);

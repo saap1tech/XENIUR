@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   DEFAULT_POLICY, MemoryKeyStore, ModelRegistry, ModelsConfigSchema, acceptanceByModel,
-  policyFrom, routeModel, type RoutingPolicy,
+  policyFrom, routeModel, type RoutingPolicy, type ModelProvider,
 } from "./index.js";
 
 /** A registry where every price has been checked, so routing has something to choose from. */
@@ -28,7 +28,7 @@ const registry = new ModelRegistry(ModelsConfigSchema.parse({
 const withKeys = (...providers: Array<"anthropic" | "openai">) => {
   const keys = new MemoryKeyStore();
   for (const p of providers) keys.write(p, "sk-test-000000000000000000000000000");
-  return (p: "anthropic" | "openai" | "google" | "ollama") => keys.has(p);
+  return (p: ModelProvider) => keys.has(p);
 };
 const ctx = (over: Partial<{ hasRestrictedSources: boolean; escalation: number; localOnly: boolean }> = {}) =>
   ({ hasRestrictedSources: false, escalation: 0, ...over });

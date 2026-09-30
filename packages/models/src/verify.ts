@@ -6,6 +6,8 @@ export interface VerifyResult {
   ok: boolean;
   /** Model ids the provider reported, when it did. */
   models: string[];
+  /** Meshy's free balance endpoint confirms access without starting a generation. */
+  balanceCredits?: number;
   /** Why not, in the words shown to the person. */
   reason: string | null;
   /** True by construction for local providers and for every path in this function. */
@@ -19,9 +21,8 @@ export type Fetcher = (url: string, init: { headers: Record<string, string> }) =
 /**
  * Checks that a key works, without spending anything.
  *
- * Every provider exposes a models-list endpoint that costs nothing to call. Verification uses
- * that and only that: no completion, no tokens, no bill. The result says so in its type —
- * `billable: false` is not a claim, it is the only value the field can take.
+ * Providers with a configured models-list endpoint use that and only that: no completion,
+ * no tokens, no bill. Providers without one return an unavailable result.
  *
  * A local provider (Ollama) is verified by asking it what it has loaded; no key is involved.
  */
@@ -44,22 +45,37 @@ export async function verifyKey(
   if (key) {
     if (entry.auth === "bearer") headers["Authorization"] = `Bearer ${key}`;
     else if (entry.auth === "x-api-key") { headers["x-api-key"] = key; headers["anthropic-version"] = "2023-06-01"; }
+    else if (entry.auth === "google-key") headers["x-goog-api-key"] = key;
     else if (entry.auth === "query") url = `${url}${url.includes("?") ? "&" : "?"}key=${encodeURIComponent(key)}`;
   }
 
   try {
-    const res = await fetcher(url, { headers });
-    if (!res.ok) {
-      return {
-        provider, ok: false, models: [],
-        reason: res.status === 401 || res.status === 403
-          ? "the provider rejected this key"
-          : `the provider answered ${res.status}`,
-        billable: false,
-      };
+    const ids = new Set<string>();
+    const pageTokens = new Set<string>();
+    for (let page = 0; page < 20; page += 1) {
+      const res = await fetcher(url, { headers });
+      if (!res.ok) {
+        return { provider, ok: false, models: [],
+          reason: res.status === 401 || res.status === 403
+            ? "the provider rejected this key"
+            : `the provider answered ${res.status}`, billable: false };
+      }
+      const body = await res.json() as Record<string, unknown>;
+      if (provider === "meshy") {
+        const balance = body["balance"];
+        if (typeof balance !== "number" || !Number.isFinite(balance) || balance < 0) throw new Error("the balance response was not readable");
+        return { provider, ok: true, models: [], balanceCredits: balance, reason: null, billable: false };
+      }
+      for (const id of modelIdsFrom(body)) ids.add(id);
+      const next = provider === "google" && typeof body["nextPageToken"] === "string" ? body["nextPageToken"] : "";
+      if (!next) return { provider, ok: true, models: [...ids], reason: null, billable: false };
+      if (pageTokens.has(next)) throw new Error("the model list repeated a page");
+      pageTokens.add(next);
+      const nextUrl = new URL(entry.verifyUrl);
+      nextUrl.searchParams.set("pageToken", next);
+      url = nextUrl.href;
     }
-    const body = await res.json() as Record<string, unknown>;
-    return { provider, ok: true, models: modelIdsFrom(body), reason: null, billable: false };
+    throw new Error("the model list has too many pages");
   } catch (err) {
     return {
       provider, ok: false, models: [],

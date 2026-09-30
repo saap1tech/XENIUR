@@ -42,6 +42,17 @@ describe("the browser surface", () => {
     expect(inProject).toMatch(/<button[^>]*disabled[^>]*>Save to project<\/button>/);
   });
 
+  it("shows the project and current step beside account browsing", () => {
+    bridge();
+    const id = "11111111-1111-4111-8111-111111111111";
+    const html = renderToStaticMarkup(<Browser worldId={id} goalTitle="Launch a small shop" stepTitle="Compare shipping options"
+      worlds={[{ id, title: "Shop launch", emoji: "◒", summary: "", createdAt: 1, lastOpenedAt: 1, kind: "work", publisherId: null }]} layout="beside" onBack={noop} />);
+    expect(html).toContain("Shop launch");
+    expect(html).toContain("Compare shipping options");
+    expect(html).toContain("Keep a source");
+    expect(html).toContain("Back to project");
+  });
+
   it("says none of the implementation's nouns", () => {
     bridge();
     const html = stripTechnical(renderToStaticMarkup(<Browser worldId={null} onBack={noop} />));

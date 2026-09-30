@@ -14,6 +14,7 @@ import type { Today } from "./today.js";
 import type { FinishResult, GoalStatus, WorkGoal } from "./goal.js";
 import type { StepDisposition, StepEvidence, StepExecution, StepKind, StepWork, WorkPlan } from "./plan.js";
 import type { WorkPosition, WorkPositionInput } from "./position.js";
+import type { SharpenAnswer, SharpenSession, WorkState } from "./work-state.js";
 import type { ActionDescription, ActionRequest, Attempt, AttemptCheck } from "./route-adapter.js";
 import type { Standing } from "./standing.js";
 import type { SupportMap } from "./support-map.js";
@@ -89,7 +90,7 @@ export interface SystemInfo {
   brainIsMock: boolean;
   brainModel: string | null;
   capabilities: Array<{ id: string; kind: string; available: boolean; reason?: string }>;
-  /** True until the person has seen the first-run scenes once (or skipped them). */
+  /** True when no usable AI model is selected and setup has not been dismissed this run. */
   firstRun: boolean;
 }
 
@@ -101,8 +102,10 @@ export interface ModelProviderView {
   keyPresent: boolean;
   /** Whether the keychain can protect a key on this machine at all. */
   canStore: boolean;
+  verified?: boolean;
   unlocks: { intelligence: string[]; generation: string[] };
-  models: Array<{ id: string; label: string; priceVerifiedOn: string | null; callable: boolean }>;
+  models: Array<{ id: string; label: string; priceVerifiedOn: string | null; callable: boolean; selected?: boolean; accessible?: boolean;
+    inputPerMTok?: number; outputPerMTok?: number; output?: "text" | "image"; imagePriceUsd?: number }>;
 }
 
 export interface IntentResult {
@@ -123,12 +126,28 @@ export interface IntentResult {
  * preload at all and therefore none of this.
  */
 export interface XeniurBridge {
+  journey: {
+    get(worldId: string): Promise<import("./journey.js").Journey | null>;
+    start(worldId: string, kind: import("./journey.js").JourneyKind): Promise<import("./journey.js").Journey>;
+    quote(command: import("./journey.js").JourneyCommand): Promise<import("./journey.js").JourneyQuote>;
+    act(command: import("./journey.js").JourneyCommand): Promise<import("./journey.js").Journey>;
+    upload(worldId: string, versionId: string): Promise<import("./journey.js").Journey>;
+    addNote(worldId: string, versionId: string, title: string, text: string): Promise<import("./journey.js").Journey>;
+    addUrl(worldId: string, versionId: string, url: string): Promise<import("./journey.js").Journey>;
+    sourcePage(input: { worldId: string; versionId: string; resourceId: string; page: number }): Promise<string>;
+    useObject(worldId: string, versionId: string, objectId: string): Promise<import("./journey.js").Journey>;
+    sourceFigure(input: { worldId: string; versionId: string; resourceId: string; page: number; crop: { x: number; y: number; width: number; height: number }; caption: string; permission: boolean }): Promise<import("./journey.js").Journey>;
+    export(worldId: string, versionId: string): Promise<{ path: string; pdf: boolean; warning: string | null } | null>;
+  };
+
   worlds: {
     list(): Promise<World[]>;
+    covers(worldIds: string[]): Promise<Record<string, string>>;
     create(input: { title: string; emoji: string; summary?: string }): Promise<World>;
     open(worldId: string): Promise<WorldSnapshot>;
   };
   objects: {
+    readText(objectId: string): Promise<{text: string; format: string; partial: boolean} | null>;
     get(objectId: string): Promise<ObjectState | null>;
     /** "Don't send this to AI" / "Use this for the current task": a versioned processing permission. */
     setAiProcessing(objectId: string, mode: "allowed" | "never"): Promise<ObjectState | null>;
@@ -156,6 +175,8 @@ export interface XeniurBridge {
   };
   /* Browsing inside XENIUR: the person's accounts, their tabs, one visible view each */
   browser: {
+    setFullscreen(enabled:boolean):Promise<boolean>;
+    onShortcut(handler:(command:"address"|"new_tab"|"close_tab"|"reload"|"find"|"next_tab"|"previous_tab"|"exit_fullscreen")=>void):()=>void;
     profiles(): Promise<BrowserProfile[]>;
     /** A signed-in account persists its session; an ephemeral one keeps nothing and reads only. */
     createProfile(label: string, kind: ProfileKind): Promise<BrowserProfile>;
@@ -196,6 +217,7 @@ export interface XeniurBridge {
     apply(id: string): Promise<string>;
   };
   code: {
+    setBounds(objectId: string, rect: Rect): Promise<void>;
     files(objectId: string): Promise<Record<string, string>>;
     run(objectId: string): Promise<{ viewId: string }>;
     stop(objectId: string): Promise<void>;
@@ -226,7 +248,10 @@ export interface XeniurBridge {
     add(provider: string, key: string): Promise<ModelProviderView[]>;
     remove(provider: string): Promise<ModelProviderView[]>;
     /** A free call to the provider's models list. Never a completion. */
-    verify(provider: string): Promise<{ ok: boolean; models: string[]; reason: string | null }>;
+    verify(provider: string): Promise<{ ok: boolean; models: string[]; balanceCredits?: number; reason: string | null }>;
+    select(modelId: string, selected: boolean): Promise<ModelProviderView[]>;
+    budget(): Promise<{ perActionUsdMax: number; monthlyUsdMax: number; monthlySpentUsd: number }>;
+    setBudget(perActionUsdMax: number, monthlyUsdMax: number): Promise<{ perActionUsdMax: number; monthlyUsdMax: number; monthlySpentUsd: number }>;
     /** The person has seen (or skipped) the first-run scenes. */
     finishFirstRun(): Promise<void>;
   };
@@ -275,6 +300,13 @@ export interface XeniurBridge {
   };
 
   /* What should I do with my time? — at most seven situations, never a feed */
+  workState: {
+    assess(goalId: string): Promise<WorkState | null>;
+    start(goalId: string, objectId?: string | null, signalId?: string | null): Promise<SharpenSession>;
+    session(sessionId: string): Promise<SharpenSession | null>;
+    answer(input: SharpenAnswer): Promise<SharpenSession>;
+  };
+
   today: {
     get(): Promise<Today>;
   };
@@ -385,6 +417,7 @@ export interface XeniurBridge {
   rhythm: {
     /** One offer if one is due and the graph holds something matched to the focus; else null. */
     offer(worldId: string, objectId: string | null): Promise<{ id: string; reward: Reward } | null>;
+    breakpoint(worldId: string, objectId: string | null): Promise<{ id: string; reward: Reward } | null>;
     resolve(offerId: string, outcome: "taken" | "skipped"): Promise<void>;
     streak(): Promise<Streak>;
   };
@@ -444,7 +477,8 @@ export interface XeniurBridge {
   process: {
     proof(objectId: string): Promise<ProcessProof>;
     publish(objectId: string, privacy?: "filtered" | "public"): Promise<ProcessProof>;
-    exportPage(input: { objectId: string; eventIds: string[]; discloseHashes: boolean; discloseTiming: boolean }): Promise<{ path: string; rootHash: string }>;
+    exportPage(input: { objectId: string; eventIds: string[]; discloseHashes: boolean; discloseTiming: boolean;
+      humanPass: { changed: string; standBehind: string; checkNext: string } }): Promise<{ path: string; rootHash: string }>;
   };
 
   metrics: {

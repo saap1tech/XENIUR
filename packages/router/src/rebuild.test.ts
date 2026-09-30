@@ -1,3 +1,4 @@
+import { sampleProvidersConfig } from "../../providers/src/test-config.js";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,7 +25,7 @@ beforeEach(async () => {
     },
   };
   router = new CapabilityRouter({
-    graph: g, broker: new PermissionBroker(g.db), config: loadProvidersConfig(ROOT), env,
+    graph: g, broker: new PermissionBroker(g.db), config: sampleProvidersConfig(ROOT), env,
   });
   runner = new RebuildRunner(g, router);
 

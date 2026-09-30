@@ -1,5 +1,5 @@
-import { app, ipcMain, type IpcMainInvokeEvent } from "electron";
-import { readFileSync, writeFileSync } from "node:fs";
+import { app, dialog, ipcMain, type IpcMainInvokeEvent } from "electron";
+import { readFileSync, writeFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { extractCandidates } from "@xeniur/sensemaking";
 import { z } from "zod";
@@ -20,6 +20,12 @@ import { exploreIntoProposals } from "./web/explore.js";
 import { runtimeAvailability } from "./availability.js";
 import { fetchArenaFeed } from "./web/arena.js";
 import { generationFingerprint, verifiedGenerationPrice } from "./economy.js";
+import { SharpenAnswerSchema } from "@xeniur/core";
+import { JourneyCommandSchema, JourneyKindSchema } from "@xeniur/core";
+import { readResource, cropPdfFigure } from "./journey/resources.js";
+import { exportJourney } from "./journey/document.js";
+import { appPaths } from "./paths.js";
+import { WorkStateStore } from "@xeniur/graph";
 
 const Uuid = z.object({ id: UuidSchema });
 const Rect = z.object({
@@ -33,7 +39,26 @@ const Rect = z.object({
  * allowlist is the API rather than a filter over a wider one.
  */
 const SCHEMAS = {
+  "journey:get": Uuid,
+  "journey:start": z.object({ worldId: UuidSchema, kind: JourneyKindSchema }).strict(),
+  "journey:quote": JourneyCommandSchema,
+  "journey:act": JourneyCommandSchema,
+  "journey:upload": z.object({ worldId: UuidSchema, versionId: UuidSchema }).strict(),
+  "journey:addNote": z.object({ worldId: UuidSchema, versionId: UuidSchema, title: z.string().trim().min(1).max(160), text: z.string().trim().min(8).max(300000) }).strict(),
+  "journey:addUrl": z.object({ worldId: UuidSchema, versionId: UuidSchema, url: z.string().url().max(4000) }).strict(),
+  "journey:sourcePage": z.object({ worldId: UuidSchema, versionId: UuidSchema, resourceId: UuidSchema, page: z.number().int().min(1).max(500) }).strict(),
+  "journey:useObject": z.object({ worldId: UuidSchema, versionId: UuidSchema, objectId: UuidSchema }).strict(),
+  "objects:readText": Uuid,
+  "journey:sourceFigure": z.object({ worldId: UuidSchema, versionId: UuidSchema, resourceId: UuidSchema, page: z.number().int().min(1).max(500),
+    crop: z.object({ x: z.number().min(0).max(.99), y: z.number().min(0).max(.99), width: z.number().positive().max(1), height: z.number().positive().max(1) }).refine(c=>c.x+c.width<=1&&c.y+c.height<=1),
+    caption: z.string().trim().min(1).max(400), permission: z.literal(true) }).strict(),
+  "journey:export": z.object({ worldId: UuidSchema, versionId: UuidSchema }).strict(),
+  "workState:assess": Uuid,
+  "workState:session": Uuid,
+  "workState:start": z.object({ goalId: UuidSchema, objectId: UuidSchema.nullable(), signalId: z.string().min(1).max(100).nullable() }).strict(),
+  "workState:answer": SharpenAnswerSchema,
   "worlds:list": z.undefined(),
+  "worlds:covers": z.object({ worldIds: z.array(UuidSchema).max(9) }),
   "worlds:create": z.object({ title: z.string().min(1), emoji: z.string().min(1).max(8), summary: z.string().optional() }),
   "worlds:open": Uuid,
   "objects:get": Uuid,
@@ -54,6 +79,7 @@ const SCHEMAS = {
   "tasks:approve": Uuid,
   "tasks:reject": Uuid,
   "tasks:cancel": Uuid,
+  "browser:setFullscreen": z.object({enabled:z.boolean()}).strict(),
   "browser:profiles": z.undefined(),
   "browser:createProfile": z.object({ label: z.string().min(1).max(60), kind: ProfileKindSchema }),
   "browser:removeProfile": z.object({ profileId: z.string().min(1) }),
@@ -81,6 +107,7 @@ const SCHEMAS = {
   "economy:cancel": z.object({ quoteId: UuidSchema }),
   "workflows:list": z.undefined(),
   "workflows:apply": z.object({ id: z.string().min(1).max(128) }),
+  "code:setBounds": z.object({id: z.string().uuid(), rect:z.object({x:z.number().finite(),y:z.number().finite(),width:z.number().finite().min(0),height:z.number().finite().min(0)})}),
   "code:files": Uuid,
   "code:run": Uuid,
   "code:stop": Uuid,
@@ -113,6 +140,7 @@ const SCHEMAS = {
   "seal:facts": Uuid,
   "seal:paste": z.object({ objectId: UuidSchema, versionId: UuidSchema.nullable(), chars: z.number().int().nonnegative(), sourceObjectId: UuidSchema.nullable().default(null) }),
   "rhythm:offer": z.object({ worldId: UuidSchema, objectId: UuidSchema.nullable() }),
+  "rhythm:breakpoint": z.object({ worldId: UuidSchema, objectId: UuidSchema.nullable() }),
   "rhythm:resolve": z.object({ id: UuidSchema, outcome: z.enum(["taken", "skipped"]) }),
   "rhythm:streak": z.undefined(),
   "packages:inspect": z.object({ path: z.string().min(1).endsWith(".xeniur") }),
@@ -209,7 +237,10 @@ const SCHEMAS = {
   "process:proof": Uuid,
   "process:publish": z.object({ id: UuidSchema, privacy: z.enum(["filtered", "public"]).default("filtered") }),
   "process:exportPage": z.object({ id: UuidSchema, eventIds: z.array(UuidSchema).max(500),
-    discloseHashes: z.boolean(), discloseTiming: z.boolean() }),
+    discloseHashes: z.boolean(), discloseTiming: z.boolean(), humanPass: z.object({
+      changed: z.string().trim().min(1).max(500), standBehind: z.string().trim().min(1).max(500),
+      checkNext: z.string().trim().min(1).max(500),
+    }) }),
   "metrics:record": z.object({
     kind: z.enum(["gesture_used", "typed_instead"]),
     concept: z.enum(["where", "when", "who", "cost", "quantity", "priority", "sequence", "relationship"]),
@@ -259,11 +290,14 @@ const SCHEMAS = {
   /* Your models — the key is written once, read only in the main process, never echoed */
   "models:list": z.undefined(),
   "models:add": z.object({
-    provider: z.enum(["anthropic", "openai", "google", "ollama"]),
+    provider: z.literal("openrouter"),
     key: z.string().min(8).max(512),
   }),
-  "models:remove": z.object({ provider: z.enum(["anthropic", "openai", "google", "ollama"]) }),
-  "models:verify": z.object({ provider: z.enum(["anthropic", "openai", "google", "ollama"]) }),
+  "models:remove": z.object({ provider: z.literal("openrouter") }),
+  "models:verify": z.object({ provider: z.literal("openrouter") }),
+  "models:select": z.object({ modelId: z.string().min(1).max(120), selected: z.boolean() }),
+  "models:budget": z.undefined(),
+  "models:setBudget": z.object({ perActionUsdMax: z.number().positive().max(5), monthlyUsdMax: z.number().positive().max(10000) }),
   "models:finishFirstRun": z.undefined(),
 
   /* Decisions */
@@ -331,7 +365,84 @@ export function registerIpc(services: Services): void {
   }>();
 
   const handlers: { [K in Channel]: (args: z.infer<(typeof SCHEMAS)[K]>) => unknown } = {
+    "journey:get": ({id}) => services.journey.get(id),
+    "journey:start": ({worldId,kind}) => services.journey.start(worldId,kind),
+    "journey:quote": (command) => services.journey.quote(command),
+    "journey:act": (command) => services.journey.act(command),
+    "journey:upload": async ({worldId,versionId}) => {
+      const chosen = await dialog.showOpenDialog({ title:"Add resources", properties:["openFile","multiSelections"], filters:[{name:"Resources",extensions:["pdf","txt","md","csv","html"]}] });
+      let journey = services.journey.get(worldId);
+      if (!journey || journey.versionId !== versionId) throw new Error("Refresh this work path before adding material.");
+      if (chosen.canceled) return journey;
+      for (const path of chosen.filePaths) {
+        if (statSync(path).size > 25_000_000) throw new Error("Choose a resource smaller than 25 MB.");
+        const reading = await readResource(readFileSync(path), path.split(/[\\/]/).pop()!, "");
+        journey = services.journey.addResource(worldId,journey.versionId,reading);
+      }
+      return journey;
+    },
+    "journey:addNote": ({worldId,versionId,title,text}) => services.journey.addResource(worldId,versionId,{ title,text,raw:Buffer.from(text),pdf:false,partial:false,pages:0 }),
+    "journey:addUrl": ({worldId,versionId,url}) => services.journey.addUrl(worldId,versionId,url),
+    "objects:readText": ({id}) => {
+      const state=services.graph.currentState(id);
+      if(!state)throw new Error("This item is unavailable.");
+      const sourceVersion=state.properties.settings["sourceVersionId"];
+      if(typeof sourceVersion==="string") {
+        const version=services.sense.getSourceVersion(sourceVersion);
+        if(version) return {text:services.graph.readBlob(version.textBlobHash).toString("utf8").slice(0,300000),format:"txt",partial:version.partial};
+      }
+      const form=state.forms.find(f=>f.role==="doc.primary")??state.forms[0];
+      const rep=form?services.graph.getRepresentation(form.representationId):null;
+      if(!rep?.blobHash || !["txt","md","json","tex","html","csv"].includes(rep.format))return null;
+      return {text:services.graph.readBlob(rep.blobHash).toString("utf8").slice(0,300000),format:rep.format,partial:false};
+    },
+    "journey:useObject": async ({worldId,versionId,objectId}) => {
+      const state=services.graph.currentState(objectId);
+      if(!state || state.object.worldId!==worldId || state.object.archivedAt)throw new Error("Choose a file in this project.");
+      const originalSourceId=state.properties.settings["sourceId"];
+      const original=typeof originalSourceId==="string"?services.sense.latestVersionOf(originalSourceId):null;
+      if(state.properties.settings["aiProcessing"]==="never" || original?.rights==="restricted")throw new Error("Keep this private item outside the AI work path.");
+      const form=state.forms.find(f=>["source.primary","doc.primary"].includes(f.role))??state.forms[0];
+      const rep=form?services.graph.getRepresentation(form.representationId):null;
+      if(!rep?.blobHash)throw new Error("This item has no file to read.");
+      const reading=await readResource(services.graph.readBlob(rep.blobHash),`${state.properties.title}.${rep.format}`,rep.format==="pdf"?"application/pdf":`text/${rep.format}`);
+      return services.journey.addResource(worldId,versionId,reading);
+    },
+    "journey:sourcePage": async ({worldId,versionId,resourceId,page}) => {
+      const j=services.journey.get(worldId);if(!j||j.versionId!==versionId)throw new Error("Refresh the source preview.");
+      const r=j.resources.find(r=>r.id===resourceId);if(!r?.blobHash||!r.pages)throw new Error("Choose a PDF.");
+      const png=await cropPdfFigure(services.graph.readBlob(r.blobHash),page,{x:0,y:0,width:1,height:1});
+      return services.graph.putBlob(png,"image/png","png");
+    },
+    "journey:sourceFigure": async ({worldId,versionId,resourceId,page,crop,caption}) => {
+      const journey=services.journey.get(worldId);
+      if(!journey || journey.versionId!==versionId)throw new Error("Refresh before selecting a source figure.");
+      const r=journey.resources.find(r=>r.id===resourceId);
+      if(!r?.blobHash || !r.pages)throw new Error("Choose an imported PDF.");
+      const bytes=await cropPdfFigure(services.graph.readBlob(r.blobHash),page,crop);
+      return services.journey.saveSourceFigure(worldId,versionId,resourceId,page,bytes,caption);
+    },
+    "journey:export": async ({worldId,versionId}) => {
+      const journey=services.journey.validateExport(worldId,versionId);
+      const target=await dialog.showSaveDialog({title:journey.flow?"Save work bundle":"Save review bundle",defaultPath:journey.flow?`xeniur-${journey.kind}.zip`:"xeniur-review.zip",filters:[{name:"Editable work bundle",extensions:["zip"]}]});
+      if(target.canceled || !target.filePath)return null;
+      services.journey.validateExport(worldId,versionId);
+      const paths=appPaths();
+      return exportJourney(journey,services.graph,paths.projectRoot,paths.scratchDir,target.filePath);
+    },
     "worlds:list": () => services.graph.listWorlds(),
+    "worlds:covers": ({ worldIds }): Record<string, string> => {
+      const covers: Record<string, string> = {};
+      for (const worldId of worldIds) {
+        if (!services.graph.getWorld(worldId)) continue;
+        const latest = services.graph.listStates(worldId)
+          .flatMap((state) => services.graph.listRepresentations(state.object.id))
+          .filter((rep) => rep.modality === "image" && rep.blobHash)
+          .sort((a, b) => b.createdAt - a.createdAt)[0];
+        if (latest?.blobHash) covers[worldId] = latest.blobHash;
+      }
+      return covers;
+    },
     "worlds:create": (a) => services.graph.createWorld(a),
     "worlds:open": ({ id }): WorldSnapshot | null => {
       const world = services.graph.getWorld(id);
@@ -422,6 +533,7 @@ export function registerIpc(services: Services): void {
     "tasks:reject": ({ id }) => { services.queue.reject(id); },
     "tasks:cancel": ({ id }) => { services.queue.cancel(id); },
 
+    "browser:setFullscreen": ({enabled})=>services.browser.setFullscreen(enabled),
     "browser:profiles": () => services.browser.profiles(),
     "browser:createProfile": ({ label, kind }) => services.browser.createProfile(label, kind),
     "browser:removeProfile": ({ profileId }) => services.browser.removeProfile(profileId),
@@ -466,6 +578,7 @@ export function registerIpc(services: Services): void {
     "workflows:list": () => services.workflows.list(),
     "workflows:apply": ({ id }) => services.workflows.apply(id),
 
+    "code:setBounds": ({id,rect}) => {services.preview.setBounds(id,rect);},
     "code:files": ({ id }) => services.preview.files(id),
     "code:run": ({ id }) => {
       const rep = services.graph.listRepresentations(id).filter((r) => r.modality === "code").at(-1);
@@ -538,6 +651,7 @@ export function registerIpc(services: Services): void {
       if (offer) services.metrics.record("reward_offered", { detail: { kind: offer.reward.kind } });
       return offer ? { id: offer.id, reward: offer.reward } : null;
     },
+    "rhythm:breakpoint": ({ worldId, objectId }) => services.rhythm.offerAtBreakpoint({ worldId, objectId }),
     "rhythm:resolve": ({ id, outcome }) => {
       services.rhythm.resolve(id, outcome);
       services.metrics.record(outcome === "taken" ? "reward_taken" : "reward_skipped");
@@ -776,6 +890,10 @@ export function registerIpc(services: Services): void {
     "plans:attachEvidence": ({ goalId, stepId, evidence }) => services.graph.plans.attachEvidence(goalId, stepId, evidence),
     "plans:work": ({ id }) => services.graph.plans.work(id),
     "goals:standing": ({ id }) => standingFor(services.graph, id),
+    "workState:assess": ({ id }) => new WorkStateStore(services.graph, (objectId) => services.readiness.evaluateAll(objectId)).assess(id),
+    "workState:session": ({ id }) => new WorkStateStore(services.graph).session(id),
+    "workState:start": ({ goalId, objectId, signalId }) => new WorkStateStore(services.graph, (id) => services.readiness.evaluateAll(id)).start(goalId, objectId, signalId),
+    "workState:answer": (answer) => new WorkStateStore(services.graph, (id) => services.readiness.evaluateAll(id)).answer(answer),
     "today:get": () => todayFor(services.graph, { rhythm: services.rhythm }),
     "trust:world": ({ id }) => trustFactsForWorld(services.graph, id),
     "trust:supportMap": ({ id }) => supportMapFor(services.graph, id),
@@ -792,11 +910,11 @@ export function registerIpc(services: Services): void {
     "trust:outcome": ({ id, releaseId }) => services.graph.getObject(id) ? outcomeOf(services.graph, id, releaseId) : null,
     "process:proof": ({ id }) => services.graph.process.proof(id),
     "process:publish": ({ id, privacy }) => services.graph.process.publish(id, privacy),
-    "process:exportPage": ({ id, eventIds, discloseHashes, discloseTiming }) => {
+    "process:exportPage": ({ id, eventIds, discloseHashes, discloseTiming, humanPass }) => {
       const state = services.graph.currentState(id);
       if (!state) throw new Error("This Object no longer exists.");
       const result = renderProofPage(services.graph.process.proof(id), { title: state.properties.title,
-        eventIds, discloseHashes, discloseTiming });
+        eventIds, discloseHashes, discloseTiming, humanPass });
       const safe = state.properties.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase() || "process";
       const path = join(app.getPath("downloads"), `${safe}-process.html`);
       writeFileSync(path, result.html, { encoding: "utf8", mode: 0o600 });
@@ -810,6 +928,9 @@ export function registerIpc(services: Services): void {
     "models:add": ({ provider, key }) => services.models.add(provider, key),
     "models:remove": ({ provider }) => services.models.remove(provider),
     "models:verify": ({ provider }) => services.models.verify(provider),
+    "models:select": ({ modelId, selected }) => services.models.select(modelId, selected),
+    "models:budget": () => services.models.budget(),
+    "models:setBudget": ({ perActionUsdMax, monthlyUsdMax }) => services.models.setBudget(perActionUsdMax, monthlyUsdMax),
     "models:finishFirstRun": () => { services.models.finishFirstRun(); },
 
     /* ----------------------------------------------------------- Decisions */

@@ -1,4 +1,4 @@
-import { sha256Hex, WorkflowManifestSchema, type Constraint, type ConstraintValue, type WorkflowManifest, type WorkflowListing } from "@xeniur/core";
+import { deliveryName, sha256Hex, WorkflowManifestSchema, type Constraint, type ConstraintValue, type WorkflowManifest, type WorkflowListing } from "@xeniur/core";
 import type { ObjectGraph } from "./graph.js";
 import { TEMPLATES, applyTemplate } from "./templates.js";
 import { validateRecipe } from "./recipes.js";
@@ -44,18 +44,30 @@ export function validateWorkflow(input: unknown): WorkflowManifest {
   return manifest;
 }
 
+/** The named results of a pipeline: every output that lands on a form role, once, in step order. */
+function deliveries(steps: readonly { outputs: readonly { formRole?: string | null }[] }[]): string[] {
+  const names = steps.flatMap((step) => step.outputs.map((output) => output.formRole)).filter((role): role is string => !!role).map(deliveryName);
+  return [...new Set(names)];
+}
+
+function listing(id: string, m: WorkflowManifest): WorkflowListing {
+  const delivers = m.deliveryRoles.length ? [...new Set(m.deliveryRoles.map(deliveryName))] : deliveries(m.recipe.steps);
+  return { id, name: m.name, author: m.author, summary: m.summary, steps: m.recipe.steps.length, source: "installed", delivers };
+}
+
 export class WorkflowLibrary {
   constructor(private readonly graph: ObjectGraph) {}
   list(): WorkflowListing[] {
     const installed = (this.graph.db.prepare("SELECT id,manifest FROM installed_workflows ORDER BY installed_at DESC").all() as { id: string; manifest: string }[])
-      .map((row) => { const m = validateWorkflow(JSON.parse(row.manifest)); return { id: row.id, name: m.name, author: m.author, summary: m.summary, steps: m.recipe.steps.length, source: "installed" as const }; });
-    return [...installed, ...TEMPLATES.map((t) => ({ id: t.id, name: t.name, author: "XENIUR", summary: t.summary, steps: t.recipe.steps.length, source: "bundled" as const }))];
+      .map((row) => listing(row.id, validateWorkflow(JSON.parse(row.manifest))));
+    return [...installed, ...TEMPLATES.map((t) => ({ id: t.id, name: t.name, author: "XENIUR", summary: t.summary, steps: t.recipe.steps.length, source: "bundled" as const,
+      emoji: t.emoji, expects: t.expects, delivers: deliveries(t.recipe.steps) }))];
   }
   install(input: unknown): WorkflowListing {
     const manifest = validateWorkflow(input);
     const body = JSON.stringify(manifest), id = sha256Hex(body);
     this.graph.db.prepare("INSERT OR IGNORE INTO installed_workflows(id,manifest,installed_at) VALUES(?,?,?)").run(id, body, Date.now());
-    return { id, name: manifest.name, author: manifest.author, summary: manifest.summary, steps: manifest.recipe.steps.length, source: "installed" };
+    return listing(id, manifest);
   }
   apply(id: string): string {
     const builtIn = TEMPLATES.find((t) => t.id === id);

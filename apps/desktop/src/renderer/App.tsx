@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Today, TrustFacts, ComputeQuote, EconomySnapshot, ObjectDetail, SystemInfo, Task, World as WorldRow, WorldSnapshot } from "@xeniur/core";
 import { Home, type HomeEntry } from "./Home.js";
-import { World } from "./World.js";
-import { ObjectView } from "./ObjectView.js";
+import { ProjectCanvas } from "./ProjectCanvas.js";
+import { ObjectReader } from "./ObjectReader.js";
 import { CommandPalette, usePaletteShortcut, type Command } from "./CommandPalette.js";
 import { FocusMode } from "./FocusMode.js";
-import { FirstRun } from "./FirstRun.js";
 import { Models } from "./Models.js";
 import { Availability } from "./Availability.js";
 import { Browser, type BrowserLayout } from "./Browser.js";
@@ -27,15 +26,16 @@ type View =
   | { kind: "world"; snapshot: WorldSnapshot; selection?: string | null; zone?: "sources" | "decisions" | "work" | "deliveries"; step?: string | null }
   | { kind: "object"; detail: ObjectDetail; worldSnapshot: WorldSnapshot }
   | { kind: "focus"; objectId: string; minutes: number; worldId: string }
-  | { kind: "web" }
+  /** Saving a page by its address; back returns to wherever the person came from. */
+  | { kind: "web"; back?: View }
   | { kind: "workflows" }
-  | { kind: "firstrun" }
   /** Your models, with the sentence that brought the person here and the view to return to. */
   | { kind: "models"; reason: string | null; back: View }
   /** What works here — the runtime's own report, read on open. */
   | { kind: "availability"; back: View }
   /** Browsing, with the project and step the tabs belong to. Null world: unassigned browsing. */
-  | { kind: "browser"; worldId: string | null; goalId: string | null; stepId: string | null; back: View };
+  | { kind: "browser"; worldId: string | null; goalId: string | null; goalTitle?: string | null;
+      stepId: string | null; stepTitle?: string | null; back: View };
 
 export function App() {
   const [worlds, setWorlds] = useState<WorldRow[]>([]);
@@ -79,7 +79,7 @@ export function App() {
 
   // The world preview lands in the Studio, not on Home.
   useEffect(() => {
-    if (window.location.hostname === "localhost" && new URLSearchParams(window.location.search).get("visual-preview") === "world") {
+    if (window.location.hostname === "localhost" && ["world","research"].includes(new URLSearchParams(window.location.search).get("visual-preview")??"")) {
       void bridge?.worlds.list().then((ws) => { if (ws[0]) void openWorld(ws[0].id); });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -94,8 +94,8 @@ export function App() {
 
   const refreshObject = useCallback(async () => {
     if (view.kind !== "object") return;
-    const detail = await bridge?.living.detail(view.detail.state.object.id);
-    if (detail) setView({ ...view, detail });
+    const [detail, snapshot] = await Promise.all([bridge?.living.detail(view.detail.state.object.id), bridge?.worlds.open(view.worldSnapshot.world.id)]);
+    if (detail) setView({ ...view, detail, worldSnapshot: snapshot ?? view.worldSnapshot });
   }, [bridge, view]);
 
   useEffect(() => {
@@ -103,8 +103,7 @@ export function App() {
     void refreshTasks();
     void bridge?.system.info().then((value) => {
       setInfo(value);
-      // The first run is one question, asked once. It is never re-entered from a route.
-      if (value?.firstRun) setView({ kind: "firstrun" });
+      if (value?.firstRun) setView({ kind: "models", reason: null, back: { kind: "home" } });
     });
     void bridge?.economy.snapshot().then(setEconomy);
   }, [bridge, refreshWorlds, refreshTasks]);
@@ -172,9 +171,11 @@ export function App() {
       run: () => openWorld(w.id),
     })),
     { id: "home", group: "Go", label: t("palette.home"), run: () => setView({ kind: "home" }) },
-    { id: "models", group: "Settings", label: "Your models", hint: "keys stay in your keychain",
+    { id: "workflows", group: "Go", label: "Workflows", hint: "start a project from a ready-made setup",
+      run: () => setView({ kind: "workflows" }) },
+    { id: "models", group: "Settings", label: "AI connection", hint: "OpenRouter · one key for thinking and drawing",
       run: () => setView((current) => ({ kind: "models", reason: null, back: current })) },
-    { id: "availability", group: "Settings", label: "What works here", hint: "available · needs setup · disabled · not implemented",
+    { id: "availability", group: "Settings", label: "What works on this computer", hint: "each feature, and what it still needs",
       run: () => setView((current) => ({ kind: "availability", back: current })) },
     { id: "browse", group: "Go", label: "Browse the web", hint: "your accounts, inside your work",
       run: () => setView((current) => ({ kind: "browser", worldId: current.kind === "world" ? current.snapshot.world.id : null, goalId: null, stepId: null, back: current })) },
@@ -229,37 +230,23 @@ export function App() {
           { id: "streak", kind: "streak", glyph: "·", text: "Streak 6 — a decision or a claim keeps it.", worldId: null, worldTitle: null, objectId: null, zone: null, verb: "" },
         ] }}
         trust={{}}
-        onOpen={() => undefined} onOpenSituation={() => undefined} onContinue={() => undefined} onStart={() => undefined} onCreate={() => undefined} onReject={() => undefined} onDismissArrival={() => undefined} onExplore={() => undefined} onWorkflows={() => undefined} />;
+        onOpen={() => undefined} onOpenSituation={() => undefined} onContinue={() => undefined} onStart={() => undefined} onCreate={() => undefined} onReject={() => undefined} onDismissArrival={() => undefined} onExplore={() => undefined} onWorkflows={() => undefined} onModels={() => undefined} />;
     }
     return <main className="xr-home"><BrandMark />
       <p className="xr-empty">The bridge is unavailable. This window is not XENIUR's own renderer.</p>
     </main>;
   }
 
-  if (view.kind === "firstrun") {
-    return (
-      <FirstRun
-        worlds={worlds}
-        onDone={() => { setView({ kind: "home" }); void bridge.system.info().then(setInfo); }}
-        onImport={() => { void startFromMaterial(); }}
-        onImportPackage={() => { void startFromMaterial(); }}
-        onStart={(outcome) => { void startFromGoal(outcome); }}
-        onContinue={(worldId) => { void openWorld(worldId); }}
-        onOpenExample={async () => {
-          const created = await bridge.worlds.create({ title: "Rainwear 2027 (example)", emoji: "◒" });
-          await refreshWorlds();
-          await openWorld(created.id);
-        }}
-      />
-    );
-  }
-
+  if (!info) return <main className="xr-loading"><BrandMark /><span>Opening your workspace…</span></main>;
   if (view.kind === "models") {
-    return <Models reason={view.reason} onBack={() => setView(view.back)} />;
+    return <Models reason={view.reason} firstRun={info.firstRun} onBack={() => {
+      void bridge.models.finishFirstRun().then(async () => setInfo(await bridge.system.info()));
+      setView(view.back);
+    }} />;
   }
   if (view.kind === "browser") {
-    return <Browser worldId={view.worldId} goalId={view.goalId} stepId={view.stepId} worlds={worlds} layout={browserLayout} onLayout={setBrowserLayout}
-      onBack={() => setView(view.back)} />;
+    return <Browser worldId={view.worldId} goalId={view.goalId} goalTitle={view.goalTitle} stepId={view.stepId} stepTitle={view.stepTitle} worlds={worlds} layout={browserLayout} onLayout={setBrowserLayout}
+      onSources={() => setView((current) => ({ kind: "web", back: current }))} onBack={() => { if(view.back.kind==="world")void openWorld(view.back.snapshot.world.id);else setView(view.back); }} />;
   }
   if (view.kind === "availability") {
     return <Availability economy={economy} onBack={() => setView(view.back)} onModels={() => setView({ kind: "models", reason: null, back: view.back })} />;
@@ -302,22 +289,23 @@ export function App() {
         finally { setBusy(false); }
       }} />}
 
-      {view.kind === "web" ? <WebLayer worlds={worlds} onBrowse={() => setView((current) => ({ kind: "browser", worldId: null, goalId: null, stepId: null, back: current }))} onBack={() => setView({ kind: "home" })} />
+      {view.kind === "web" ? <WebLayer worlds={worlds} onBrowse={() => { setBrowserLayout("fill"); setView((current) => ({ kind: "browser", worldId: null, goalId: null, stepId: null, back: current })); }} backLabel={view.back?.kind === "browser" ? "Browser" : "Home"} onBack={() => setView(view.back ?? { kind: "home" })} />
       : view.kind === "workflows" ? <WorkflowLibrary onBack={() => setView({ kind: "home" })} onApplied={(worldId) => { void refreshWorlds(); void openWorld(worldId); }} />
       : view.kind === "object" ? (
-        <ObjectView
+        <ObjectReader
           detail={view.detail} busy={busy}
           onRefresh={() => { void refreshObject(); }}
           onBack={() => setView({ kind: "world", snapshot: view.worldSnapshot })}
+          onOpenObject={(id) => { void openObject(id, view.worldSnapshot); }}
         />
       ) : view.kind === "world" ? (
-        <World
+        <ProjectCanvas
           snapshot={view.snapshot} tasks={tasks} busy={busy} initialSelection={view.selection ?? null} initialZone={view.zone ?? "work"} initialStep={view.step ?? null}
           onBack={() => setView({ kind: "home" })}
           onOpenObject={(id) => { void openObject(id, view.snapshot); }}
           onSubmit={submit} onApprove={approve} onReject={reject}
           onNeedsKey={(reason) => setView((current) => ({ kind: "models", reason, back: current }))}
-          onBrowse={(stepId) => setView((current) => ({ kind: "browser", worldId: view.snapshot.world.id, goalId: null, stepId, back: current }))}
+          onBrowse={(context) => { setBrowserLayout("fill"); setView((current) => ({ kind: "browser", worldId: view.snapshot.world.id, ...context, back: current })); }}
           onImported={(result) => {
             // Re-read whichever World it landed in — the same one, or a new critique World.
             void bridge?.worlds.list().then(setWorlds);
@@ -329,6 +317,7 @@ export function App() {
           worlds={worlds} active={tasks} info={info}
           economy={economy} today={today} trust={worldTrust}
           onOpen={(id) => { void openWorld(id); }}
+          onModels={() => setView((current) => ({ kind: "models", reason: null, back: current }))}
           onContinue={(card, objectId) => {
             // The saved position, exactly: item, zone, step. Never a grant — there is no field for one.
             const p = card.position;
@@ -359,8 +348,9 @@ export function App() {
             await openWorld(created.id);
           }}
           onReject={reject}
-          onExplore={() => setView({ kind: "web" })}
+          onExplore={() => { setBrowserLayout("fill"); setView({ kind: "browser", worldId: null, goalId: null, stepId: null, back: { kind: "home" } }); }}
           onWorkflows={() => setView({ kind: "workflows" })}
+          onCommand={() => setPaletteOpen(true)}
         />
       )}
     </>

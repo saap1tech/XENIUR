@@ -16,13 +16,28 @@ const call = <T>(channel: string, payload?: unknown): Promise<T> =>
   ipcRenderer.invoke(channel, payload) as Promise<T>;
 
 contextBridge.exposeInMainWorld("xeniur", {
+  journey: {
+    get: (worldId: string) => call("journey:get", { id: worldId }),
+    start: (worldId: string, kind: string) => call("journey:start", { worldId, kind }),
+    quote: (command: unknown) => call("journey:quote", command),
+    act: (command: unknown) => call("journey:act", command),
+    upload: (worldId: string, versionId: string) => call("journey:upload", { worldId, versionId }),
+    addNote: (worldId: string, versionId: string, title: string, text: string) => call("journey:addNote", { worldId, versionId, title, text }),
+    addUrl: (worldId: string, versionId: string, url: string) => call("journey:addUrl", { worldId, versionId, url }),
+    sourcePage: (input: unknown) => call("journey:sourcePage", input),
+    useObject: (worldId: string, versionId: string, objectId: string) => call("journey:useObject", { worldId, versionId, objectId }),
+    sourceFigure: (input: unknown) => call("journey:sourceFigure", input),
+    export: (worldId: string, versionId: string) => call("journey:export", { worldId, versionId }),
+  },
   worlds: {
     list: () => call("worlds:list"),
+    covers: (worldIds: string[]) => call("worlds:covers", { worldIds }),
     create: (input: { title: string; emoji: string; summary?: string }) => call("worlds:create", input),
     open: (worldId: string) => call("worlds:open", { id: worldId }),
   },
   objects: {
     get: (objectId: string) => call("objects:get", { id: objectId }),
+    readText: (objectId: string) => call("objects:readText", {id:objectId}),
     setAiProcessing: (objectId: string, mode: string) => call("objects:setAiProcessing", { id: objectId, mode }),
     representations: (objectId: string) => call("objects:representations", { id: objectId }),
     lineage: (representationId: string) => call("objects:lineage", { id: representationId }),
@@ -49,6 +64,8 @@ contextBridge.exposeInMainWorld("xeniur", {
     },
   },
   browser: {
+    setFullscreen:(enabled:boolean)=>call("browser:setFullscreen",{enabled}),
+    onShortcut:(handler:(command:string)=>void)=>{const listener=(_e:unknown,command:string)=>handler(command);ipcRenderer.on("xeniur:browser-shortcut",listener);return()=>ipcRenderer.removeListener("xeniur:browser-shortcut",listener);},
     profiles: () => call("browser:profiles"),
     createProfile: (label: string, kind: string) => call("browser:createProfile", { label, kind }),
     removeProfile: (profileId: string) => call("browser:removeProfile", { profileId }),
@@ -88,6 +105,7 @@ contextBridge.exposeInMainWorld("xeniur", {
     apply: (id: string) => call("workflows:apply", { id }),
   },
   code: {
+    setBounds: (objectId: string, rect: {x:number;y:number;width:number;height:number}) => call("code:setBounds", {id:objectId,rect}),
     files: (objectId: string) => call("code:files", { id: objectId }),
     run: (objectId: string) => call("code:run", { id: objectId }),
     stop: (objectId: string) => call("code:stop", { id: objectId }),
@@ -121,6 +139,9 @@ contextBridge.exposeInMainWorld("xeniur", {
     add: (provider: string, key: string) => call("models:add", { provider, key }),
     remove: (provider: string) => call("models:remove", { provider }),
     verify: (provider: string) => call("models:verify", { provider }),
+    select: (modelId: string, selected: boolean) => call("models:select", { modelId, selected }),
+    budget: () => call("models:budget"),
+    setBudget: (perActionUsdMax: number, monthlyUsdMax: number) => call("models:setBudget", { perActionUsdMax, monthlyUsdMax }),
     finishFirstRun: () => call("models:finishFirstRun"),
   },
 
@@ -220,6 +241,7 @@ contextBridge.exposeInMainWorld("xeniur", {
   },
   rhythm: {
     offer: (worldId: string, objectId: string | null) => call("rhythm:offer", { worldId, objectId }),
+    breakpoint: (worldId: string, objectId: string | null) => call("rhythm:breakpoint", { worldId, objectId }),
     resolve: (offerId: string, outcome: string) => call("rhythm:resolve", { id: offerId, outcome }),
     streak: () => call("rhythm:streak"),
   },
@@ -276,6 +298,13 @@ contextBridge.exposeInMainWorld("xeniur", {
     standing: (goalId: string) => call("goals:standing", { id: goalId }),
   },
 
+  workState: {
+    assess: (goalId: string) => call("workState:assess", { id: goalId }),
+    start: (goalId: string, objectId?: string | null, signalId?: string | null) => call("workState:start", { goalId, objectId: objectId ?? null, signalId: signalId ?? null }),
+    session: (sessionId: string) => call("workState:session", { id: sessionId }),
+    answer: (input: import("@xeniur/core").SharpenAnswer) => call("workState:answer", input),
+  },
+
   today: {
     get: () => call("today:get"),
   },
@@ -292,9 +321,10 @@ contextBridge.exposeInMainWorld("xeniur", {
     proof: (objectId: string) => call("process:proof", { id: objectId }),
     publish: (objectId: string, privacy?: "filtered" | "public") =>
       call("process:publish", { id: objectId, privacy }),
-    exportPage: (input: { objectId: string; eventIds: string[]; discloseHashes: boolean; discloseTiming: boolean }) =>
+    exportPage: (input: { objectId: string; eventIds: string[]; discloseHashes: boolean; discloseTiming: boolean;
+      humanPass: { changed: string; standBehind: string; checkNext: string } }) =>
       call("process:exportPage", { id: input.objectId, eventIds: input.eventIds,
-        discloseHashes: input.discloseHashes, discloseTiming: input.discloseTiming }),
+        discloseHashes: input.discloseHashes, discloseTiming: input.discloseTiming, humanPass: input.humanPass }),
   },
 
   metrics: {

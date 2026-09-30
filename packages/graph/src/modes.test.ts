@@ -82,8 +82,21 @@ const CFG: RhythmConfig = { enabled: true, cadenceMinutes: 90, skipLengthens: 1.
   streak: { forgivenessDays: 1 } };
 
 describe("rhythm: cadence predictable, content the surprise", () => {
-  it("ships off", () => {
-    expect(loadRhythmConfig(process.cwd()).enabled).toBe(false);
+  it("ships with a fixed cadence and never interrupts a mode-less session", () => {
+    expect(loadRhythmConfig(process.cwd()).enabled).toBe(true);
+    expect(new RhythmStore(g.db, g, g.modes, CFG).due().due).toBe(false);
+  });
+
+  it("offers a project question only at a breakpoint after the cadence", () => {
+    const rhythm = new RhythmStore(g.db, g, g.modes, CFG);
+    const started = g.getWorld(worldId)!.createdAt;
+    const question = g.createObject({ worldId, semanticType: "atom", title: "Which fabric lasts longer?" }).object.id;
+    g.db.prepare(`INSERT INTO atoms (object_id, atom_type, lane, stated_at) VALUES (?, 'question', 'question', ?)`).run(question, started);
+    expect(rhythm.offerAtBreakpoint({ worldId, objectId: question }, started + 89 * 60_000)).toBeNull();
+    const offer = rhythm.offerAtBreakpoint({ worldId, objectId: question }, started + 91 * 60_000);
+    expect(offer?.reward.objectId).toBe(question);
+    expect(offer?.reward.kind).toBe("open_question");
+    expect(rhythm.offerAtBreakpoint({ worldId, objectId: question }, started + 100 * 60_000)).toBeNull();
   });
 
   it("lengthens the cadence on every skip and caps it", () => {

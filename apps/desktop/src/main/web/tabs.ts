@@ -191,7 +191,17 @@ export class TabManager {
       this.onChanged(tab.id);
     });
     // The person touching the keyboard or the pointer takes the tab back from the assistant.
-    contents.on("before-input-event", () => { this.takeOver(tab.id); });
+    contents.on("before-input-event", (event,input) => {
+      this.takeOver(tab.id);
+      if(input.type!=="keyDown")return;
+      let command:string|null=null;const key=input.key.toLowerCase();
+      if((input.control||input.meta)&&!input.alt){
+        command=({l:"address",t:"new_tab",w:"close_tab",r:"reload",f:"find"} as Record<string,string>)[key]??null;
+        if(key==="tab")command=input.shift?"previous_tab":"next_tab";
+      }
+      if(key==="escape"&&this.window.isFullScreen())command="exit_fullscreen";
+      if(command){event.preventDefault();this.window.webContents.focus();this.window.webContents.send("xeniur:browser-shortcut",command);}
+    });
 
     this.live.set(tab.id, { tab, view, profile, risk, error: null, browserState: "person", acting: false, grantOrigins: [] });
     this.window.contentView.addChildView(view);
@@ -222,6 +232,8 @@ export class TabManager {
   stopFind(tabId: string): void { this.#live(tabId).view.webContents.stopFindInPage("clearSelection"); }
 
   /** One tab is visible at a time; the rest sit at zero size, still loaded. */
+  setFullscreen(enabled:boolean):boolean { this.window.setFullScreen(enabled);return enabled; }
+
   activate(tabId: string): void {
     this.activeTabId = tabId;
     for (const [id, l] of this.live) if (id !== tabId) l.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
@@ -229,7 +241,7 @@ export class TabManager {
   }
 
   setBounds(tabId: string, rect: Rect): void {
-    if (this.activeTabId !== tabId) return;
+    if (this.activeTabId !== tabId || !this.live.has(tabId)) return;
     this.#live(tabId).view.setBounds({ x: Math.round(rect.x), y: Math.round(rect.y), width: Math.max(0, Math.round(rect.width)), height: Math.max(0, Math.round(rect.height)) });
   }
 

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { untrusted, type ObjectState, type Representation } from "@xeniur/core";
 import { Brain, InvalidPlanError, MockLlmClient, ScriptedLlmClient, OpenAiClient,
          renderContext, SYSTEM_PROMPT, type BrainContext } from "./index.js";
@@ -142,5 +142,28 @@ describe("the OpenAI client is inert until deliberately enabled", () => {
     const client = new OpenAiClient({ apiKey: "sk-test", model: "gpt-5.6-luna", modelVerified: false });
     await expect(client.complete({ system: "s", user: "u", maxOutputTokens: 10 }))
       .rejects.toThrow("is unverified");
+  });
+
+  it("reads every output text part after a reasoning item", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({
+      output: [
+        { type: "reasoning", summary: [] },
+        { type: "message", content: [
+          { type: "output_text", text: '{"intent":' },
+          { type: "output_text", text: '"make"}' },
+        ] },
+      ],
+      usage: { input_tokens: 12, output_tokens: 8 },
+    }), { status: 200 }));
+    try {
+      const client = new OpenAiClient({ apiKey: "sk-test", model: "gpt-5.6-sol", modelVerified: true });
+      const result = await client.complete({ system: "s", user: "u", maxOutputTokens: 100 });
+      expect(result.text).toBe('{"intent":"make"}');
+      expect(result.inputTokens).toBe(12);
+      expect(result.outputTokens).toBe(8);
+      expect(fetchMock).toHaveBeenCalledOnce();
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 });

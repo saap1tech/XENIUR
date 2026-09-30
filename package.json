@@ -2,7 +2,7 @@
   "name": "xeniur",
   "private": true,
   "version": "0.1.0",
-  "description": "XENIUR \u2014 a universal visual computing environment. Intent \u2192 Object \u2192 Manipulate \u2192 Transform \u2192 Act \u2192 Outcome.",
+  "description": "XENIUR — a universal visual computing environment. Intent → Object → Manipulate → Transform → Act → Outcome.",
   "type": "module",
   "main": "apps/desktop/out/main/index.js",
   "engines": {
@@ -24,6 +24,7 @@
     "rebuild:node": "node scripts/ensure-abi.mjs node",
     "seed:demo": "node scripts/ensure-abi.mjs node && tsx scripts/seed-demo.ts",
     "preview:world": "node scripts/ensure-abi.mjs node && tsx scripts/preview-world.tsx",
+    "preview:web": "vite --config scripts/preview-web.config.ts",
     "demo:asset": "node scripts/ensure-abi.mjs node && tsx scripts/demo-asset.ts",
     "demo:revision": "node scripts/ensure-abi.mjs node && tsx scripts/demo-revision.ts",
     "demo:research": "node scripts/ensure-abi.mjs node && tsx scripts/demo-research.ts",
@@ -54,13 +55,16 @@
     "vitest": "^2.1.8"
   },
   "dependencies": {
+    "@napi-rs/canvas": "0.1.100",
     "@react-three/fiber": "^8.17.10",
     "better-sqlite3": "^11.6.0",
     "clsx": "^2.1.1",
+    "fflate": "^0.8.3",
     "framer-motion": "^13.2.0",
     "ipaddr.js": "^2.5.0",
     "lucide-react": "^1.44.0",
     "parse5": "^8.0.1",
+    "pdfjs-dist": "^4.10.38",
     "playwright": "^1.49.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

@@ -651,9 +651,8 @@ describe("no request was made by any of this", () => {
     const { readFileSync } = await import("node:fs");
     const config = JSON.parse(readFileSync(join(process.cwd(), "config/providers.json"), "utf8"));
     expect(config.brain.default).toBe("mock");
-    expect(config.brain.providers.openai.enabled).toBe(false);
-    // And the price is still marked unverified, which is its own refusal.
-    expect(config.brain.providers.openai.price.unverified).toBe(true);
+    expect(Object.keys(config.brain.providers)).toEqual(["mock"]);
+    expect(Object.keys(config.providers)).not.toEqual(expect.arrayContaining(["openai.image", "meshy", "runway"]));
   });
 });
 

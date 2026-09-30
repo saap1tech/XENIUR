@@ -105,6 +105,26 @@ export class RhythmStore {
     return offer;
   }
 
+  /** The ordinary project rhythm: called only after a meaningful action has stopped. */
+  offerAtBreakpoint(focus: { worldId: string; objectId: string | null }, at = now()): { id: string; reward: Reward } | null {
+    if (!this.config.enabled) return null;
+    const world = this.graph.getWorld(focus.worldId);
+    if (!world || at < nextOfferAt(this.lastOfferedAt() ?? world.createdAt, this.consecutiveSkips(), this.config)) return null;
+    const dayStart = new Date(at); dayStart.setHours(0, 0, 0, 0);
+    const today = (this.db.prepare(`SELECT COUNT(*) c FROM rhythm_offers WHERE offered_at >= ?`)
+      .get(dayStart.getTime()) as { c: number }).c;
+    if (today >= 2) return null;
+    const reward = this.selectReward(focus);
+    if (!reward) return null;
+    const id = newId();
+    this.db.prepare(
+      `INSERT INTO rhythm_offers (id, mode_id, kind, object_id, pair_key, offered_at, outcome)
+       VALUES (?, NULL, ?, ?, ?, ?, NULL)`,
+    ).run(id, reward.kind, reward.objectId,
+      reward.kind === "inspiration" && focus.objectId ? pairKey(focus.objectId, reward.objectId) : null, at);
+    return { id, reward };
+  }
+
   resolve(offerId: string, outcome: "taken" | "skipped"): void {
     this.db.prepare(`UPDATE rhythm_offers SET outcome = ? WHERE id = ? AND outcome IS NULL`).run(outcome, offerId);
   }
@@ -118,7 +138,9 @@ export class RhythmStore {
   selectReward(focus: { worldId: string; objectId: string | null }): Reward | null {
     const q = this.db.prepare(
       `SELECT a.object_id id FROM atoms a JOIN objects o ON o.id = a.object_id
-       WHERE o.world_id = ? AND a.lane = 'question' ORDER BY a.stated_at DESC LIMIT 1`,
+       WHERE o.world_id = ? AND a.lane = 'question'
+         AND NOT EXISTS (SELECT 1 FROM rhythm_offers r WHERE r.kind = 'open_question' AND r.object_id = a.object_id)
+       ORDER BY a.stated_at DESC LIMIT 1`,
     ).get(focus.worldId) as { id: string } | undefined;
     if (q) {
       const title = this.graph.currentState(q.id)?.properties.title ?? "an open question";
@@ -128,7 +150,9 @@ export class RhythmStore {
 
     const r = this.db.prepare(
       `SELECT d.object_id id, d.question FROM decisions d JOIN objects o ON o.id = d.object_id
-       WHERE o.world_id = ? AND d.state = 'needs_review' ORDER BY d.accepted_at LIMIT 1`,
+       WHERE o.world_id = ? AND d.state = 'needs_review'
+         AND NOT EXISTS (SELECT 1 FROM rhythm_offers r WHERE r.kind = 'review_due' AND r.object_id = d.object_id)
+       ORDER BY d.accepted_at LIMIT 1`,
     ).get(focus.worldId) as { id: string; question: string } | undefined;
     if (r) {
       return { kind: "review_due", objectId: r.id, label: r.question,
@@ -136,20 +160,17 @@ export class RhythmStore {
     }
 
     const a = this.db.prepare(
-      `SELECT s.id, s.author, s.title FROM sources s
+      `SELECT s.id, s.author, s.title, e.decision_id decisionId FROM sources s
        JOIN source_versions v ON v.source_id = s.id
        JOIN decision_evidence e ON e.source_version_id = v.id
-       WHERE s.world_id = ? AND s.author IS NOT NULL ORDER BY v.retrieved_at DESC LIMIT 1`,
-    ).get(focus.worldId) as { id: string; author: string; title: string } | undefined;
+       WHERE s.world_id = ? AND s.author IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM rhythm_offers r WHERE r.kind = 'cited_author' AND r.object_id = e.decision_id)
+       ORDER BY v.retrieved_at DESC LIMIT 1`,
+    ).get(focus.worldId) as { id: string; author: string; title: string; decisionId: string } | undefined;
     if (a) {
-      // A source is not an Object; the reward points at the World's newest Object citing it
-      // would be a guess, so it points at nothing and names the author.
-      const anyObject = this.graph.listObjects(focus.worldId)[0];
-      if (anyObject) {
-        return { kind: "cited_author", objectId: anyObject.id, label: `${a.author} — ${a.title}`,
-          whyItMayConnect: `You cited ${a.author} when deciding here; more of their work may bear on it.`,
-          terminates: false };
-      }
+      return { kind: "cited_author", objectId: a.decisionId, label: `${a.author} — ${a.title}`,
+        whyItMayConnect: `You cited ${a.author} in this decision; their source may be worth another look.`,
+        terminates: false };
     }
 
     return focus.objectId ? this.inspire(focus.objectId) : null;

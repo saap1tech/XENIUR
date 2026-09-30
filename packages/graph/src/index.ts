@@ -23,6 +23,7 @@ export { OutreachStore, DisabledTransport, MockTransport } from "./outreach.js";
 export { ChallengeStore, rulesDigest } from "./challenges.js";
 export { TrailStore } from "./trail.js";
 export { GoalStore } from "./goals.js";
+export { assessWorkState, WorkStateStore } from "./work-state.js";
 export { EnvelopeStore } from "./envelopes.js";
 export type { DisclosureLevel } from "./envelopes.js";
 export { standingFor, resumeCard, lastActiveWorld, finishGoal, NotFinishable } from "./standing.js";

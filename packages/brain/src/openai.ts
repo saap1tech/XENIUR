@@ -7,14 +7,7 @@ export interface OpenAiOptions {
   baseUrl?: string;
 }
 
-/**
- * Written against the Responses API shape, and deliberately inert.
- *
- * It refuses to send anything until a key is present *and* the model id in
- * config/providers.json has been marked verified — because the spec's model name and its
- * quoted price could not be confirmed, and an accidental first call is the expensive kind
- * of mistake. Flip `modelVerified` only after checking the live pricing page.
- */
+/** Calls the Responses API after the account key and model are verified. */
 export class OpenAiClient implements LlmClient {
   readonly id = "openai";
   constructor(private readonly opts: OpenAiOptions) {}
@@ -54,12 +47,19 @@ export class OpenAiClient implements LlmClient {
 
     const body = await res.json() as {
       output_text?: string;
-      output?: Array<{ content?: Array<{ text?: string }> }>;
+      output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
       usage?: { input_tokens?: number; output_tokens?: number };
     };
-    const text = body.output_text
-      ?? body.output?.[0]?.content?.[0]?.text
-      ?? "";
+    // Reasoning items can precede the assistant message, and a response can
+    // contain multiple output text parts. The REST payload has no guaranteed
+    // first-text location.
+    const text = body.output
+      ?.flatMap((item) => item.content ?? [])
+      .filter((part) => part.type === "output_text")
+      .map((part) => part.text ?? "")
+      .join("")
+      || body.output_text
+      || "";
     return {
       text,
       inputTokens: body.usage?.input_tokens ?? 0,
