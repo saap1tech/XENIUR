@@ -43,7 +43,7 @@ jobs:
           npm run verify:browser
           npm run verify:export
       - run: npm run package:dir
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: desktop-${{ matrix.os }}
           path: release/
