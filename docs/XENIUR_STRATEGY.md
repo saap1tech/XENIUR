@@ -8,7 +8,7 @@ The durable product promise is: **“Your asset keeps its history. Every deliver
 
 The existing universal computing vision can remain the long-term destination. The first customer needs a specific reason to use XENIUR this week. That reason should be recovering, revising, and delivering real work.
 
-Read the [repository audit](/Users/developer/development/Xeniun/docs/PROJECT_AUDIT.md) for verified implementation findings and the [revised V1 plan](/Users/developer/development/Xeniun/docs/XENIUR_V1_PLAN.md) for the corresponding architecture and release gates.
+This September proposal remains a historical strategy reference. The current alpha supports broader project paths; see the October [competitive review](COMPETITIVE_REVIEW.md), [architecture](ARCHITECTURE.md), and [release verification](VERIFICATION.md) for its present scope and evidence.
 
 **1. What is valuable in the original idea**
 

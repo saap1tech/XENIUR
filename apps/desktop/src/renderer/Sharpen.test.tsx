@@ -44,6 +44,6 @@ describe("the thinking path", () => {
     expect(html).toContain("1 recorded condition to consider");
     expect(html).toContain('aria-expanded="false"');
     expect(html).not.toContain("A citation has no human review.");
-    expect(html).toContain("Sharpen this");
+    expect(html).toContain("Quick check");
   });
 });

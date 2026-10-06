@@ -38,10 +38,10 @@ export function Sharpen({ goalId, objectId, revision, onOpen, onSaved, initialSt
   }, [bridge, goalId]);
   useEffect(() => { if (bridge) void refresh(); return () => { generation.current++; }; }, [refresh, revision, bridge]);
   useEffect(() => { setSession(null); setExpanded(false); setError(null); }, [goalId]);
-  const start = async (signal?: WorkSignal, targetId = objectId) => {
+  const start = async (signal?: WorkSignal, targetId = objectId,depth:"focused"|"full"="focused") => {
     if (!bridge) return;
     setBusy(true); setError(null);
-    try { setSession(await bridge.start(goalId, signal?.objectId ?? targetId, signal?.id)); setExpanded(false); }
+    try { setSession(await bridge.start(goalId, signal?.objectId ?? targetId, signal?.id,depth)); setExpanded(false); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not begin this check."); }
     finally { setBusy(false); }
   };
@@ -50,9 +50,9 @@ export function Sharpen({ goalId, objectId, revision, onOpen, onSaved, initialSt
   return <section className="xr-strength" aria-label="Strengthen this work">
     <div className="xr-strength__bar"><Compass size={19} aria-hidden="true" /><button type="button" className="xr-strength__toggle" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
       <strong>Strengthen the work</strong><span>{state ? state.signals.length ? `${state.signals.length} recorded ${state.signals.length === 1 ? "condition" : "conditions"} to consider` : "Check your reasons at a stopping point" : "Reading the work…"}</span><ChevronDown size={15} aria-hidden="true" /></button>
-      <button type="button" className="xr-strength__start" disabled={busy || (!objectId && !state?.signals.length)} onClick={() => void start()}>Sharpen this <ArrowRight size={15} /></button>
+      <button type="button" className="xr-strength__start" disabled={busy || (!objectId && !state?.signals.length)} onClick={() => void start()}>Quick check <ArrowRight size={15} /></button>
     </div>
-    {expanded && <div className="xr-strength__body"><div className="xr-strength__intro"><ProjectIllustration kind="sharpen" /><div><h3>A stronger basis.<br />A clearer next move.</h3><p>Use a short thinking move to improve this project. Each answer becomes a linked note, review request, or test.</p></div></div>
+    {expanded && <div className="xr-strength__body"><button type="button" className="xr-text-action" disabled={busy} onClick={()=>void start(undefined,objectId,"full")}>Full thinking path</button><div className="xr-strength__intro"><ProjectIllustration kind="sharpen" /><div><h3>A stronger basis.<br />A clearer next move.</h3><p>Use a short thinking move to improve this project. Each answer becomes a linked note, review request, or test.</p></div></div>
       {pending && <button type="button" className="xr-strength__resume" onClick={() => { setSession(pending); setError(null); setExpanded(false); }}><BookOpen size={17} /> Resume your check of “{pending.title}” <ArrowRight size={15} /></button>}
       <div className="xr-strength__signals">{state?.signals.map((signal) => { const { icon: Icon, label } = signalMeta[signal.kind]; return <article key={signal.id}>
         <Icon size={20} aria-hidden="true" /><div><small>{label}</small><button type="button" className="xr-strength__subject" onClick={() => onOpen(signal.objectId)}>{signal.title}</button><p>{signal.fact}</p>

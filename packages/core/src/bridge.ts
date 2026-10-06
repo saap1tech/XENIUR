@@ -127,6 +127,9 @@ export interface IntentResult {
  */
 export interface XeniurBridge {
   journey: {
+    cancel(worldId:string):Promise<boolean>;
+    insights(worldId:string):Promise<{runs:import("./evidence.js").JourneyRun[];outcomes:Record<string,number>}>;
+    passage(worldId:string,versionId:string,passageId:string):Promise<import("./evidence.js").EvidencePassage>;
     get(worldId: string): Promise<import("./journey.js").Journey | null>;
     start(worldId: string, kind: import("./journey.js").JourneyKind): Promise<import("./journey.js").Journey>;
     quote(command: import("./journey.js").JourneyCommand): Promise<import("./journey.js").JourneyQuote>;
@@ -185,6 +188,8 @@ export interface XeniurBridge {
     /** A project's tabs, or — with null — the unassigned ones. */
     tabs(worldId?: string | null): Promise<BrowserTab[]>;
     activate(tabId: string): Promise<void>;
+    compare(tabId:string,otherId:string|null):Promise<void>;
+    shelf(worldId:string):Promise<Array<{sourceId:string;title:string;url:string|null;excerpt:string;at:number;private:boolean;inPath:boolean}>>;
     navigate(tabId: string, url: string): Promise<void>;
     back(tabId: string): Promise<void>;
     forward(tabId: string): Promise<void>;
@@ -197,7 +202,7 @@ export interface XeniurBridge {
     snapshot(tabId: string): Promise<TabSnapshot>;
     /** The person takes the tab back. It needs no reason and stops what the assistant was doing. */
     takeOver(tabId: string): Promise<void>;
-    downloads(): Promise<HeldDownload[]>;
+    downloads(worldId?:string|null): Promise<HeldDownload[]>;
     decideDownload(id: string, decision: "kept" | "discarded"): Promise<void>;
     onEvent(handler: (payload: { tabId: string }) => void): () => void;
   };
@@ -231,6 +236,8 @@ export interface XeniurBridge {
 
   /* Living Objects */
   living: {
+    pickSource(objectId:string):Promise<ObjectState|null>;
+    saveForm(objectId:string,role:string):Promise<{path:string}|null>;
     detail(objectId: string): Promise<ObjectDetail | null>;
     validate(objectId: string): Promise<Check[]>;
     rebuild(objectId: string, includeGeneration: boolean): Promise<ObjectDetail | null>;
@@ -302,7 +309,7 @@ export interface XeniurBridge {
   /* What should I do with my time? — at most seven situations, never a feed */
   workState: {
     assess(goalId: string): Promise<WorkState | null>;
-    start(goalId: string, objectId?: string | null, signalId?: string | null): Promise<SharpenSession>;
+    start(goalId: string, objectId?: string | null, signalId?: string | null,depth?:"focused"|"full"): Promise<SharpenSession>;
     session(sessionId: string): Promise<SharpenSession | null>;
     answer(input: SharpenAnswer): Promise<SharpenSession>;
   };
@@ -500,6 +507,7 @@ export interface XeniurBridge {
       sourceIdentity?: { tabId: string; profileLabel: string };
       permittedUse?: Rights;
       aiProcessing?: "allowed" | "never";
+      journeyVersionId?:string;
     }): Promise<{ sourceId: string; candidates: CandidateRecord[] }>;
     observe(worldId: string, text: string, about?: string): Promise<Atom>;
     sort(objectId: string, lane: Lane): Promise<Atom | null>;

@@ -26,7 +26,7 @@ function sources(dir: string, out: string[] = []): string[] {
 const tsx = [...sources(join(root, "apps/desktop/src/renderer")), ...sources(join(root, "packages/ui/src"))].join("\n");
 
 /** Top-level rules only; @media blocks are legitimate redefinitions and are skipped. */
-const topLevel = css.replace(/@media[^{]*\{[\s\S]*?\}\s*\}/g, "");
+const topLevel = css.replace(/@keyframes\s+[\w-]+\s*\{[\s\S]*?\}\s*\}/g, "").replace(/@media[^{]*\{[\s\S]*?\}\s*\}/g, "");
 const selectors = topLevel.split("}").map((b) => b.split("{")[0]?.trim() ?? "").filter((s) => s && !s.startsWith("@"))
   .flatMap((group) => group.split(",").map((s) => s.trim().replace(/\s+/g, " ")));
 
@@ -82,15 +82,16 @@ describe("the stylesheet is one generation", () => {
     expect(physical, [...new Set(physical)].join(", ")).toEqual([]);
   });
 
-  it("moves only in paint and small lifts: every transition, opacity-only keyframes, plus one 240 ms settle", () => {
+  it("moves only in paint and small lifts: every transition, opacity-only work animations, a logo path reveal, and one 240 ms settle", () => {
     // Hover and press may ease colour, depth and a small translate; nothing animates layout.
     const allowed = /^(opacity|color|background-color|border-color|box-shadow|transform)\b/;
     const transitions = [...css.matchAll(/transition:\s*([^;}]+)/g)].map((m) => m[1]!.trim());
     for (const value of transitions) for (const part of value.split(",")) expect(part.trim(), value).toMatch(allowed);
-    const keyframes = [...css.matchAll(/@keyframes\s+[\w-]+\s*\{([\s\S]*?)\}\s*\}/g)].map((m) => m[1]!);
-    for (const body of keyframes) {
+    const keyframes = [...css.matchAll(/@keyframes\s+([\w-]+)\s*\{([\s\S]*?)\}\s*\}/g)];
+    for (const frame of keyframes) {
+      const body=frame[2]!;
       const props = [...body.matchAll(/([a-z-]+)\s*:/g)].map((m) => m[1]!);
-      expect(props.every((p) => p === "opacity"), body).toBe(true);
+      expect(props.every((p) => p === (frame[1] === "xr-splash-draw" ? "stroke-dashoffset" : "opacity")), body).toBe(true);
     }
     expect(css).toMatch(/@keyframes xr-settle/);
     expect(css).toMatch(/\.xr-trust\.is-settled\s*\{\s*animation:\s*xr-settle 240ms/);

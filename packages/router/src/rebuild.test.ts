@@ -1,3 +1,4 @@
+import {findExecutable} from "../../../apps/desktop/src/main/binaries.js";
 import { sampleProvidersConfig } from "../../providers/src/test-config.js";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -20,8 +21,8 @@ beforeEach(async () => {
   const env: ProviderEnv = {
     scratchDir: join(dir, "scratch"), rootDir: ROOT,
     binaries: {
-      ffmpeg: "/opt/homebrew/bin/ffmpeg",
-      blender: "/Applications/Blender.app/Contents/MacOS/Blender",
+      ffmpeg: findExecutable("ffmpeg",process.env["XENIUR_FFMPEG"]),
+      blender: findExecutable("blender",process.env["XENIUR_BLENDER"]),
     },
   };
   router = new CapabilityRouter({

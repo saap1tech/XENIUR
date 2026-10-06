@@ -1,6 +1,6 @@
 import { ObjectGraph, type SpendLedger } from "@xeniur/graph";
 import { SensemakingStore } from "@xeniur/sensemaking";
-import { DraftSchema, ReportSchema, OutlineSchema, JOURNEY_FONTS, JOURNEY_LAYOUTS, findKeyShaped, newId,
+import { JourneyBriefSchema, DraftSchema, ReportSchema, OutlineSchema, JOURNEY_FONTS, JOURNEY_LAYOUTS, findKeyShaped, newId,
   builtInPath, type PathResult, type StepOutput,
   type Journey, type JourneyCommand, type JourneyKind, type JourneyResource, type JourneyQuote, type PlanStepInput } from "@xeniur/core";
 import { OpenRouterClient, routerRequest, generateRouterImage } from "@xeniur/brain";
@@ -10,6 +10,8 @@ import { PATH_PLANNER_PROMPT, pathInput, parsePath, validateStep } from "./path-
 import { renderBrandVisual } from "./brand-visual.js";
 import { renderPathVisual } from "./path-visuals.js";
 import type { ReadResource } from "./resources.js";
+import {EvidenceIndex} from "./evidence.js";
+import type {EvidencePassage,JourneyRun} from "@xeniur/core";
 import { EDITOR_SYSTEM, ILLUSTRATION_STYLE, REPORT_SHAPE, OUTLINE_SHAPE, DRAFT_SHAPE, KIND_PURPOSE } from "./prompts.js";
 
 const PATH_STEPS = [
@@ -22,7 +24,7 @@ const PATH_STEPS = [
   {stage:"make",kind:"make",purpose:"Create the draft",rule:{kind:"form_exists",role:"doc.primary"}},
   {stage:"review",kind:"check",purpose:"Review the document",rule:{kind:"decision_accepted"}},
 ] as const;
-const PAID = new Set(["search","summarize","feedback","outline","edit_outline","draft","illustrate","figure","design_path","run_step"]);
+const PAID = new Set(["search","summarize","feedback","outline","edit_outline","draft","illustrate","figure","design_path","run_step","scene_image"]);
 const OUT_TOKENS:Record<string,number> = { search:1800,summarize:2300,feedback:2300,outline:3000,edit_outline:3000,draft:11000,design_path:4000,run_step:12000 };
 export interface JourneyDependencies {
   graph:ObjectGraph; sense:SensemakingStore; spend:SpendLedger;
@@ -32,7 +34,34 @@ export interface JourneyDependencies {
 }
 export class JourneyStore {
   private active = new Set<string>();
-  constructor(private readonly deps:JourneyDependencies) {}
+  private controllers=new Map<string,AbortController>();
+  private evidenceIndex:EvidenceIndex;
+  constructor(private readonly deps:JourneyDependencies) {
+    this.evidenceIndex=new EvidenceIndex(deps.graph);
+    deps.graph.db.exec(`CREATE TABLE IF NOT EXISTS journey_runs (id TEXT PRIMARY KEY,world_id TEXT NOT NULL,hold_id TEXT,record TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS journey_outcomes (id TEXT PRIMARY KEY,world_id TEXT NOT NULL,kind TEXT NOT NULL,at INTEGER NOT NULL);`);
+    for(const row of deps.graph.db.prepare("SELECT * FROM journey_runs").all() as Array<{id:string;hold_id:string;record:string}>){
+      const run=JSON.parse(row.record) as JourneyRun;if(run.state!=="running")continue;
+      run.state="interrupted";run.finishedAt=Date.now();
+      const hold=deps.graph.db.prepare("SELECT status FROM spend WHERE id=?").get(row.hold_id) as {status:string}|undefined;
+      if(hold?.status==="held")deps.spend.settle(row.hold_id,{usd:run.maximumUsd,outcome:"error"});
+      this.saveRun(run);
+    }
+  }
+  cancel(worldId:string):boolean {const c=this.controllers.get(worldId);if(!c)return false;c.abort(new Error("Stopped. Any provider charge may still apply; your previous work is saved."));return true;}
+  private saveRun(run:JourneyRun){this.deps.graph.db.prepare("UPDATE journey_runs SET record=? WHERE id=?").run(JSON.stringify(run),run.id);}
+  recordOutcome(worldId:string,kind:string){this.deps.graph.db.prepare("INSERT INTO journey_outcomes VALUES (?,?,?,?)").run(newId(),worldId,kind,Date.now());}
+  insights(worldId:string){
+    if(!this.deps.graph.getWorld(worldId))throw new Error("Choose a project.");
+    const rows=this.deps.graph.db.prepare("SELECT record FROM journey_runs WHERE world_id=? ORDER BY rowid DESC LIMIT 12").all(worldId) as Array<{record:string}>;
+    const outcomes=this.deps.graph.db.prepare("SELECT kind,COUNT(*) AS count FROM journey_outcomes WHERE world_id=? GROUP BY kind").all(worldId) as Array<{kind:string;count:number}>;
+    return {runs:rows.map(r=>JSON.parse(r.record) as JourneyRun),outcomes:Object.fromEntries(outcomes.map(r=>[r.kind,r.count]))};
+  }
+  passage(worldId:string,versionId:string,id:string){
+    const j=this.read(worldId,versionId);this.selection(j);
+    const p=this.evidenceIndex.get(id);if(!p||!j.resources.some(r=>r.sourceId===p.sourceId&&r.sourceVersionId===p.sourceVersionId))throw new Error("This passage is outside your current resources.");
+    this.recordOutcome(worldId,"evidence_opened");return p;
+  }
   get(worldId:string):Journey|null {
     const state=this.deps.graph.listStates(worldId).find(s=>s.properties.tags.includes("xeniur.journey"));
     const data=state?.properties.settings["journey"] as Journey|undefined;
@@ -92,22 +121,30 @@ export class JourneyStore {
     const modes=this.deps.graph.modes.active().filter(m=>m.worldId===j.worldId);
     if(modes.some(m=>m.envelope.remoteModels===false))throw new Error("This session is set to local work.");
   }
-  private material(j:Journey) {
-    return j.resources.map(r=>{
-      const v=this.deps.sense.getSourceVersion(r.sourceVersionId)!;
-      const all=this.deps.graph.readBlob(v.textBlobHash).toString("utf8");
-      // Equal explicit shares prevent a long first paper hiding all later ones.
-      const limit=Math.min(18000,Math.floor(65000/Math.max(1,j.resources.length)));
-      return {id:r.sourceId,title:r.title,url:r.url,partial:r.partial||all.length>limit,text:all.slice(0,limit),pages:r.pages};
-    });
+  private selection(j:Journey,edit?:string){
+    for(const r of j.resources){const v=this.deps.sense.getSourceVersion(r.sourceVersionId)!;this.evidenceIndex.ensure(r,this.deps.graph.readBlob(v.textBlobHash).toString("utf8"));}
+    const query=[j.brief?.topic,this.deps.graph.goals.get(j.goalId)?.outcome,j.brief?.notes,edit,...(j.outline?.sections.map(s=>`${s.title} ${s.purpose}`)??[]),j.flow?.definition?.steps[j.flow.index]?.instruction].filter(Boolean).join(" ");
+    const m=this.deps.models().find(m=>m.provider==="openrouter"&&m.output!=="image");
+    const budget=Math.min(96000,Math.max(2000,Math.floor(((m?.contextWindow??100000)-20000)/4)));
+    return this.evidenceIndex.select(j.resources,query,budget);
+  }
+  private material(j:Journey,edit?:string) {
+    const selected=this.selection(j,edit);
+    return j.resources.map(r=>({id:r.sourceId,title:r.title,url:r.url,partial:r.partial,pages:r.pages,
+      coverage:selected.coverage.resources.find(c=>c.sourceId===r.sourceId),
+      passages:selected.passages.filter(p=>p.sourceId===r.sourceId).map(p=>({passageId:p.id,sourceId:p.sourceId,sourceVersionId:p.sourceVersionId,page:p.page,text:p.text}))}));
+  }
+  private validateEvidence(items:Array<{sourceIds:string[];citations?:import("@xeniur/core").PassageCitation[]}>,offered:EvidencePassage[]){
+    for(const item of items)this.evidenceIndex.validate(item.citations??[],offered,item.sourceIds);
   }
   private input(j:Journey,c:JourneyCommand):string {
     const goal=this.deps.graph.goals.get(j.goalId);
-    const material=this.material(j);
-    if(c.action==="design_path")return JSON.stringify({goal:goal?.outcome,request:c.text,materials:material,previousProposal:j.flow?.definition});
+    const material=this.material(j,c.text);
+    if(c.action==="design_path")return JSON.stringify({goal:goal?.outcome,request:c.text,brief:j.brief??null,materials:material,previousProposal:j.flow?.definition});
+    if(c.action==="scene_image") {const r=j.flow!.results.find(r=>r.stepId===j.flow!.definition!.steps[j.flow!.index]!.id)!;const scene=r.output.storyboard!.scenes.find(s=>s.id===c.id)!;return JSON.stringify({brief:j.brief,scene,style:ILLUSTRATION_STYLE});}
     if(c.action==="run_step")return pathInput(j,goal?.outcome??"",material,c.text);
-    if(c.action==="search")return `Search the web once for recent primary resources for this goal: ${goal?.outcome}. Prefer papers, official data and open full texts. Mention each resource separately with a title and citation. Never suggest a download without a returned web citation. No invented links.`;
-    const base=JSON.stringify({goal:goal?.outcome,result:KIND_PURPOSE[j.kind],materials:material,
+    if(c.action==="search")return `Search the web once for recent primary resources for this goal: ${j.brief?.topic??goal?.outcome}. Prefer papers, official data and open full texts. Mention each resource separately with a title and citation. Never suggest a download without a returned web citation. No invented links.`;
+    const base=JSON.stringify({goal:goal?.outcome,result:KIND_PURPOSE[j.kind],brief:j.brief??null,materials:material,
       userEdit:c.text||null,scope:"Only the supplied captured text; do not imply a comprehensive literature search."});
     if(c.action==="summarize"||c.action==="feedback")return `${base}\n${c.action==="feedback"?`Revise this report after the person's edit: ${JSON.stringify(j.report)}. Keep it one short page.`:"Produce a short one-page report, at most 5 findings and 3 gaps. Use strong contrast palettes with a light paper color, connected to this topic."}\nRequired JSON: ${REPORT_SHAPE}`;
     if(c.action==="outline"||c.action==="edit_outline")return `${base}\nApproved report: ${JSON.stringify(j.report)}\n${c.action==="edit_outline"?`Revise this outline: ${JSON.stringify(j.outline)}`:"Create the document's sections, subsections and subsubsections. Keep scope proportional to the available evidence."}\nRequired JSON: ${OUTLINE_SHAPE}`;
@@ -123,11 +160,12 @@ export class JourneyStore {
     const searching=command.action==="search";
     const inputBound=Buffer.byteLength(input+(command.action==="design_path"?PATH_PLANNER_PROMPT:EDITOR_SYSTEM))*(searching?2:1)+(searching?120000:4000);
     const outputBound=(OUT_TOKENS[command.action]??2000)*(searching?2:1);
+    if(!image&&!searching&&inputBound+outputBound>m.contextWindow)throw new Error("This scope exceeds the selected model’s context. Choose a larger-context model or narrow this work path.");
     const cost=image?m.imagePriceUsd!:(inputBound/1_000_000*m.price.inputPerMTok+outputBound/1_000_000*m.price.outputPerMTok+(searching?.007:0));
-    return {action:command.action,maximumUsd:Math.ceil(cost*10000)/10000,model:m.label,
-      sends:command.action==="search"?"Your project goal":image?"Illustration brief and XENIUR style":`${j.resources.length} resource excerpts and your instructions`};
+    return {action:command.action,maximumUsd:Math.ceil(cost*10000)/10000,model:m.label,coverage:this.selection(j,command.text).coverage,
+      sends:command.action==="search"?"Your project goal":image?"Illustration brief and XENIUR style":`${j.resources.length} sources: selected page passages and your instructions`};
   }
-  private imageAction(j:Journey,c:JourneyCommand) {return c.action==="illustrate"||c.action==="figure"||(c.action==="run_step"&&j.flow?.definition?.steps[j.flow.index]?.operation==="image");}
+  private imageAction(j:Journey,c:JourneyCommand) {return c.action==="illustrate"||c.action==="figure"||c.action==="scene_image"||(c.action==="run_step"&&j.flow?.definition?.steps[j.flow.index]?.operation==="image");}
   private installPath(j:Journey) {
     const plan=this.deps.graph.plans.current(j.goalId);
     const steps:PlanStepInput[]=j.flow!.definition!.steps.map((s,i)=>({id:`path.${s.id}`,kind:s.operation==="compare"?"compare":s.operation==="check"?"check":s.operation==="brief"?"understand":"make",purpose:s.title,expectedResult:s.check,completionRule:{kind:"decision_accepted"},disposition:"adopted",dependsOn:i?[`path.${j.flow!.definition!.steps[i-1]!.id}`]:[]}));
@@ -146,6 +184,7 @@ export class JourneyStore {
     for(const p of previous){const r=f.results.find(r=>r.stepId===p.id);if(!r?.accepted||!r.decisionId||this.deps.graph.decisions.get(r.decisionId)?.state!=="accepted"||this.deps.graph.currentState(r.objectId)?.versionId!==r.versionId)throw new Error("Earlier work changed. Reopen that step before continuing.");}
     if(c.action==="run_step"&&step.operation==="manual")throw new Error("This step needs your real observations. Record them to continue.");
     if(c.action==="record_step"&&(step.operation!=="manual"||!c.text||c.text.trim().length<8))throw new Error("Describe what you actually did or observed.");
+    if(c.action==="scene_image") {const r=f.results.find(r=>r.stepId===step.id);if(step.operation!=="storyboard"||!r?.output.storyboard?.scenes.some(s=>s.id===c.id)||r.accepted)throw new Error("Choose a scene in the current storyboard.");if(this.deps.graph.currentState(r.objectId)?.versionId!==r.versionId)throw new Error("This storyboard changed. Refresh it first.");}
     if(c.action==="approve_step"||c.action==="edit_step") {
       this.assertMaterial(j);
       const r=f.results.find(r=>r.stepId===step.id);if(!r||r.accepted)throw new Error("Create a result before accepting or editing it.");
@@ -156,7 +195,8 @@ export class JourneyStore {
     }
   }
   private assertAction(j:Journey,c:JourneyCommand) {
-    const pathActions=["design_path","approve_path","begin_path","run_step","approve_step","reopen_step","record_step","edit_step"];
+    if(c.action==="save_brief") {const brief=JourneyBriefSchema.parse(c.brief);if(findKeyShaped(brief).length)throw new Error("Remove credentials from your brief.");return;}
+    const pathActions=["design_path","approve_path","begin_path","run_step","approve_step","reopen_step","record_step","edit_step","scene_image"];
     if(pathActions.includes(c.action)){if(!j.flow)throw new Error("This is a document path.");this.assertPath(j,c);return;}
     if(j.flow&&!["search","resource_accept","resource_reject","remove_resource"].includes(c.action))throw new Error("Use the current step in this path.");
     if(["summarize","feedback","outline","edit_outline","draft","illustrate","figure"].includes(c.action)&&!j.resources.length)throw new Error("Add at least one readable resource first.");
@@ -164,7 +204,7 @@ export class JourneyStore {
     if(c.action==="feedback" && (j.feedbackCount>=3 || !c.text?.trim()))throw new Error(j.feedbackCount>=3?"Three focused edits are saved. You can edit the material or start a new summary.":"Write the change you want.");
     if(["edit_outline","approve_outline"].includes(c.action)&&!j.outline)throw new Error("Create the structure first.");
     if(c.action==="outline"&&!j.decisions.some(d=>d.stage==="summary"))throw new Error("Review the report before shaping the structure.");
-    if(c.action==="choose_palette"&&!j.decisions.some(d=>d.stage==="outline"))throw new Error("Review the structure first.");
+    if(["choose_palette","use_design_defaults"].includes(c.action)&&!j.decisions.some(d=>d.stage==="outline"))throw new Error("Review the structure first.");
     if(c.action==="choose_font"&&!j.choices.palette)throw new Error("Choose your colors first.");
     if(c.action==="choose_layout"&&!j.choices.font)throw new Error("Choose your type first.");
     if(c.action==="draft"&&(!j.outline||!j.choices.layout||!j.decisions.some(d=>d.stage==="outline")))throw new Error("Approve a structure and choose its style first.");
@@ -175,6 +215,7 @@ export class JourneyStore {
       const hash=primary?this.deps.graph.getRepresentation(primary.representationId)?.blobHash:null;
       if(!hash || JSON.stringify(JSON.parse(this.deps.graph.readBlob(hash).toString()))!==JSON.stringify(j.draft))throw new Error("The draft record changed outside this path. Generate an updated draft before continuing.");
     }
+    if(c.action==="review_evidence"&&(!c.id||!c.evidenceState||!c.text?.trim()||c.text.trim().length<8))throw new Error("Record what the evidence supports or leaves uncertain.");
     if(c.action==="review"&&(!c.text?.trim()||c.text.trim().length<8))throw new Error("Record what you reviewed before exporting.");
     if(c.action==="figure"&&!j.draft?.figureIdeas[Number(c.id)])throw new Error("Choose a figure from this draft.");
   }
@@ -205,6 +246,7 @@ export class JourneyStore {
       const work=this.deps.graph.plans.workOf(j.goalId,step.id);if(work)this.deps.graph.plans.setExecution(j.goalId,step.id,"needs_review",{note:"An earlier choice changed."});
     }
     j.draft=null;j.reviewed=false;j.figureIds=[];
+    for(const r of j.evidenceReviews??[])if(!r.target.startsWith("finding:")&&r.objectId)this.deps.sense.sort(r.objectId,"ignore");j.evidenceReviews=(j.evidenceReviews??[]).filter(r=>r.target.startsWith("finding:"));
     if(index<=3)j.choices.font=null;
     if(index<=4)j.choices.layout=null;
   }
@@ -226,6 +268,8 @@ export class JourneyStore {
     if(PATH_STEPS.some(s=>s.stage===stage))this.completeStage(j,stage,[d.objectId]);
   }
   private invalidate(j:Journey) {
+    for(const r of j.evidenceReviews??[])if(r.objectId)this.deps.sense.sort(r.objectId,"ignore");
+    j.coverage=undefined;j.evidenceReviews=[];
     for(const step of this.deps.graph.plans.current(j.goalId)?.steps??[])if(step.id.startsWith("journey.")&&this.deps.graph.plans.workOf(j.goalId,step.id))this.deps.graph.plans.setExecution(j.goalId,step.id,"needs_review",{note:"Project material changed."});
     for(const d of j.decisions)this.deps.graph.decisions.flagForReview(d.objectId);
     if(j.flow){for(const r of j.flow.results)if(r.decisionId)this.deps.graph.decisions.flagForReview(r.decisionId);j.flow.results=[];j.flow.index=0;for(const step of this.deps.graph.plans.current(j.goalId)?.steps??[])if(step.id.startsWith("path.")&&this.deps.graph.plans.workOf(j.goalId,step.id))this.deps.graph.plans.setExecution(j.goalId,step.id,"needs_review",{note:"Material changed."});}
@@ -236,7 +280,7 @@ export class JourneyStore {
     if(this.active.has(worldId))throw new Error("Wait for the current step to finish.");
     const j=this.read(worldId,versionId);
     return this.deps.graph.db.transaction(()=>{
-      if(j.resources.length>=16)throw new Error("This path supports 16 resources. Split a larger review into projects.");
+      if(j.resources.length>=128)throw new Error("This project supports 128 resources. Group larger collections into separate reviews.");
       if(findKeyShaped(reading.text).length)throw new Error("Remove credentials before importing this text.");
       const source=this.deps.sense.recordSource({worldId,kind:reading.pdf?"paper":"article",title:reading.title,text:reading.text,raw:reading.raw,url,partial:reading.partial,extractor:"xeniur.journey/pdfjs-1"});
       const sourceVersion=this.deps.sense.latestVersionOf(source.id)!;
@@ -246,10 +290,28 @@ export class JourneyStore {
       const rep=g.addRepresentation({objectId:obj.object.id,modality:"text",format:reading.pdf?"pdf":"txt",blobHash:blob,provenance:"human",provider:"local.import"});
       const saved=g.commitVersion({objectId:obj.object.id,forms:[{role:"source.primary",representationId:rep.id}],label:"Material added"});
       const resource:JourneyResource={id:newId(),sourceId:source.id,sourceVersionId:sourceVersion.id,objectId:obj.object.id,title:reading.title,url,
-        textLength:reading.text.length,partial:reading.partial,rights:"unknown",blobHash:blob,pages:reading.pages};
+        textLength:reading.text.length,partial:reading.partial,rights:"unknown",blobHash:blob,pages:reading.pages,extraction:reading.extraction};
       j.resources.push(resource);this.invalidate(j);this.save(j,versionId);
       g.process.record({objectId:obj.object.id,versionId:saved.versionId,kind:"source_collected",actor:"human",label:"Added resource",tool:null,model:null,inputHashes:[],outputHashes:[blob],durationMs:0});
       return this.get(worldId)!;
+    })();
+  }
+  /** Adopt the exact saved browser copy; never re-fetch or duplicate its Source. */
+  attachSource(worldId:string,versionId:string,sourceId:string):Journey {
+    if(this.active.has(worldId))throw new Error("Wait for the current step to finish.");
+    const j=this.read(worldId,versionId),source=this.deps.sense.getSource(sourceId),version=this.deps.sense.latestVersionOf(sourceId);
+    if(!source||source.worldId!==worldId||!version)throw new Error("Choose a source in this project.");
+    if(source.metadata["aiProcessing"]==="never"||version.rights==="restricted")throw new Error("Keep this source private; it cannot enter the AI work path.");
+    if(j.resources.some(r=>r.sourceVersionId===version.id))return j;
+    const text=this.deps.graph.readBlob(version.textBlobHash).toString("utf8");
+    if(findKeyShaped(text).length)throw new Error("Remove credentials before adding this source to the work path.");
+    if(j.resources.length>=128)throw new Error("This work path supports 128 resources.");
+    return this.deps.graph.db.transaction(()=>{
+      const g=this.deps.graph,obj=g.createObject({worldId,title:source.title,semanticType:"source",properties:{tags:["journey.resource"],settings:{sourceId,sourceVersionId:version.id}}});
+      const rep=g.addRepresentation({objectId:obj.object.id,modality:"text",format:"txt",blobHash:version.textBlobHash,provenance:"imported",provider:"browser.capture"});
+      g.commitVersion({objectId:obj.object.id,forms:[{role:"source.primary",representationId:rep.id}],label:"Browser source added to work path"});
+      j.resources.push({id:newId(),sourceId,sourceVersionId:version.id,objectId:obj.object.id,title:source.title,url:source.url,textLength:text.length,partial:version.partial,rights:version.rights,blobHash:version.textBlobHash,pages:0});
+      this.invalidate(j);this.save(j,versionId);return this.get(worldId)!;
     })();
   }
   async addUrl(worldId:string,versionId:string,url:string):Promise<Journey> {
@@ -260,7 +322,7 @@ export class JourneyStore {
     const {worldId,versionId}=command;
     if(this.active.has(worldId))throw new Error("Wait for the current step to finish.");
     const j=this.read(worldId,versionId);this.assertAction(j,command);
-    this.active.add(worldId);
+    this.active.add(worldId);const controller=new AbortController();this.controllers.set(worldId,controller);let completedRun:JourneyRun|null=null;
     try {
       if(command.action==="resource_accept"||command.action==="resource_reject") {
         const suggestion=j.suggestions.find(s=>s.id===command.id);
@@ -286,35 +348,41 @@ export class JourneyStore {
         const m=this.model(image);model=m.model;
         const hold=this.deps.spend.reserve({estimateUsd:quote.maximumUsd,provider:"openrouter",model:m.model,taskId:null,attempt:1});
         let accounted=false;let dispatched=false;
+        const run:JourneyRun={id:newId(),action:command.action,state:"running",startedAt:Date.now(),finishedAt:null,maximumUsd:quote.maximumUsd,actualUsd:null,usageKnown:false};
+        this.deps.graph.db.prepare("INSERT INTO journey_runs VALUES (?,?,?,?)").run(run.id,worldId,hold.id,JSON.stringify(run));
+        const offered=this.selection(j,command.text);j.coverage=offered.coverage;
         try {
           if(image) {
             // Refresh the exact endpoint before dispatch; a price rise requires a new review.
-            const fresh=routerImageModel({id:m.model,name:m.label},await routerRequest(this.deps.key()!,`/images/models/${m.model}/endpoints`,undefined,this.deps.fetch),new Date().toISOString().slice(0,10));
+            const fresh=routerImageModel({id:m.model,name:m.label},await routerRequest(this.deps.key()!,`/images/models/${m.model}/endpoints`,undefined,this.deps.fetch,controller.signal),new Date().toISOString().slice(0,10));
             if(!fresh||fresh.imageProvider!==m.imageProvider||fresh.imagePriceUsd!>quote.maximumUsd)throw new Error("The image price changed. Check your connection and review it again.");
             const pathStep=command.action==="run_step"?j.flow!.definition!.steps[j.flow!.index]!:null;
-            const idea=pathStep?{prompt:JSON.stringify({goal:this.deps.graph.goals.get(j.goalId)?.outcome,step:pathStep.instruction,acceptedWork:j.flow!.results.filter(r=>r.accepted).map(r=>({output:r.output,chosen:r.selected,note:r.note})),materials:this.material(j),requestedChange:command.text}),caption:pathStep.title,sourceIds:j.resources.map(r=>r.sourceId)}:command.action==="figure"?j.draft!.figureIdeas[Number(command.id)]!:null;
+            const sceneResult=command.action==="scene_image"?j.flow!.results.find(r=>r.stepId===j.flow!.definition!.steps[j.flow!.index]!.id)!:null;
+            const scene=sceneResult?.output.storyboard!.scenes.find(s=>s.id===command.id);
+            const idea=scene?{prompt:JSON.stringify({brief:j.brief,scene,acceptedScript:j.flow!.results.filter(r=>r.accepted).map(r=>r.output)}),caption:scene.title,sourceIds:scene.sourceIds}:pathStep?{prompt:JSON.stringify({goal:this.deps.graph.goals.get(j.goalId)?.outcome,brief:j.brief??null,step:pathStep.instruction,acceptedWork:j.flow!.results.filter(r=>r.accepted).map(r=>({output:r.output,chosen:r.selected,note:r.note})),materials:this.material(j),requestedChange:command.text}),caption:pathStep.title,sourceIds:j.resources.map(r=>r.sourceId)}:command.action==="figure"?j.draft!.figureIdeas[Number(command.id)]!:null;
             const topic=idea?.prompt??j.report!.illustration;
             const prompt=`${ILLUSTRATION_STYLE}\nTopic and grounded brief: ${topic}\n${idea?`Scientific basis: ${JSON.stringify(idea.sourceIds)}`:j.report!.findings.map(f=>f.text).join("\n")}`;
             dispatched=true;
             const output=await generateRouterImage({key:this.deps.key()!,model:m.model,provider:m.imageProvider!,prompt,parameters:fresh.imageParameters,
-              reference:this.deps.reference?.(),fetch:this.deps.fetch});
-            this.deps.spend.settle(hold.id,{usd:output.cost??quote.maximumUsd,outcome:"ok"});accounted=true;
-            this.read(worldId,versionId);this.assertMaterial(j);
+              reference:this.deps.reference?.(),fetch:this.deps.fetch,signal:controller.signal});
+            this.deps.spend.settle(hold.id,{usd:output.cost??quote.maximumUsd,outcome:"ok"});accounted=true;run.actualUsd=output.cost??null;run.usageKnown=output.cost!==undefined;controller.signal.throwIfAborted();
+            this.read(worldId,versionId);this.assertMaterial(j);this.assertAction(j,command);
             const bytes=await sharp(output.bytes,{limitInputPixels:25_000_000}).resize({width:1600,height:1200,fit:"inside",withoutEnlargement:true}).png().toBuffer();
             const hash=this.deps.graph.putBlob(bytes,"image/png","png");
             const obj=this.deps.graph.createObject({worldId,title:idea?.caption??"Topic illustration",semanticType:"image",properties:{tags:["journey.illustration"]}});
             const rep=this.deps.graph.addRepresentation({objectId:obj.object.id,modality:"image",format:"png",blobHash:hash,provenance:"generated",provider:"openrouter",model:m.model,generationParams:{prompt}});
             const saved=this.deps.graph.commitVersion({objectId:obj.object.id,forms:[{role:"art.primary",representationId:rep.id}],label:"Conceptual illustration"});
             this.deps.graph.process.record({objectId:obj.object.id,versionId:saved.versionId,kind:"model_step",actor:"model",label:"Generated conceptual illustration",model:m.model,tool:null,inputHashes:[],outputHashes:[hash],durationMs:0});
-            if(pathStep){const output:StepOutput={title:pathStep.title,summary:"Conceptual image for your review.",sections:[],options:[],checks:[pathStep.check],uncertainties:["An illustration is not measured evidence."],sourceIds:idea!.sourceIds};this.pathResult(j,output,model,hash);}
+            if(sceneResult&&scene){sceneResult.sceneImages={...sceneResult.sceneImages,[scene.id]:hash};const state=this.deps.graph.currentState(sceneResult.objectId)!;const rep=this.deps.graph.addRepresentation({objectId:state.object.id,modality:"image",format:"png",blobHash:hash,provenance:"generated",provider:"openrouter",model:m.model});const updated=this.deps.graph.commitVersion({objectId:state.object.id,forms:[...state.forms.filter(f=>f.role!==`scene.${scene.id}`),{role:`scene.${scene.id}`,representationId:rep.id}],label:`Scene: ${scene.title}`});sceneResult.versionId=updated.versionId;}
+            else if(pathStep){const output:StepOutput={title:pathStep.title,summary:"Conceptual image for your review.",sections:[],options:[],checks:[pathStep.check],uncertainties:["An illustration is not measured evidence."],sourceIds:idea!.sourceIds};this.pathResult(j,output,model,hash);}
             else if(idea)j.figureIds.push({id:newId(),blobHash:hash,caption:idea.caption,origin:"generated",sourceId:null,page:null,objectId:obj.object.id,sourceIds:idea.sourceIds});
             else j.illustration=hash;
           } else {
-            const client=new OpenRouterClient({apiKey:this.deps.key()!,model:m.model,fetch:this.deps.fetch,inputPerMTok:m.price.inputPerMTok,outputPerMTok:m.price.outputPerMTok});
+            const client=new OpenRouterClient({apiKey:this.deps.key()!,model:m.model,fetch:this.deps.fetch,inputPerMTok:m.price.inputPerMTok,outputPerMTok:m.price.outputPerMTok,signal:controller.signal});
             dispatched=true;
             const result=await client.chat({system:command.action==="design_path"?PATH_PLANNER_PROMPT:EDITOR_SYSTEM,user:this.input(j,command),maxOutputTokens:OUT_TOKENS[command.action]!},command.action==="search");
-            this.deps.spend.settle(hold.id,{usd:result.cost??quote.maximumUsd,inputTokens:result.inputTokens,outputTokens:result.outputTokens,outcome:"ok"});accounted=true;
-            this.read(worldId,versionId);this.assertMaterial(j);
+            this.deps.spend.settle(hold.id,{usd:result.cost??quote.maximumUsd,inputTokens:result.inputTokens,outputTokens:result.outputTokens,outcome:"ok"});accounted=true;run.actualUsd=result.cost??null;run.usageKnown=result.cost!==undefined;controller.signal.throwIfAborted();
+            this.read(worldId,versionId);this.assertMaterial(j);this.assertAction(j,command);
             if(command.action==="search") {
               const citations=[...new Map(result.citations.map(c=>[c.url,c])).values()].slice(0,6);
               if(!citations.length)throw new Error("No cited resources were returned. Try a more specific topic or add your own sources.");
@@ -325,32 +393,35 @@ export class JourneyStore {
               if(command.action==="design_path") {j.flow!.definition=parsePath(value);j.flow!.approved=false;j.flow!.request=command.text!;j.stage="path";}
               else if(command.action==="run_step") {const step=j.flow!.definition!.steps[j.flow!.index]!;const output=validateStep(value,step.operation,allowed);this.pathResult(j,output,model);j.stage="steps";}
               else if(command.action==="summarize"||command.action==="feedback") {
-                const report=ReportSchema.parse(value);this.checkCitations(report.findings.flatMap(f=>f.sourceIds),allowed);
+                const report=ReportSchema.parse(value);this.checkCitations(report.findings.flatMap(f=>f.sourceIds),allowed);this.validateEvidence(report.findings,offered.passages);
                 if(command.action==="feedback"||j.report) {if(command.action==="feedback")j.feedbackCount++;for(const d of j.decisions)this.deps.graph.decisions.flagForReview(d.objectId);j.decisions=[];j.outline=null;j.draft=null;j.reviewed=false;j.choices={palette:null,font:null,layout:null};}
                 this.completeStage(j,"materials",j.resources.map(r=>r.objectId));
-                j.report=report;j.reportObjectId=this.artifact(j,report.title,report,"document",model);j.illustration=null;j.stage="summary";
+                for(const r of j.evidenceReviews??[])if(r.objectId)this.deps.sense.sort(r.objectId,"ignore");j.evidenceReviews=[];j.report=report;j.reportObjectId=this.artifact(j,report.title,report,"document",model);j.illustration=null;j.stage="summary";
               } else if(command.action==="outline"||command.action==="edit_outline") {
                 j.outline=OutlineSchema.parse(value);
                 for(const d of j.decisions.filter(d=>d.stage!=="summary"))this.deps.graph.decisions.flagForReview(d.objectId);
                 j.decisions=j.decisions.filter(d=>d.stage==="summary");j.draft=null;j.reviewed=false;j.choices={palette:null,font:null,layout:null};
                 j.outlineObjectId=this.artifact(j,j.outline.title,j.outline,"document",model);j.stage="outline";
               } else {
-                const draft=DraftSchema.parse(value);
+                const draft=DraftSchema.parse(value);this.validateEvidence([...draft.sections,...draft.tables],offered.passages);
                 this.checkCitations([...draft.sections.flatMap(s=>s.sourceIds),...draft.tables.flatMap(t=>t.sourceIds),...draft.figureIdeas.flatMap(f=>f.sourceIds)],allowed);
                 if(draft.tables.some(t=>t.rows.some(r=>r.length!==t.columns.length)))throw new Error("The draft returned an incomplete table. Try again.");
                 if(draft.sourceFigureIdeas.some(f=>!j.resources.some(r=>r.sourceId===f.sourceId&&r.pages>=f.page)))throw new Error("A suggested figure did not identify an available PDF page.");
-                j.draft=draft;j.draftObjectId=this.artifact(j,draft.title,draft,"document",model);j.stage="review";j.reviewed=false;
+                for(const r of j.evidenceReviews??[])if(!r.target.startsWith("finding:")&&r.objectId)this.deps.sense.sort(r.objectId,"ignore");j.evidenceReviews=(j.evidenceReviews??[]).filter(r=>r.target.startsWith("finding:"));j.draft=draft;j.draftObjectId=this.artifact(j,draft.title,draft,"document",model);j.stage="review";j.reviewed=false;
                 this.completeStage(j,"make",[j.draftObjectId]);
                 this.deps.graph.goals.setRequiredOutputs(j.goalId,[j.draftObjectId]);this.deps.graph.goals.setFocus(j.goalId,j.draftObjectId);
               }
             }
           }
+          completedRun=run;
         } catch(error) {
+          run.state=controller.signal.aborted?"cancelled":"failed";if(!dispatched){run.actualUsd=0;run.usageKnown=true;}
           if(!accounted){if(dispatched)this.deps.spend.settle(hold.id,{usd:quote.maximumUsd,outcome:"error"});else this.deps.spend.release(hold.id);}
           throw error;
-        }
+        } finally {run.finishedAt=Date.now();this.saveRun(run);}
       } else {
         const g=this.deps.graph;
+        if(command.action==="save_brief"){const brief=JourneyBriefSchema.parse(command.brief);if(JSON.stringify(j.brief)!==JSON.stringify(brief)){this.invalidate(j);if(j.flow&&!j.flow.approved)j.stage="path";j.brief=brief;g.goals.setOutcome(j.goalId,brief.topic);this.artifact(j,"Your project brief",brief,"document",null);}}
         if(command.action==="approve_path"){this.choose(j,"path","Use this work path?",[{key:"use",label:j.flow!.definition!.title}],"use",command.text,j.id);j.flow!.approved=true;this.installPath(j);j.stage="materials";}
         if(command.action==="begin_path")j.stage="steps";
         if(command.action==="record_step"){const step=j.flow!.definition!.steps[j.flow!.index]!;this.pathResult(j,{title:step.title,summary:"Recorded by you",sections:[{heading:"What happened",text:command.text!}],options:[],checks:[step.check],uncertainties:[],sourceIds:[]},null);}
@@ -368,6 +439,28 @@ export class JourneyStore {
           j.resources=j.resources.filter(r=>r.id!==command.id);this.invalidate(j);
         }
         if(command.action==="approve_summary") {this.choose(j,"summary","Use this resource report?",[{key:"keep",label:"Use report"},{key:"change",label:"Change report"}],"keep",command.text,j.reportObjectId);j.stage="outline";}
+        if(command.action==="review_evidence") {
+          const match=/^(finding|section|table):(\d+)$/.exec(command.id!);const item=match?.[1]==="finding"?j.report?.findings[Number(match[2])]:match?.[1]==="section"?j.draft?.sections[Number(match[2])]:match?.[1]==="table"?j.draft?.tables[Number(match[2])]:null;
+          if(!item)throw new Error("Choose current evidence to review.");
+          const previous=j.evidenceReviews?.find(r=>r.target===command.id);if(previous?.objectId)this.deps.sense.sort(previous.objectId,"ignore");
+          const claimText="text" in item?item.text:"paragraphs" in item?item.paragraphs.join("\n\n"):item.title;
+          const atom=this.deps.sense.createAtom({worldId,atomType:"claim",text:claimText,provenance:"human",lane:"keep"});
+          for(const citation of item.citations??[])g.support.record({claimObjectId:atom.objectId,sourceVersionId:citation.sourceVersionId,
+            locator:{selectors:[{type:"TextQuoteSelector",exact:citation.quote,prefix:"",suffix:""},...(citation.page?[{type:"PageSelector" as const,page:citation.page}]:[])]},
+            status:command.evidenceState==="supports"?"supported":command.evidenceState==="contradicts"?"contradicted":"ambiguous",checkedBy:"human",note:command.text});
+          this.artifact(j,"Your evidence check",{target:command.id,state:command.evidenceState,note:command.text,basis:item,claimObjectId:atom.objectId},"document",null);
+          if(command.evidenceState!=="supports"){for(const d of j.decisions.filter(d=>d.stage==="review"||d.stage==="summary"))g.decisions.flagForReview(d.objectId);j.reviewed=false;}
+
+          j.evidenceReviews=[...(j.evidenceReviews??[]).filter(r=>r.target!==command.id),{target:command.id!,state:command.evidenceState!,note:command.text!,at:Date.now(),objectId:atom.objectId}];
+          this.recordOutcome(worldId,"evidence_reviewed");
+        }
+        if(command.action==="use_design_defaults") {
+          const palette=j.report!.palettes[0]!;this.resetAfter(j,"palette");
+          this.choose(j,"palette","Use suggested colors",[{key:palette.id,label:palette.name}],palette.id,"Suggested design accepted by the person.");
+          this.choose(j,"font","Use suggested type",[{key:"erewhon",label:"Erewhon"}],"erewhon","Suggested design accepted by the person.");
+          this.choose(j,"layout","Use suggested layout",[{key:"field",label:"Field notes"}],"field","Suggested design accepted by the person.");
+          j.choices={palette:palette.id,font:"erewhon",layout:"field"};j.stage="make";
+        }
         if(command.action==="approve_outline") {this.choose(j,"outline","Use this structure?",[{key:"keep",label:"Use structure"},{key:"change",label:"Change structure"}],"keep",command.text,j.outlineObjectId);j.stage="palette";}
         if(command.action==="choose_palette") {
           const palette=j.report!.palettes.find(p=>p.id===command.id);if(!palette)throw new Error("Choose one of these palettes.");
@@ -378,7 +471,7 @@ export class JourneyStore {
         if(command.action==="edit_draft") {
           const section = j.draft!.sections[Number(command.id)];
           if(!section || !command.text?.trim())throw new Error("Choose a section and write your revision.");
-          section.paragraphs=command.text.trim().split(/\n\s*\n/).slice(0,15);
+          const previousCheck=j.evidenceReviews?.find(r=>r.target===`section:${command.id}`);if(previousCheck?.objectId)this.deps.sense.sort(previousCheck.objectId,"ignore");section.citations=[];j.evidenceReviews=(j.evidenceReviews??[]).filter(r=>r.target!==`section:${command.id}`);section.paragraphs=command.text.trim().split(/\n\s*\n/).slice(0,15);
           const current=g.currentState(j.draftObjectId!)!;
           const blob=g.putBlob(Buffer.from(JSON.stringify(j.draft,null,2)),"application/json","json");
           const rep=g.addRepresentation({objectId:j.draftObjectId!,modality:"text",format:"json",blobHash:blob,provenance:"human",provider:"local.editor"});
@@ -389,9 +482,12 @@ export class JourneyStore {
         }
         if(command.action==="review") {this.choose(j,"review","Ready to use this draft?",[{key:"keep",label:"Reviewed draft"},{key:"change",label:"Needs changes"}],"keep",command.text,j.draftObjectId);j.reviewed=true;g.goals.setStatus(j.goalId,"reviewing");}
       }
+      if(command.action==="review")this.recordOutcome(worldId,"review_completed");
+      if(command.action==="reopen_step")this.recordOutcome(worldId,"decision_revised");
       this.read(worldId,versionId);
-      this.deps.graph.db.transaction(()=>this.save(j,versionId))();return this.get(worldId)!;
-    } finally {this.active.delete(worldId);}
+      controller.signal.throwIfAborted();
+      this.deps.graph.db.transaction(()=>{this.save(j,versionId);if(completedRun){completedRun.state="succeeded";this.saveRun(completedRun);}})();return this.get(worldId)!;
+    } catch(error){if(completedRun){completedRun.state=controller.signal.aborted?"cancelled":"failed";this.saveRun(completedRun);}throw error;} finally {this.active.delete(worldId);this.controllers.delete(worldId);}
   }
   private pathResult(j:Journey,output:StepOutput,model:string|null,imageHash?:string) {
     if(findKeyShaped(output).length)throw new Error("Remove credentials from this result.");
@@ -404,6 +500,8 @@ export class JourneyStore {
     if(imageHash){const rep=this.deps.graph.addRepresentation({objectId,modality:"image",format:"png",blobHash:imageHash,provenance:model?"generated":"human",provider:model?"openrouter":"local.editor",model});state=this.deps.graph.commitVersion({objectId,forms:[...state.forms,{role:"art.primary",representationId:rep.id}],label:"Conceptual image"});}
     if(output.project){const hash=this.deps.graph.putBlob(Buffer.from(JSON.stringify(output.project)),"application/json","json");const rep=this.deps.graph.addRepresentation({objectId,modality:"code",format:"json",blobHash:hash,provenance:model?"generated":"human",provider:model?"openrouter":"local.editor",model});state=this.deps.graph.commitVersion({objectId,forms:[...state.forms,{role:"code.project",representationId:rep.id}],label:"Project files"});result.codeObjectId=objectId;}
     this.deps.graph.goals.setFocus(j.goalId,objectId);
+    const previous=f.results.find(r=>r.stepId===step.id);
+    if(output.storyboard&&previous?.output.storyboard){const unchanged=output.storyboard.scenes.filter(s=>JSON.stringify(previous.output.storyboard!.scenes.find(v=>v.id===s.id))===JSON.stringify(s));result.sceneImages=Object.fromEntries(unchanged.flatMap(s=>previous.sceneImages?.[s.id]?[[s.id,previous.sceneImages[s.id]!]]:[]));for(const [id,hash] of Object.entries(result.sceneImages)){const rep=this.deps.graph.addRepresentation({objectId,modality:"image",format:"png",blobHash:hash,provenance:"generated",provider:"openrouter"});state=this.deps.graph.commitVersion({objectId,forms:[...state.forms,{role:`scene.${id}`,representationId:rep.id}],label:"Retained scene illustration"});}}
     result.versionId=state.versionId;f.results=f.results.filter(r=>r.stepId!==step.id);f.results.push(result);j.reviewed=false;
   }
   private checkCitations(ids:string[],allowed:Set<string>) {if(ids.some(id=>!allowed.has(id)))throw new Error("The draft cited material outside this project. It was not saved.");}

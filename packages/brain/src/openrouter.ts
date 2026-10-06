@@ -10,7 +10,7 @@ export class OpenRouterClient implements LlmClient {
   readonly id = "openrouter";
   readonly model: string;
   constructor(private readonly opts: { apiKey?: string; model: string; fetch?: RouterFetch;
-    inputPerMTok?: number; outputPerMTok?: number }) { this.model = opts.model; }
+    inputPerMTok?: number; outputPerMTok?: number;signal?:AbortSignal }) { this.model = opts.model; }
   async complete(request: LlmRequest): Promise<RouterResult> { return this.chat(request); }
   async chat(request: LlmRequest, search = false): Promise<RouterResult> {
     const body = await routerRequest(this.opts.apiKey, "/chat/completions", {
@@ -24,7 +24,7 @@ export class OpenRouterClient implements LlmClient {
       provider: { allow_fallbacks: false, ...(this.opts.inputPerMTok !== undefined ? { max_price: {
         prompt: this.opts.inputPerMTok, completion: this.opts.outputPerMTok,
       } } : {}) },
-    }, this.opts.fetch);
+    }, this.opts.fetch,this.opts.signal);
     const message = body.choices?.[0]?.message;
     if (body.error || !message || typeof message.content !== "string" || body.choices[0].finish_reason === "length") {
       throw new Error(body.choices?.[0]?.finish_reason === "length" ? "This draft was too long. Try a smaller scope." : "OpenRouter did not return a complete text response.");
@@ -42,10 +42,10 @@ export class OpenRouterClient implements LlmClient {
   }
 }
 
-export async function routerRequest(key: string | undefined, path: string, body?: unknown, fetcher: RouterFetch = fetch): Promise<any> {
+export async function routerRequest(key: string | undefined, path: string, body?: unknown, fetcher: RouterFetch = fetch,signal?:AbortSignal): Promise<any> {
   if (!key) throw new Error("Connect your OpenRouter key first.");
   const response = await fetcher(`${OPENROUTER_BASE}${path}`, {
-    method: body === undefined ? "GET" : "POST", signal: AbortSignal.timeout(body === undefined ? 30_000 : 180_000),
+    method: body === undefined ? "GET" : "POST", signal:signal?AbortSignal.any([signal,AbortSignal.timeout(body===undefined?30_000:180_000)]):AbortSignal.timeout(body === undefined ? 30_000 : 180_000),
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "X-OpenRouter-Title": "XENIUR" },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
@@ -57,14 +57,16 @@ export async function routerRequest(key: string | undefined, path: string, body?
       : `OpenRouter could not finish this request (${response.status}).`;
     throw new Error(message);
   }
-  const text = await response.text();
-  if (text.length > 32_000_000) throw new Error("The OpenRouter response was too large.");
+  const chunks:Uint8Array[]=[];let size=0;
+  const reader=response.body?.getReader();if(!reader)throw new Error("OpenRouter returned an empty response.");
+  try {while(true){signal?.throwIfAborted();const part=await reader.read();if(part.done)break;size+=part.value.length;if(size>32_000_000){await reader.cancel();throw new Error("The OpenRouter response was too large.");}chunks.push(part.value);}}finally{reader.releaseLock();}
+  const text=Buffer.concat(chunks).toString("utf8");
   return JSON.parse(text);
 }
 
 /** A dedicated, priced image call. Only fixed per-image endpoints are offered by discovery. */
 export async function generateRouterImage(opts: { key: string; model: string; provider: string; prompt: string;
-  parameters?: Record<string, unknown>; reference?: string; fetch?: RouterFetch }): Promise<{ bytes: Buffer; mime: string; cost?: number }> {
+  parameters?: Record<string, unknown>; reference?: string; fetch?: RouterFetch;signal?:AbortSignal }): Promise<{ bytes: Buffer; mime: string; cost?: number }> {
   const supported = opts.parameters ?? {};
   const body = await routerRequest(opts.key, "/images", {
     model: opts.model, prompt: opts.prompt,
@@ -72,7 +74,7 @@ export async function generateRouterImage(opts: { key: string; model: string; pr
     ...(supported["n"] ? { n: 1 } : {}),
     ...(supported["output_format"] ? { output_format: "png" } : {}),
     ...(opts.reference && supported["input_references"] ? { input_references: [{ type: "image_url", image_url: { url: opts.reference } }] } : {}),
-  }, opts.fetch);
+  }, opts.fetch,opts.signal);
   const data = body.data?.[0];
   if (typeof data?.b64_json !== "string" || !/^[A-Za-z0-9+/=\r\n]+$/.test(data.b64_json)) throw new Error("No usable image was returned.");
   const bytes = Buffer.from(data.b64_json, "base64");

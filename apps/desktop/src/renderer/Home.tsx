@@ -86,7 +86,7 @@ export function Home({ worlds, active, info, economy, today, trust, onOpen, onOp
 
       <section className="xr-haven__now" aria-labelledby="haven-now"><div className="xr-haven__section-head"><div><small>Today</small><h2 id="haven-now">Your next steps</h2></div>{pending > 0 && <span>{pending} waiting on you</span>}</div>
         {today === null ? <p className="xr-haven__quiet">Reading your projects…</p>
-          : situations.length === 0 ? <div className="xr-haven__allclear"><span><Check size={23} /></span><div><strong>All clear</strong><small>Your work is ready when you are.</small></div></div>
+          : situations.length === 0 ? <div className="xr-haven__allclear"><span><Check size={23} /></span><div><strong>No pending requests</strong><small>Continue your project when you’re ready.</small></div></div>
           : <div className="xr-haven__situations">{visibleSituations.map((row) => {
             const taskId = row.id.startsWith("task:") ? row.id.slice(5) : null;
             return <article key={row.id} className="xr-haven__situation"><span className="xr-haven__situation-glyph" aria-hidden="true">{row.glyph}</span>

@@ -1,3 +1,4 @@
+import {findExecutable} from "../../../apps/desktop/src/main/binaries.js";
 import { sampleProvidersConfig } from "../../providers/src/test-config.js";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -21,7 +22,7 @@ beforeEach(() => {
   g = ObjectGraph.open({ dbPath: ":memory:", blobDir: join(dir, "blobs") });
   const env: ProviderEnv = {
     scratchDir: join(dir, "scratch"), rootDir: ROOT,
-    binaries: { ffmpeg: "/opt/homebrew/bin/ffmpeg", blender: "/Applications/Blender.app/Contents/MacOS/Blender" },
+    binaries: { ffmpeg: findExecutable("ffmpeg",process.env["XENIUR_FFMPEG"]), blender: findExecutable("blender",process.env["XENIUR_BLENDER"]) },
   };
   router = new CapabilityRouter({
     graph: g, broker: new PermissionBroker(g.db),
@@ -64,7 +65,7 @@ describe("deterministic first, cheap model second, expensive generation last", (
 
     const misconfigured = new CapabilityRouter({
       graph: g, broker: new PermissionBroker(g.db), registry, config,
-      env: { scratchDir: join(dir, "s"), rootDir: ROOT, binaries: { ffmpeg: "/opt/homebrew/bin/ffmpeg", blender: "/Applications/Blender.app/Contents/MacOS/Blender" } },
+      env: { scratchDir: join(dir, "s"), rootDir: ROOT, binaries: { ffmpeg: findExecutable("ffmpeg",process.env["XENIUR_FFMPEG"]), blender: findExecutable("blender",process.env["XENIUR_BLENDER"]) } },
     });
     await expect(misconfigured.route("image.transform")).rejects.toThrow("routing rule violated");
   });
@@ -74,7 +75,7 @@ describe("deterministic first, cheap model second, expensive generation last", (
     config.capabilities["transform"] = { order: ["openai.image"] };  // wrong tool entirely
     const empty = new CapabilityRouter({
       graph: g, broker: new PermissionBroker(g.db), registry: new ProviderRegistry(), config,
-      env: { scratchDir: join(dir, "s"), rootDir: ROOT, binaries: { ffmpeg: "/opt/homebrew/bin/ffmpeg", blender: "/Applications/Blender.app/Contents/MacOS/Blender" } },
+      env: { scratchDir: join(dir, "s"), rootDir: ROOT, binaries: { ffmpeg: findExecutable("ffmpeg",process.env["XENIUR_FFMPEG"]), blender: findExecutable("blender",process.env["XENIUR_BLENDER"]) } },
     });
     await expect(empty.route("image.transform")).rejects.toThrow("nothing in config supports");
   });
@@ -174,7 +175,7 @@ describe("budget ceilings", () => {
 
     const tight = new CapabilityRouter({
       graph: g, broker: new PermissionBroker(g.db), registry, config,
-      env: { scratchDir: join(dir, "s2"), rootDir: ROOT, binaries: { ffmpeg: "/opt/homebrew/bin/ffmpeg", blender: "/Applications/Blender.app/Contents/MacOS/Blender" } },
+      env: { scratchDir: join(dir, "s2"), rootDir: ROOT, binaries: { ffmpeg: findExecutable("ffmpeg",process.env["XENIUR_FFMPEG"]), blender: findExecutable("blender",process.env["XENIUR_BLENDER"]) } },
     });
     await expect(tight.image({ prompt: "expensive" }, { worldId, objectId }))
       .rejects.toThrow("perActionUsdMax");

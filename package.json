@@ -2,11 +2,11 @@
   "name": "xeniur",
   "private": true,
   "version": "0.1.0",
-  "description": "XENIUR — a universal visual computing environment. Intent → Object → Manipulate → Transform → Act → Outcome.",
+  "description": "A desktop workspace for projects, sources, decisions and useful AI-assisted work.",
   "type": "module",
   "main": "apps/desktop/out/main/index.js",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.14.0"
   },
   "workspaces": [
     "packages/*",
@@ -34,30 +34,39 @@
     "demo:arena": "node scripts/ensure-abi.mjs node && tsx scripts/demo-arena.ts",
     "demo:guided": "node scripts/ensure-abi.mjs node && tsx scripts/demo-guided.ts",
     "demo:browser": "node scripts/ensure-abi.mjs node && tsx scripts/demo-browser.ts",
-    "preview:ui": "node scripts/ensure-abi.mjs node && tsx scripts/preview-ui.tsx"
+    "preview:ui": "node scripts/ensure-abi.mjs node && tsx scripts/preview-ui.tsx",
+    "icons": "node scripts/make-icons.mjs",
+    "package": "npm run build && npm run icons && electron-builder --config electron-builder.cjs --publish never",
+    "package:dir": "npm run icons && electron-builder --config electron-builder.cjs --dir --publish never",
+    "verify:live": "node scripts/ensure-abi.mjs node && node --import tsx scripts/verify-openrouter-live.ts",
+    "verify:browser": "node scripts/check-browser-desktop.mjs",
+    "verify:workflow": "node scripts/check-workflow-desktop.mjs",
+    "verify:export": "node scripts/check-export-desktop.mjs"
   },
   "devDependencies": {
-    "@electron/rebuild": "^3.7.0",
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.10.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@types/three": "^0.170.0",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react": "^5.2.0",
     "autoprefixer": "^10.5.6",
-    "electron": "^33.2.0",
-    "electron-vite": "^2.3.0",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "esbuild": "^0.28.2",
     "postcss": "^8.5.28",
     "tailwindcss": "^3.4.19",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "vite": "^5.4.11",
-    "vitest": "^2.1.8"
+    "vite": "^7.3.6",
+    "vitest": "^4.1.11"
   },
   "dependencies": {
     "@napi-rs/canvas": "0.1.100",
     "@react-three/fiber": "^8.17.10",
-    "better-sqlite3": "^11.6.0",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "better-sqlite3": "^13.0.3",
     "clsx": "^2.1.1",
     "fflate": "^0.8.3",
     "framer-motion": "^13.2.0",
@@ -70,7 +79,10 @@
     "react-dom": "^18.3.1",
     "sharp": "^0.35.4",
     "tailwind-merge": "^3.6.0",
+    "tesseract.js": "^7.0.0",
     "three": "^0.170.0",
     "zod": "^3.23.8"
-  }
+  },
+  "license": "MIT",
+  "author": "XENIUR contributors"
 }

@@ -1,0 +1,50 @@
+name: Checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install local test tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y blender ffmpeg
+      - name: Install local test tools (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg && brew install --cask blender
+      - name: Install local test tools (Windows)
+        if: runner.os == 'Windows'
+        run: choco install blender ffmpeg -y --no-progress
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Full tests (macOS and Linux)
+        if: runner.os != 'Windows'
+        run: npm test
+      - name: Windows tests
+        if: runner.os == 'Windows'
+        run: npm test -- --exclude packages/providers/src/probe.test.ts
+        # This suite creates Unix executable shell fixtures. Other tests still run.
+      - run: npm run build
+      - name: Desktop integration (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          npm run verify:workflow
+          npm run verify:browser
+          npm run verify:export
+      - run: npm run package:dir
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.os }}
+          path: release/
+          retention-days: 7

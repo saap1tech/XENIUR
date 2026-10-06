@@ -2,7 +2,7 @@ import { sampleJourneyBridge, previewBlob } from "./sampleJourney.js";
 import type {
   Atom, DecisionDetail, ObjectState, Representation, Standing, StepWork, ThinkingMap, TrustFacts, WorkGoal, WorkPlan, WorldSnapshot, XeniurBridge,
 } from "@xeniur/core";
-import { PlanStepSchema, templatePlanFor } from "@xeniur/core";
+import { PATH_CATALOG, PlanStepSchema, templatePlanFor } from "@xeniur/core";
 import { sampleWorkStateBridge } from "./sampleSharpen.js";
 
 /**
@@ -109,9 +109,10 @@ const trust = (objectId: string, over: Partial<TrustFacts> = {}): TrustFacts => 
 /** The localhost preview. Writes are no-ops or in-memory demonstrations, never persisted. */
 export function sampleBridge(opts: { firstRun?: boolean; research?:boolean } = {}): XeniurBridge {
   const noop = async () => undefined;
-  const snapshot=opts.research?{...sampleSnapshot,world:{...sampleSnapshot.world,title:"CO₂ electrolysis · sample",summary:"A research review"},states:[],representations:[]}:sampleSnapshot;
+  const journey=sampleJourneyBridge();
+  let snapshot=opts.research?{...sampleSnapshot,world:{...sampleSnapshot.world,title:"CO₂ electrolysis · sample",summary:"A research review"},states:[],representations:[]}:sampleSnapshot;
   return {
-    journey: sampleJourneyBridge(),
+    journey,
     code:{files:async()=>({}),run:async()=>{throw new Error("Run this project in the desktop app. This is a sample preview.");},stop:noop,setBounds:noop},
     blobs: { url: (h: string) => previewBlob(h) || `xeniur-blob://asset/${h}` },
     system: { info: async () => ({ version: "0.1", brainIsMock: true, brainModel: null, capabilities: [], firstRun: opts.firstRun ?? false }) },
@@ -129,7 +130,7 @@ export function sampleBridge(opts: { firstRun?: boolean; research?:boolean } = {
     },
     decisions: { list: async () => [sampleDecision], get: async () => sampleDecision, influence: async () => null },
     constraints: { list: async () => [] },
-    living: { detail: async () => null, exportPackage: async () => null, rebuild: async () => null, validate: async () => [], importFiles: async () => [], impact: async (id: string) => ({ objectId: id, rebuild: [], review: id === ids.jacket ? [{ objectId: ids.decision, title: sampleDecision.question, because: "a source it cited changed", causeObjectId: ids.claim1 }] : [], sinceReleaseId: null, sinceLabel: null, headline: "1 thing to review" }) },
+    living: { detail: async (id:string) => {const state=snapshot.states.find(s=>s.object.id===id);return state?{state,representations:[],steps:[],checks:[],rebuildPlan:{willRebuild:[],willSkip:[],blocked:[]}}:null;}, pickSource:async()=>{throw new Error("Add a real source file in the desktop app. This is a sample preview.");}, saveForm:async()=>null, exportPackage: async () => null, rebuild: async () => null, validate: async () => [], importFiles: async () => [], impact: async (id: string) => ({ objectId: id, rebuild: [], review: id === ids.jacket ? [{ objectId: ids.decision, title: sampleDecision.question, because: "a source it cited changed", causeObjectId: ids.claim1 }] : [], sinceReleaseId: null, sinceLabel: null, headline: "1 thing to review" }) },
     process: { proof: async (id: string) => ({ objectId: id, summary: "4 human, 3 tool, 1 model steps recorded", counts: { human: 4, tool: 3, model: 1, total: 8, durationMs: 47 * 60_000 }, events: [], disclosedHashes: [], rootHash: "0".repeat(64), privacy: "private", generatedAt: now }) },
     trust: { facts: async (id: string) => trust(id), world: async () => trust(W), supportMap: async () => null },
     brain: { trail: async () => [], resolve: async (u: string) => ({ intent: null, objects: [], interpretation: `I did not read "${u}"`, by: "unresolved", nearest: [] }) },
@@ -142,14 +143,14 @@ export function sampleBridge(opts: { firstRun?: boolean; research?:boolean } = {
     metrics: { record: noop }, publishers: { self: async () => ({ publicKey: "P".repeat(43), displayName: "You" }) },
     tasks: { active: async () => [], approve: noop, reject: noop, onEvent: () => () => undefined },
     economy: { snapshot: async () => ({ local: { metered: false, label: "Unlimited Local" }, intelligence: { configured: false, rollingRemaining: 0, rollingLimit: 0, reserveRemaining: 0, reserveLimit: 0, resetsAt: now }, compute: { configured: false, balance: 0, usdPerCompute: 0, held: 0 } }), cancel: noop },
-    today: { get: async () => ({ date: "2026-09-28", resume: { worldId: W, worldTitle: sampleSnapshot.world.title, goalId: sampleGoal.id, fragments: [{ text: "You were comparing seam construction. One choice needs review.", objectId: null }], focusObjectId: ids.jacket, lastActiveAt: now, position: null }, rows: [], more: 0, quiet: true }) },
+    today: { get: async () => ({ date: "2026-09-28", resume: { worldId: W, worldTitle: sampleSnapshot.world.title, goalId: sampleGoal.id, fragments: [{ text: "You were comparing seam construction. One choice needs review.", objectId: null }], focusObjectId: ids.jacket, lastActiveAt: now, position: null }, rows: [{id:"decision:sample",kind:"decision_review",glyph:"◇",text:"The seam choice needs review after its evidence changed.",worldId:W,worldTitle:sampleSnapshot.world.title,objectId:ids.jacket,zone:"decisions",verb:"Review"}], more: 0, quiet: false }) },
     workflows: { list: async () => [
       { id: "preview-research", name: "An evidence-led choice", author: "Studio Adrar", summary: "Gather sources, compare your options, and record a reason you can return to.", source: "installed", steps: 5, delivers: ["Decision record", "Finished document"] },
       { id: "asset3d", name: "3D asset", author: "XENIUR", summary: "A model you own, kept deliverable as you keep working on it.", source: "bundled", steps: 4, emoji: "🚀", expects: "a .blend, .glb, .stl or .obj", delivers: ["Game-ready model", "3D-print file", "Preview image", "Turntable video"] },
       { id: "brand", name: "Brand identity", author: "XENIUR", summary: "A logo, and every size and surface it has to survive.", source: "bundled", steps: 4, emoji: "🎨", expects: "a logo as PNG or SVG", delivers: ["Web logo", "App icon", "One-colour logo", "Print-ready logo"] },
       { id: "figure", name: "Scientific figure", author: "XENIUR", summary: "A figure a journal will accept, and that says where its numbers came from.", source: "bundled", steps: 1, emoji: "📊", expects: "a chart or plot as PNG or SVG", delivers: ["Journal-ready figure"] },
       { id: "onepager", name: "Document one-pager", author: "XENIUR", summary: "A plan or proposal, kept honest about what is in it before it goes out.", source: "bundled", steps: 1, emoji: "📄", expects: "a Markdown or text draft", delivers: ["Finished document"] },
-    ], apply: async () => W },
+    ], apply: async (id:string) => {if(id.startsWith('path:')){const kind=id.slice(5) as Parameters<typeof journey.start>[1];const card=PATH_CATALOG.find(c=>c.id===kind);snapshot={...snapshot,world:{...snapshot.world,title:card?.name??'Your own path'},states:[],representations:[]};await journey.start(W,kind);}else{const root=state(ids.jacket,id==='brand'?'Logo sizes':id==='figure'?'Figure sizes':'File workflow', 'file', ['versioned'],[]);root.properties.settings={template:id,expects:'Sample preview. Add your actual file in the desktop app.'};snapshot={...snapshot,world:{...snapshot.world,title:root.properties.title},states:[root],representations:[]};}return W;} },
     web: { settings: async () => ({ riskMode: "local_only", lookupConfigured: false, disclosure: "Saved pages remain available in your project." }) },
     arena: { feeds: async () => [] },
     browser: { setFullscreen:async()=>false, onShortcut:()=>()=>{}, profiles: async () => [{ id: "preview-public", label: "Public browsing", kind: "signed_out", createdAt: now }], tabs: async () => [], downloads: async () => [], onEvent: () => () => undefined },

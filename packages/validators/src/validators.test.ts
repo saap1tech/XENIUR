@@ -1,3 +1,4 @@
+import {findExecutable} from "../../../apps/desktop/src/main/binaries.js";
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach } from "vitest";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from "node:fs";
@@ -10,7 +11,7 @@ import type { ProviderEnv } from "@xeniur/providers";
 import { ValidationRunner } from "./index.js";
 
 const ROOT = process.cwd();
-const BLENDER = process.env["XENIUR_BLENDER"] ?? "/Applications/Blender.app/Contents/MacOS/Blender";
+const BLENDER = findExecutable("blender",process.env["XENIUR_BLENDER"]);
 let dir: string, g: ObjectGraph, env: ProviderEnv, runner: ValidationRunner;
 let readiness: ReadinessEvaluator, worldId: string, objectId: string;
 
@@ -62,8 +63,8 @@ beforeEach(() => {
   env = {
     scratchDir: join(dir, "scratch"), rootDir: ROOT,
     binaries: {
-      ffmpeg: "/opt/homebrew/bin/ffmpeg",
-      blender: "/Applications/Blender.app/Contents/MacOS/Blender",
+      ffmpeg: findExecutable("ffmpeg",process.env["XENIUR_FFMPEG"]),
+      blender: findExecutable("blender",process.env["XENIUR_BLENDER"]),
     },
   };
   runner = new ValidationRunner(g, env);

@@ -1,3 +1,4 @@
+import {findExecutable} from "../../../apps/desktop/src/main/binaries.js";
 import { describe, it, expect, beforeEach } from "vitest";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,7 +10,7 @@ beforeEach(() => { dir = mkdtempSync(join(tmpdir(), "xeniur-probe-")); clearProb
 
 describe("availability means it actually runs", () => {
   it("reports a real binary as available, with what it printed", async () => {
-    const state = await probeBlender("/Applications/Blender.app/Contents/MacOS/Blender");
+    const state = await probeBlender(findExecutable("blender",process.env["XENIUR_BLENDER"]));
     expect(state.ok).toBe(true);
     if (state.ok) {
       expect(state.detail).toMatch(/^Blender /);

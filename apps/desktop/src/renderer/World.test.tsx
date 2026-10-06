@@ -1,3 +1,4 @@
+import {findExecutable} from "../main/binaries.js";
 import { sampleProvidersConfig } from "../../../../packages/providers/src/test-config.js";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -35,8 +36,8 @@ beforeAll(async () => {
   const env: ProviderEnv = {
     scratchDir: join(dir, "scratch"), rootDir: ROOT,
     binaries: {
-      ffmpeg: "/opt/homebrew/bin/ffmpeg",
-      blender: "/Applications/Blender.app/Contents/MacOS/Blender",
+      ffmpeg: findExecutable("ffmpeg",process.env["XENIUR_FFMPEG"]),
+      blender: findExecutable("blender",process.env["XENIUR_BLENDER"]),
     },
   };
   const router = new CapabilityRouter({

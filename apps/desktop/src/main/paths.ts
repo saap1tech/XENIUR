@@ -2,6 +2,7 @@ import { app } from "electron";
 import { join } from "node:path";
 import { mkdirSync, existsSync } from "node:fs";
 import { dirname } from "node:path";
+import { findExecutable } from "./binaries.js";
 
 /** Everything XENIUR owns lives under one directory, so it can be inspected or deleted. */
 export function appPaths() {
@@ -22,8 +23,8 @@ export function appPaths() {
 }
 
 export const BINARIES = {
-  ffmpeg: process.env["XENIUR_FFMPEG"] ?? "/opt/homebrew/bin/ffmpeg",
-  blender: process.env["XENIUR_BLENDER"] ?? "/Applications/Blender.app/Contents/MacOS/Blender",
+  ffmpeg: findExecutable("ffmpeg",process.env["XENIUR_FFMPEG"]),
+  blender: findExecutable("blender",process.env["XENIUR_BLENDER"]),
 };
 
 const MARKER = join("config", "providers.json");

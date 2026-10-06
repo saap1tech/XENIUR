@@ -1,5 +1,6 @@
-import { app, BrowserWindow, session as electronSession } from "electron";
-import { join, dirname } from "node:path";
+import { app, BrowserWindow, nativeImage, session as electronSession } from "electron";
+import { join, dirname, isAbsolute } from "node:path";
+import { mkdirSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { TEMPLATES, applyTemplate } from "@xeniur/graph";
 import { createServices, type Services } from "./services.js";
@@ -7,6 +8,7 @@ import { registerIpc } from "./ipc.js";
 import { registerTrustedRenderer } from "./security.js";
 import { registerPreviewScheme } from "./preview.js";
 import { registerBlobScheme, installBlobProtocol } from "./blobs.js";
+import { appPaths } from "./paths.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const DEV_URL = process.env["ELECTRON_RENDERER_URL"];
@@ -14,6 +16,9 @@ const DEV_URL = process.env["ELECTRON_RENDERER_URL"];
 // The app owns one named directory. Without this the userData path falls back to
 // "Electron" whenever the entry is run directly rather than from a packaged bundle.
 app.setName("Xeniur");
+// An explicit local override lets testers and contributors use a disposable profile.
+const dataDir=process.env["XENIUR_DATA_DIR"];
+if(dataDir){if(!isAbsolute(dataDir))throw new Error("XENIUR_DATA_DIR must be an absolute path.");mkdirSync(dataDir,{recursive:true});app.setPath("userData",dataDir);}
 
 // Custom schemes must be declared privileged before the app is ready.
 registerPreviewScheme();
@@ -25,6 +30,7 @@ function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
     width: 1360, height: 900, minWidth: 960, minHeight: 640,
     backgroundColor: "#f3f2ec",
+    icon: join(appPaths().projectRoot,"brand/icons/icon.png"),
     titleBarStyle: "hiddenInset",
     show: false,
     webPreferences: {
@@ -66,6 +72,7 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  app.dock?.setIcon(nativeImage.createFromPath(join(appPaths().projectRoot,"brand/icons/icon.png")));
   // Deny device permissions in the default session too, not only in browsing partitions.
   electronSession.defaultSession.setPermissionRequestHandler((_wc, _p, cb) => cb(false));
 

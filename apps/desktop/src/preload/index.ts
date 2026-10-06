@@ -17,6 +17,9 @@ const call = <T>(channel: string, payload?: unknown): Promise<T> =>
 
 contextBridge.exposeInMainWorld("xeniur", {
   journey: {
+    cancel:(worldId:string)=>call("journey:cancel",{id:worldId}),
+    insights:(worldId:string)=>call("journey:insights",{id:worldId}),
+    passage:(worldId:string,versionId:string,passageId:string)=>call("journey:passage",{worldId,versionId,passageId}),
     get: (worldId: string) => call("journey:get", { id: worldId }),
     start: (worldId: string, kind: string) => call("journey:start", { worldId, kind }),
     quote: (command: unknown) => call("journey:quote", command),
@@ -80,9 +83,11 @@ contextBridge.exposeInMainWorld("xeniur", {
     setBounds: (tabId: string, rect: { x: number; y: number; width: number; height: number }) => { void call("browser:setBounds", { tabId, rect }); },
     closeTab: (tabId: string) => call("browser:closeTab", { tabId }),
     state: (tabId: string) => call("browser:state", { tabId }),
+    compare:(tabId:string,otherId:string|null)=>call("browser:compare",{tabId,otherId}),
+    shelf:(worldId:string)=>call("browser:shelf",{worldId}),
     snapshot: (tabId: string) => call("browser:snapshot", { tabId }),
     takeOver: (tabId: string) => call("browser:takeOver", { tabId }),
-    downloads: () => call("browser:downloads"),
+    downloads: (worldId?:string|null) => call("browser:downloads",worldId===undefined?{}:{worldId}),
     decideDownload: (id: string, decision: "kept" | "discarded") => call("browser:decideDownload", { id, decision }),
     onEvent: (handler: (payload: { tabId: string }) => void) => {
       const listener = (_e: unknown, payload: { tabId: string }) => handler(payload);
@@ -120,6 +125,8 @@ contextBridge.exposeInMainWorld("xeniur", {
   },
 
   living: {
+    pickSource: (objectId:string) => call("living:pickSource",{id:objectId}),
+    saveForm: (objectId:string,role:string) => call("living:saveForm",{id:objectId,role}),
     detail: (objectId: string) => call("living:detail", { id: objectId }),
     validate: (objectId: string) => call("living:validate", { id: objectId }),
     rebuild: (objectId: string, includeGeneration: boolean) =>
@@ -300,7 +307,7 @@ contextBridge.exposeInMainWorld("xeniur", {
 
   workState: {
     assess: (goalId: string) => call("workState:assess", { id: goalId }),
-    start: (goalId: string, objectId?: string | null, signalId?: string | null) => call("workState:start", { goalId, objectId: objectId ?? null, signalId: signalId ?? null }),
+    start: (goalId: string, objectId?: string | null, signalId?: string | null,depth?:"focused"|"full") => call("workState:start", { goalId, objectId: objectId ?? null, signalId: signalId ?? null,depth }),
     session: (sessionId: string) => call("workState:session", { id: sessionId }),
     answer: (input: import("@xeniur/core").SharpenAnswer) => call("workState:answer", input),
   },

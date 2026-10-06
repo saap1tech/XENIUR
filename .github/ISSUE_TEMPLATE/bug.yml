@@ -1,0 +1,27 @@
+name: Something did not work
+description: Report a reproducible problem. Do not include keys or private project material.
+body:
+  - type: textarea
+    id: task
+    attributes:
+      label: What were you trying to do?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include expected and actual results. A small public example helps.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version and operating system
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshot or error
+      description: Remove credentials, personal information and private sources.

@@ -15,6 +15,16 @@ describe('bounded path contracts',()=>{
   expect(()=>validateStep({...base,diagram:{...diagram,points:[{label:'A',value:1e308,sourceId:source},diagram.points[1]]}},'diagram',new Set([source]))).toThrow();
  });
  it('outlines the selected bundled font for portable brand artwork',()=>{const svg=renderBrandVisual({...base,identity:{name:'Common Ground',tagline:'Useful things',colors:['#29483D','#F8F6ED'],font:'cochineal',voice:['Clear and specific']}},process.cwd());expect(svg).toContain('<path');expect(svg).not.toContain('<text');});
+ it('bounds storyboards and rejects duplicated scenes and foreign factual sources',()=>{
+  const scene={id:'opening',title:'Opening',seconds:30,visual:'A calm workshop with a chair being repaired.',narration:'A second life.',sourceIds:[]};
+  const storyboard={aspect:'16:9',scenes:[scene,{...scene,id:'closing',sourceIds:[source]}]};
+  expect(()=>validateStep({...base,storyboard},'storyboard',new Set())).toThrow('outside');
+  expect(validateStep({...base,storyboard},'storyboard',new Set([source])).storyboard?.scenes).toHaveLength(2);
+  expect(()=>validateStep({...base,storyboard:{...storyboard,scenes:[scene,scene]}},'storyboard',new Set())).toThrow();
+  expect(()=>validateStep({...base,storyboard:{...storyboard,scenes:[scene,{...scene,id:'closing',seconds:181}]}},'storyboard',new Set())).toThrow();
+  expect(()=>validateStep(base,'storyboard',new Set())).toThrow('missing');
+  expect(()=>validateStep({...base,storyboard},'write',new Set([source]))).toThrow('approved step');
+ });
  it('escapes labels and handles zero and negative chart values',()=>{
   const o=validateStep({...base,diagram:{kind:'bar',title:'<script>alert(1)</script>',caption:'A & B',unit:'mA',points:[{label:'A',value:-5,sourceId:source},{label:'B',value:0,sourceId:source}],sourceIds:[source]}},'diagram',new Set([source]));const svg=renderPathVisual(o)!;expect(svg).not.toContain('<script>');expect(svg).toContain('&lt;script&gt;');expect(svg).not.toMatch(/NaN|Infinity/);
  });

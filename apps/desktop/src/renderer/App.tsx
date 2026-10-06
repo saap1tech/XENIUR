@@ -13,6 +13,7 @@ import { BrandMark } from "./BrandMark.js";
 import { ComputeReview } from "./ComputeReview.js";
 import { WebLayer } from "./WebLayer.js";
 import { WorkflowLibrary } from "./WorkflowLibrary.js";
+import { Splash } from "./Splash.js";
 
 /** A new World, named for the way in rather than for a subsystem. */
 const NEW_WORLD: Record<HomeEntry, { title: string; emoji: string }> = {
@@ -48,6 +49,9 @@ export function App() {
   const [economy, setEconomy] = useState<EconomySnapshot | null>(null);
   const [quote, setQuote] = useState<ComputeQuote | null>(null);
   const [browserLayout, setBrowserLayout] = useState<BrowserLayout>("fill");
+  const [openingDone,setOpeningDone]=useState(false);
+  const [openingError,setOpeningError]=useState<string|null>(null);
+  const finishOpening=useCallback(()=>setOpeningDone(true),[]);
 
   const bridge = window.xeniur;
   usePaletteShortcut(setPaletteOpen);
@@ -98,15 +102,19 @@ export function App() {
     if (detail) setView({ ...view, detail, worldSnapshot: snapshot ?? view.worldSnapshot });
   }, [bridge, view]);
 
-  useEffect(() => {
-    void refreshWorlds();
-    void refreshTasks();
+  const readStartup=useCallback(()=>{
+    setOpeningError(null);
     void bridge?.system.info().then((value) => {
       setInfo(value);
       if (value?.firstRun) setView({ kind: "models", reason: null, back: { kind: "home" } });
-    });
+    }).catch(c=>setOpeningError(c instanceof Error?c.message:"Try reopening the application."));
+  },[bridge]);
+  useEffect(() => {
+    void refreshWorlds();
+    void refreshTasks();
+    readStartup();
     void bridge?.economy.snapshot().then(setEconomy);
-  }, [bridge, refreshWorlds, refreshTasks]);
+  }, [bridge, refreshWorlds, refreshTasks,readStartup]);
 
   /** A new World opened on its drop target — the way in for material and for .xeniur packages alike. */
   const startFromMaterial = useCallback(async () => {
@@ -212,6 +220,7 @@ export function App() {
 
   if (!bridge) {
     const preview = window.location.hostname === "localhost" ? new URLSearchParams(window.location.search).get("visual-preview") : null;
+    if(preview==="splash")return <Splash onFinish={finishOpening}/>;
     if (preview !== null) {
       const now = Date.now();
       const sampleWorlds: WorldRow[] = [
@@ -237,7 +246,7 @@ export function App() {
     </main>;
   }
 
-  if (!info) return <main className="xr-loading"><BrandMark /><span>Opening your workspace…</span></main>;
+  if (!info||!openingDone) return <Splash ready={!!info} error={openingError} onFinish={finishOpening} onRetry={readStartup}/>;
   if (view.kind === "models") {
     return <Models reason={view.reason} firstRun={info.firstRun} onBack={() => {
       void bridge.models.finishFirstRun().then(async () => setInfo(await bridge.system.info()));
@@ -290,7 +299,7 @@ export function App() {
       }} />}
 
       {view.kind === "web" ? <WebLayer worlds={worlds} onBrowse={() => { setBrowserLayout("fill"); setView((current) => ({ kind: "browser", worldId: null, goalId: null, stepId: null, back: current })); }} backLabel={view.back?.kind === "browser" ? "Browser" : "Home"} onBack={() => setView(view.back ?? { kind: "home" })} />
-      : view.kind === "workflows" ? <WorkflowLibrary onBack={() => setView({ kind: "home" })} onApplied={(worldId) => { void refreshWorlds(); void openWorld(worldId); }} />
+      : view.kind === "workflows" ? <WorkflowLibrary onBack={() => setView({ kind: "home" })} onApplied={async(worldId) => { await refreshWorlds(); await openWorld(worldId); }} />
       : view.kind === "object" ? (
         <ObjectReader
           detail={view.detail} busy={busy}
@@ -299,7 +308,7 @@ export function App() {
           onOpenObject={(id) => { void openObject(id, view.worldSnapshot); }}
         />
       ) : view.kind === "world" ? (
-        <ProjectCanvas
+        <ProjectCanvas key={view.snapshot.world.id}
           snapshot={view.snapshot} tasks={tasks} busy={busy} initialSelection={view.selection ?? null} initialZone={view.zone ?? "work"} initialStep={view.step ?? null}
           onBack={() => setView({ kind: "home" })}
           onOpenObject={(id) => { void openObject(id, view.snapshot); }}

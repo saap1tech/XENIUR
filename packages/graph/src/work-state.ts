@@ -84,7 +84,7 @@ export class WorkStateStore {
     return row ? JSON.parse(row.session) as SharpenSession : null;
   }
 
-  start(goalId: string, objectId: string | null = null, signalId: string | null = null): SharpenSession {
+  start(goalId: string, objectId: string | null = null, signalId: string | null = null,depth:"focused"|"full"="full"): SharpenSession {
     const g = this.graph, work = this.assess(goalId), goal = g.goals.get(goalId);
     if (!work || !goal) throw new Error("This goal no longer exists.");
     if (g.getWorld(goal.worldId)?.kind !== "work") throw new Error("Sharpen is available in your own projects.");
@@ -109,6 +109,11 @@ export class WorkStateStore {
       move("apply", signal?.kind === "assumption" ? `How did you check this assumption, or what concrete test would you run?\n${signal.fact}` : `What new case, source, or requirement would you test against “${title}”?`, `${recorded}\n${goal.requiredOutputs.length ? `Required outputs: ${goal.requiredOutputs.join(", ")}` : "No required outputs recorded."}`, signal?.kind === "assumption" ? ["reflect", "test", "checked"] : ["reflect", "test"]),
     ];
     if (d) moves.push(move("decide", `Keep your choice, or reopen “${title}”? Include your reason and compare the other options.`, recorded, ["keep", "needs_review"]));
+    if(depth==="focused"){
+      const kinds:SharpenKind[]=signal?.kind==="changed_basis"||signal?.kind==="recall"?["recall","apply","decide"]:
+        signal?.kind==="disagreement"||signal?.kind==="unreviewed_basis"?["distinguish","challenge","decide"]:["challenge","apply","decide"];
+      const selected=moves.filter(m=>kinds.includes(m.kind));moves.splice(0,moves.length,...selected);
+    }
     const session: SharpenSession = { id: newId(), goalId, worldId: goal.worldId, objectId: state.object.id, objectVersionId: state.versionId,
       title, subjectKey: signal?.subjectKey ?? "recall", basisDigest: this.digest(goalId, state.object.id), fact: signal?.fact ?? "A short check of the work and the reasons behind it.", moves, createdAt: now() };
     g.db.prepare(`INSERT INTO sharpen_sessions (id, goal_id, world_id, object_id, session, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(session.id, goalId, goal.worldId, state.object.id, JSON.stringify(session), session.createdAt);

@@ -42,7 +42,8 @@ describe("Home", () => {
 
   it("makes a quiet day feel complete and offers two visual starting points", () => {
     const html = home({ date: "d", quiet: true, more: 0, resume: null, rows: [] });
-    expect(html).toContain("All clear");
+    expect(html).toContain("No pending requests");
+    expect(html).not.toContain("Your work is ready");
     expect(html).toContain("Start something");
     expect(html).toContain("Add material");
     expect(html).not.toContain("<textarea");

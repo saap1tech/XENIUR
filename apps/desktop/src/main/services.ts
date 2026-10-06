@@ -567,7 +567,7 @@ export function createServices(window: BrowserWindow): Services {
     systemInfo, lineage, providerIds: ALL_PROVIDERS.map((p) => p.id),
     async dispose() {
       metrics.end();
-      browser.closeAll();
+      browser.closeAll(true);
       preview.stopAll();
       await queue.stop();
       graph.close();

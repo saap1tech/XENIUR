@@ -1,0 +1,18 @@
+name: A task XENIUR could help with
+description: Suggest an improvement based on work you actually do.
+body:
+  - type: textarea
+    id: work
+    attributes:
+      label: What work needs help?
+      description: Who does it, what do they start with, and what useful result do they need?
+    validations:
+      required: true
+  - type: textarea
+    id: friction
+    attributes:
+      label: Where does the current experience get in the way?
+  - type: textarea
+    id: success
+    attributes:
+      label: How would you know the improvement worked?

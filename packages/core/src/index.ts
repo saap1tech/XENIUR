@@ -51,3 +51,4 @@ export * from "./route-adapter.js";
 export * from "./journey.js";
 
 export * from "./work-path.js";
+export * from "./evidence.js";

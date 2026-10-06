@@ -6,7 +6,13 @@ out/
 .DS_Store
 .env
 .env.local
+.env.*
+!.env.example
 coverage/
+release/
+live-verification*.json
 scratch/
 world-preview.html
 ui-preview*.html
+
+live-verification/

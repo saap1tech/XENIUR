@@ -21,8 +21,8 @@ import { runtimeAvailability } from "./availability.js";
 import { fetchArenaFeed } from "./web/arena.js";
 import { generationFingerprint, verifiedGenerationPrice } from "./economy.js";
 import { SharpenAnswerSchema } from "@xeniur/core";
-import { JourneyCommandSchema, JourneyKindSchema } from "@xeniur/core";
-import { readResource, cropPdfFigure } from "./journey/resources.js";
+import { JourneyCommandSchema, JourneyKindSchema, PATH_CATALOG } from "@xeniur/core";
+import { readResource, cropPdfFigure, MAX_RESOURCE_BYTES } from "./journey/resources.js";
 import { exportJourney } from "./journey/document.js";
 import { appPaths } from "./paths.js";
 import { WorkStateStore } from "@xeniur/graph";
@@ -40,22 +40,25 @@ const Rect = z.object({
  */
 const SCHEMAS = {
   "journey:get": Uuid,
+  "journey:cancel": Uuid,
+  "journey:insights": Uuid,
+  "journey:passage": z.object({worldId:UuidSchema,versionId:UuidSchema,passageId:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),
   "journey:start": z.object({ worldId: UuidSchema, kind: JourneyKindSchema }).strict(),
   "journey:quote": JourneyCommandSchema,
   "journey:act": JourneyCommandSchema,
   "journey:upload": z.object({ worldId: UuidSchema, versionId: UuidSchema }).strict(),
   "journey:addNote": z.object({ worldId: UuidSchema, versionId: UuidSchema, title: z.string().trim().min(1).max(160), text: z.string().trim().min(8).max(300000) }).strict(),
   "journey:addUrl": z.object({ worldId: UuidSchema, versionId: UuidSchema, url: z.string().url().max(4000) }).strict(),
-  "journey:sourcePage": z.object({ worldId: UuidSchema, versionId: UuidSchema, resourceId: UuidSchema, page: z.number().int().min(1).max(500) }).strict(),
+  "journey:sourcePage": z.object({ worldId: UuidSchema, versionId: UuidSchema, resourceId: UuidSchema, page: z.number().int().min(1).max(2000) }).strict(),
   "journey:useObject": z.object({ worldId: UuidSchema, versionId: UuidSchema, objectId: UuidSchema }).strict(),
   "objects:readText": Uuid,
-  "journey:sourceFigure": z.object({ worldId: UuidSchema, versionId: UuidSchema, resourceId: UuidSchema, page: z.number().int().min(1).max(500),
+  "journey:sourceFigure": z.object({ worldId: UuidSchema, versionId: UuidSchema, resourceId: UuidSchema, page: z.number().int().min(1).max(2000),
     crop: z.object({ x: z.number().min(0).max(.99), y: z.number().min(0).max(.99), width: z.number().positive().max(1), height: z.number().positive().max(1) }).refine(c=>c.x+c.width<=1&&c.y+c.height<=1),
     caption: z.string().trim().min(1).max(400), permission: z.literal(true) }).strict(),
   "journey:export": z.object({ worldId: UuidSchema, versionId: UuidSchema }).strict(),
   "workState:assess": Uuid,
   "workState:session": Uuid,
-  "workState:start": z.object({ goalId: UuidSchema, objectId: UuidSchema.nullable(), signalId: z.string().min(1).max(100).nullable() }).strict(),
+  "workState:start": z.object({ goalId: UuidSchema, objectId: UuidSchema.nullable(), signalId: z.string().min(1).max(100).nullable(),depth:z.enum(["focused","full"]).optional() }).strict(),
   "workState:answer": SharpenAnswerSchema,
   "worlds:list": z.undefined(),
   "worlds:covers": z.object({ worldIds: z.array(UuidSchema).max(9) }),
@@ -86,6 +89,8 @@ const SCHEMAS = {
   "browser:openTab": z.object({ profileId: z.string().min(1), url: z.string().url(), worldId: UuidSchema.nullable().default(null),
     goalId: UuidSchema.nullable().default(null), stepId: z.string().nullable().default(null) }),
   "browser:tabs": z.object({ worldId: UuidSchema.nullable().optional() }),
+  "browser:compare":z.object({tabId:z.string().min(1),otherId:z.string().min(1).nullable()}).strict(),
+  "browser:shelf":z.object({worldId:UuidSchema}).strict(),
   "browser:activate": z.object({ tabId: z.string().min(1) }),
   "browser:navigate": z.object({ tabId: z.string().min(1), url: z.string().url() }),
   "browser:back": z.object({ tabId: z.string().min(1) }),
@@ -97,7 +102,7 @@ const SCHEMAS = {
   "browser:state": z.object({ tabId: z.string().min(1) }),
   "browser:snapshot": z.object({ tabId: z.string().min(1) }),
   "browser:takeOver": z.object({ tabId: z.string().min(1) }),
-  "browser:downloads": z.undefined(),
+  "browser:downloads":z.object({worldId:UuidSchema.nullable().optional()}),
   "browser:decideDownload": z.object({ id: z.string().min(1), decision: z.enum(["kept", "discarded"]) }),
   "web:settings": z.undefined(),
   "web:setRiskMode": z.object({ mode: z.enum(["local_only", "google_lookup"]) }),
@@ -118,13 +123,15 @@ const SCHEMAS = {
   "living:detail": Uuid,
   "living:validate": Uuid,
   "living:rebuild": z.object({ id: UuidSchema, includeGeneration: z.boolean().default(false) }),
-  "living:release": z.object({ id: UuidSchema, profileId: z.string().min(1), note: z.string().max(500).optional() }),
+  "living:release": z.object({ id: UuidSchema, profileId: z.string().min(1), note: z.string().max(2000).optional() }),
   "living:switchBranch": z.object({ id: UuidSchema, branchId: UuidSchema }),
   "living:import": z.object({
     paths: z.array(z.string().min(1)).min(1).max(32),
     worldId: UuidSchema,
     objectId: UuidSchema.nullable().optional(),
   }),
+  "living:pickSource": Uuid,
+  "living:saveForm": z.object({id:UuidSchema,role:z.string().min(1).max(100)}).strict(),
   "living:export": Uuid,
   "living:impact": Uuid,
   "constraints:list": Uuid,
@@ -188,13 +195,13 @@ const SCHEMAS = {
   "publishers:self": z.undefined(),
   "publishers:list": z.undefined(),
   "publishers:setTrust": PublisherRefSchema.extend({ level: TrustLevelSchema }),
-  "publishers:report": PublisherRefSchema.extend({ reason: ReportReasonSchema, note: z.string().max(500) }),
+  "publishers:report": PublisherRefSchema.extend({ reason: ReportReasonSchema, note: z.string().max(2000) }),
   "goals:current": Uuid,
-  "goals:create": z.object({ worldId: UuidSchema, outcome: z.string().min(1).max(500), focusObjectId: UuidSchema.nullable() }),
+  "goals:create": z.object({ worldId: UuidSchema, outcome: z.string().min(1).max(2000), focusObjectId: UuidSchema.nullable() }),
   // Finished is not a status one can set: it is the outcome of goals:finish.
   "goals:setStatus": z.object({ id: UuidSchema, status: GoalStatusSchema.exclude(["finished"]) }),
-  "goals:finish": z.object({ id: UuidSchema, anyway: z.object({ because: z.string().min(8).max(500) }).optional() }),
-  "goals:setOutcome": z.object({ id: UuidSchema, outcome: z.string().min(1).max(500) }),
+  "goals:finish": z.object({ id: UuidSchema, anyway: z.object({ because: z.string().min(8).max(2000) }).optional() }),
+  "goals:setOutcome": z.object({ id: UuidSchema, outcome: z.string().min(1).max(2000) }),
   "goals:setFocus": z.object({ id: UuidSchema, objectId: UuidSchema.nullable() }),
   "goals:addNextAction": z.object({ id: UuidSchema, text: z.string().min(1).max(200), objectId: UuidSchema.nullable() }),
   "goals:doneNextAction": z.object({ id: UuidSchema, actionId: z.string().min(1) }),
@@ -236,10 +243,10 @@ const SCHEMAS = {
   "trust:outcome": z.object({ id: UuidSchema, releaseId: UuidSchema.optional() }),
   "process:proof": Uuid,
   "process:publish": z.object({ id: UuidSchema, privacy: z.enum(["filtered", "public"]).default("filtered") }),
-  "process:exportPage": z.object({ id: UuidSchema, eventIds: z.array(UuidSchema).max(500),
+  "process:exportPage": z.object({ id: UuidSchema, eventIds: z.array(UuidSchema).max(2000),
     discloseHashes: z.boolean(), discloseTiming: z.boolean(), humanPass: z.object({
-      changed: z.string().trim().min(1).max(500), standBehind: z.string().trim().min(1).max(500),
-      checkNext: z.string().trim().min(1).max(500),
+      changed: z.string().trim().min(1).max(2000), standBehind: z.string().trim().min(1).max(2000),
+      checkNext: z.string().trim().min(1).max(2000),
     }) }),
   "metrics:record": z.object({
     kind: z.enum(["gesture_used", "typed_instead"]),
@@ -249,7 +256,7 @@ const SCHEMAS = {
   /* Sensemaking */
   "sense:map": Uuid,
   "sense:friction": Uuid,
-  "sense:dismissFriction": z.object({ id: UuidSchema, reason: z.string().max(500).optional() }),
+  "sense:dismissFriction": z.object({ id: UuidSchema, reason: z.string().max(2000).optional() }),
   "sense:capture": z.object({
     worldId: UuidSchema,
     kind: z.enum(["article", "video", "podcast", "paper", "note", "conversation", "screenshot", "clip", "book"]),
@@ -263,6 +270,7 @@ const SCHEMAS = {
     permittedUse: RightsSchema.default("unknown"),
     /** The person said not to send it to a model, at the moment of saving. */
     aiProcessing: z.enum(["allowed", "never"]).default("allowed"),
+    journeyVersionId:UuidSchema.optional(),
   }),
   "sense:observe": z.object({ worldId: UuidSchema, text: z.string().min(1).max(4000), about: UuidSchema.optional() }),
   "sense:sort": z.object({ id: UuidSchema, lane: z.enum(["keep", "question", "connect", "test", "build", "ignore"]) }),
@@ -270,10 +278,10 @@ const SCHEMAS = {
   "sense:link": z.object({
     fromObjectId: UuidSchema, toObjectId: UuidSchema,
     relation: z.enum(["supports", "contradicts", "example_of", "asks_about", "same_as", "derived_from"]),
-    note: z.string().max(500).optional(),
+    note: z.string().max(2000).optional(),
   }),
 
-  "sense:reviewSupport": z.object({ id: UuidSchema, status: SupportStatusSchema, note: z.string().max(500) }),
+  "sense:reviewSupport": z.object({ id: UuidSchema, status: SupportStatusSchema, note: z.string().max(2000) }),
   "sense:pendingCandidates": Uuid,
   "sense:basis": Uuid,
   "sense:connections": Uuid,
@@ -305,11 +313,11 @@ const SCHEMAS = {
   "decisions:get": Uuid,
   "decisions:create": z.object({
     worldId: UuidSchema,
-    question: z.string().min(1).max(500),
+    question: z.string().min(1).max(2000),
     options: z.array(z.object({
       key: z.string().min(1).max(60),
       label: z.string().min(1).max(200),
-      note: z.string().max(500).default(""),
+      note: z.string().max(2000).default(""),
     })).max(12).default([]),
     chosenOption: z.string().max(60).nullable().optional(),
     rationale: z.string().max(4000).optional(),
@@ -319,18 +327,18 @@ const SCHEMAS = {
     sourceVersionId: UuidSchema.nullable().optional(),
     atomObjectId: UuidSchema.nullable().optional(),
     relation: z.enum(["supports", "contradicts", "informed_by"]).default("informed_by"),
-    note: z.string().max(500).default(""),
+    note: z.string().max(2000).default(""),
   }),
   "decisions:assume": z.object({
     id: UuidSchema,
     text: z.string().min(1).max(1000),
-    reviewTrigger: z.string().max(500).default(""),
+    reviewTrigger: z.string().max(2000).default(""),
   }),
   "decisions:accept": z.object({
     id: UuidSchema,
     /** One reason this could be wrong. Either this or skipSteelman must be present. */
     steelman: z.string().max(1000).optional(),
-    reviewTrigger: z.string().max(500).optional(),
+    reviewTrigger: z.string().max(2000).optional(),
     skipSteelman: z.boolean().optional(),
   }),
   "decisions:reaffirm": Uuid,
@@ -366,6 +374,9 @@ export function registerIpc(services: Services): void {
 
   const handlers: { [K in Channel]: (args: z.infer<(typeof SCHEMAS)[K]>) => unknown } = {
     "journey:get": ({id}) => services.journey.get(id),
+    "journey:cancel": ({id}) => services.journey.cancel(id),
+    "journey:insights": ({id}) => services.journey.insights(id),
+    "journey:passage": ({worldId,versionId,passageId}) => services.journey.passage(worldId,versionId,passageId),
     "journey:start": ({worldId,kind}) => services.journey.start(worldId,kind),
     "journey:quote": (command) => services.journey.quote(command),
     "journey:act": (command) => services.journey.act(command),
@@ -375,7 +386,7 @@ export function registerIpc(services: Services): void {
       if (!journey || journey.versionId !== versionId) throw new Error("Refresh this work path before adding material.");
       if (chosen.canceled) return journey;
       for (const path of chosen.filePaths) {
-        if (statSync(path).size > 25_000_000) throw new Error("Choose a resource smaller than 25 MB.");
+        if (statSync(path).size > MAX_RESOURCE_BYTES) throw new Error("Choose a resource smaller than 50 MB.");
         const reading = await readResource(readFileSync(path), path.split(/[\\/]/).pop()!, "");
         journey = services.journey.addResource(worldId,journey.versionId,reading);
       }
@@ -428,7 +439,7 @@ export function registerIpc(services: Services): void {
       if(target.canceled || !target.filePath)return null;
       services.journey.validateExport(worldId,versionId);
       const paths=appPaths();
-      return exportJourney(journey,services.graph,paths.projectRoot,paths.scratchDir,target.filePath);
+      const result=await exportJourney(journey,services.graph,paths.projectRoot,paths.scratchDir,target.filePath);services.journey.recordOutcome(worldId,"exported");return result;
     },
     "worlds:list": () => services.graph.listWorlds(),
     "worlds:covers": ({ worldIds }): Record<string, string> => {
@@ -539,7 +550,12 @@ export function registerIpc(services: Services): void {
     "browser:removeProfile": ({ profileId }) => services.browser.removeProfile(profileId),
     "browser:openTab": (input) => services.browser.openTab(input),
     "browser:tabs": ({ worldId }) => services.browser.tabs(worldId),
-    "browser:activate": ({ tabId }) => { services.browser.activate(tabId); },
+    "browser:activate": ({ tabId }) => services.browser.activate(tabId),
+    "browser:compare":({tabId,otherId})=>services.browser.compare(tabId,otherId),
+    "browser:shelf":({worldId})=>{
+      const journey=services.journey.get(worldId);
+      return services.sense.listSources(worldId).slice(0,128).map(source=>{const version=services.sense.latestVersionOf(source.id);return {sourceId:source.id,title:source.title,url:source.url,at:source.retrievedAt,excerpt:version?services.graph.readBlob(version.textBlobHash).toString("utf8").slice(0,240):"",private:source.metadata["aiProcessing"]==="never"||version?.rights==="restricted",inPath:journey?.resources.some(r=>r.sourceVersionId===version?.id)??false};});
+    },
     "browser:navigate": ({ tabId, url }) => services.browser.navigate(tabId, url),
     "browser:back": ({ tabId }) => { services.browser.back(tabId); },
     "browser:forward": ({ tabId }) => { services.browser.forward(tabId); },
@@ -551,8 +567,8 @@ export function registerIpc(services: Services): void {
     "browser:snapshot": ({ tabId }) => services.browser.snapshot(tabId),
     // Take over is the person's, always, and it needs no reason.
     "browser:takeOver": ({ tabId }) => { services.browser.takeOver(tabId); },
-    "browser:downloads": () => services.browser.downloads(),
-    "browser:decideDownload": ({ id, decision }) => { services.browser.decideDownload(id, decision); },
+    "browser:downloads": ({worldId}) => services.browser.downloads(worldId),
+    "browser:decideDownload": ({ id, decision }) => services.browser.decideDownload(id, decision),
     "web:settings": () => ({
       riskMode: services.compute.preference("web.riskMode", "local_only") === "google_lookup" ? "google_lookup" as const : "local_only" as const,
       lookupConfigured: Boolean(process.env["GOOGLE_WEB_RISK_API_KEY"]),
@@ -576,7 +592,16 @@ export function registerIpc(services: Services): void {
     "economy:confirm": ({ quoteId }) => services.compute.confirm(quoteId, (quote) => enqueuePlan(services, quote.worldId, quote.plan, quote.id)),
     "economy:cancel": ({ quoteId }) => { services.compute.cancel(quoteId); },
     "workflows:list": () => services.workflows.list(),
-    "workflows:apply": ({ id }) => services.workflows.apply(id),
+    "workflows:apply": ({ id }) => {
+      if (!id.startsWith("path:")) return services.workflows.apply(id);
+      const kind = JourneyKindSchema.parse(id.slice(5));
+      const card = PATH_CATALOG.find(p => p.id === kind);
+      return services.graph.db.transaction(() => {
+        const world = services.graph.createWorld({title:card?.name ?? "Your own path",emoji:"◻",summary:card?.description ?? "A path around your work"});
+        services.journey.start(world.id,kind);
+        return world.id;
+      })();
+    },
 
     "code:setBounds": ({id,rect}) => {services.preview.setBounds(id,rect);},
     "code:files": ({ id }) => services.preview.files(id),
@@ -892,7 +917,7 @@ export function registerIpc(services: Services): void {
     "goals:standing": ({ id }) => standingFor(services.graph, id),
     "workState:assess": ({ id }) => new WorkStateStore(services.graph, (objectId) => services.readiness.evaluateAll(objectId)).assess(id),
     "workState:session": ({ id }) => new WorkStateStore(services.graph).session(id),
-    "workState:start": ({ goalId, objectId, signalId }) => new WorkStateStore(services.graph, (id) => services.readiness.evaluateAll(id)).start(goalId, objectId, signalId),
+    "workState:start": ({ goalId, objectId, signalId,depth }) => new WorkStateStore(services.graph, (id) => services.readiness.evaluateAll(id)).start(goalId, objectId, signalId,depth),
     "workState:answer": (answer) => new WorkStateStore(services.graph, (id) => services.readiness.evaluateAll(id)).answer(answer),
     "today:get": () => todayFor(services.graph, { rhythm: services.rhythm }),
     "trust:world": ({ id }) => trustFactsForWorld(services.graph, id),
@@ -987,6 +1012,18 @@ export function registerIpc(services: Services): void {
     "decisions:influence": ({ id, releaseId }) =>
       services.graph.decisions.influenceOn(id, releaseId),
 
+    "living:pickSource": async ({id}) => {
+      const object=services.graph.getObject(id);if(!object)throw new Error("This project item is unavailable.");services.graph.assertWritable(id);
+      const chosen=await dialog.showOpenDialog({title:"Add your source file",properties:["openFile"]});if(chosen.canceled||!chosen.filePaths[0])return null;
+      const path=chosen.filePaths[0];const result=await services.router.execute({intent:"Import source file",objects:[id],tool:"import.file",args:{path},confirmation:false},{worldId:object.worldId,objectId:id,formRoles:["source.primary","model.mesh"],label:"Source added"});return result.state??null;
+    },
+    "living:saveForm": async ({id,role}) => {
+      const state=services.graph.currentState(id),form=state?.forms.find(f=>f.role===role);const rep=form&&services.graph.getRepresentation(form.representationId);if(!rep?.blobHash)throw new Error("Create this result before saving it.");
+      const extension=/^[a-z0-9]{1,12}$/i.test(rep.format)?rep.format:"bin";
+      const chosen=await dialog.showSaveDialog({title:"Save result",defaultPath:`${(state!.properties.title).replace(/[^a-z0-9]+/gi,"-").slice(0,65)||"result"}-${role.split('.').at(-1)}.${extension}`});if(chosen.canceled||!chosen.filePath)return null;
+      if(services.graph.currentState(id)?.versionId!==state!.versionId)throw new Error("This result changed. Preview it again before saving.");
+      writeFileSync(chosen.filePath,services.graph.readBlob(rep.blobHash));return {path:chosen.filePath};
+    },
     "living:import": async ({ paths, worldId, objectId }) => {
       const out = [];
       for (const path of paths) {
@@ -1019,7 +1056,8 @@ export function registerIpc(services: Services): void {
     "sense:friction": ({ id }) => services.sense.friction(id),
     "sense:dismissFriction": ({ id, reason }) => { services.sense.dismissFriction(id, reason ?? ""); },
 
-    "sense:capture": ({ worldId, kind, title, text, url, author, sourceIdentity, permittedUse, aiProcessing }) => {
+    "sense:capture": ({ worldId, kind, title, text, url, author, sourceIdentity, permittedUse, aiProcessing,journeyVersionId }) => services.graph.db.transaction(()=>{
+      if(journeyVersionId){if(aiProcessing==="never"||permittedUse==="restricted")throw new Error("Keep private material outside the AI work path.");const j=services.journey.get(worldId);if(!j||j.versionId!==journeyVersionId)throw new Error("The work path changed. Refresh before saving into it.");}
       // The copy is stored with where it came from and what may be done with it; candidates are
       // proposed, as such. Saving, proposing and accepting stay three separate acts.
       const source = services.sense.recordSource({
@@ -1034,8 +1072,9 @@ export function registerIpc(services: Services): void {
       // context compiler reads it there. Saying it must record it somewhere it will be read.
       const version = services.sense.latestVersionOf(source.id);
       const candidates = version ? services.sense.propose(worldId, version.id, extractCandidates(text), "heuristic/1") : [];
+      if(journeyVersionId)services.journey.attachSource(worldId,journeyVersionId,source.id);
       return { sourceId: source.id, candidates };
-    },
+    })(),
 
     "sense:observe": ({ worldId, text, about }) =>
       services.sense.observe(worldId, text, about ? { about } : {}),

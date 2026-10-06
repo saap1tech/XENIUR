@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { UuidSchema } from "./ids.js";
 
-export const PathOperationSchema=z.enum(["brief","compare","plan","write","image","diagram","identity","one_page","code","check","manual"]);
+export const PathOperationSchema=z.enum(["brief","compare","plan","write","image","diagram","identity","one_page","code","check","manual","storyboard"]);
 export type PathOperation=z.infer<typeof PathOperationSchema>;
 export const PathDefinitionSchema=z.object({
   title:z.string().trim().min(1).max(80), outcome:z.string().trim().min(8).max(400),
@@ -23,18 +23,20 @@ export const DiagramSchema=z.discriminatedUnion("kind",[
   z.object({kind:z.enum(["bar","line"]),title:z.string().max(100),caption:z.string().max(400),unit:z.string().max(40),
     points:z.array(z.object({label:z.string().max(40),value:z.number().finite().min(-1e15).max(1e15),sourceId:UuidSchema}).strict()).min(2).max(12),sourceIds}).strict(),
 ]);
+export const StoryboardSchema=z.object({aspect:z.enum(["16:9","9:16","1:1"]),scenes:z.array(z.object({id:z.string().regex(/^[a-z][a-z0-9_-]{0,29}$/),title:z.string().trim().min(1).max(80),seconds:z.number().finite().min(1).max(180),visual:z.string().min(8).max(1000),narration:z.string().max(1500),sourceIds}).strict()).min(2).max(12)}).strict().superRefine((v,ctx)=>{if(new Set(v.scenes.map(s=>s.id)).size!==v.scenes.length)ctx.addIssue({code:"custom",message:"Each scene needs a unique ID."});if(v.scenes.reduce((n,s)=>n+s.seconds,0)>1800)ctx.addIssue({code:"custom",message:"Keep a storyboard under 30 minutes."});});
 const hex=z.string().regex(/^#[0-9a-fA-F]{6}$/);
 export const StepOutputSchema=z.object({title:z.string().trim().min(1).max(120),summary:z.string().max(500),
   sections:z.array(z.object({heading:z.string().max(80),text:z.string().max(3000)}).strict()).max(8),
   options:z.array(z.object({id:z.string().regex(/^[a-z0-9_-]+$/).max(30),title:z.string().max(80),reason:z.string().max(600),tradeoff:z.string().max(400)}).strict()).max(4).default([]),
   checks:z.array(z.string().max(240)).max(6),uncertainties:z.array(z.string().max(300)).max(6),sourceIds,
+  storyboard:StoryboardSchema.optional(),
   diagram:DiagramSchema.optional(),
   identity:z.object({name:z.string().max(60),tagline:z.string().max(120),colors:z.array(hex).min(2).max(5),font:z.enum(["cochineal","erewhon","pagella","schola"]),voice:z.array(z.string().max(100)).min(1).max(4)}).strict().optional(),
   onePage:z.array(z.object({heading:z.string().max(50),text:z.string().max(300)}).strict()).length(6).optional(),
   project:z.object({entry:z.literal("index.html"),files:z.record(z.string().max(50000))}).strict().optional(),
 }).strict();
 export type StepOutput=z.infer<typeof StepOutputSchema>;
-export interface PathResult {stepId:string;objectId:string;versionId:string;output:StepOutput;imageHash?:string;svgHash?:string;codeObjectId?:string;selected?:string;note?:string;accepted:boolean;decisionId?:string;}
+export interface PathResult {stepId:string;objectId:string;versionId:string;output:StepOutput;imageHash?:string;sceneImages?:Record<string,string>;svgHash?:string;codeObjectId?:string;selected?:string;note?:string;accepted:boolean;decisionId?:string;}
 export interface WorkPath {definition:PathDefinition|null;approved:boolean;index:number;results:PathResult[];request:string;}
 export interface PathCard {id:string;name:string;group:"Research"|"Create"|"Business"|"Everyday";description:string;inputs:string;output:string;icon:string;}
 export const PATH_CATALOG:PathCard[]=[
@@ -43,7 +45,7 @@ export const PATH_CATALOG:PathCard[]=[
   {id:"prototype",name:"Prototype report",group:"Research",description:"Show what was built, tested, and learned.",inputs:"Design notes, requirements and real test records",output:"A prototype report with evidence and next changes",icon:"prototype"},
   {id:"scientific_figure",name:"Scientific figure",group:"Research",description:"Turn a clear explanation or data into one figure.",inputs:"Sources, an explanation or a table of real values",output:"Editable SVG, PNG, caption and source record",icon:"figure"},
   {id:"document",name:"Written piece",group:"Create",description:"Make a clear document in your voice.",inputs:"Your brief, notes and references",output:"An editable illustrated document",icon:"document"},
-  {id:"script",name:"Film or video script",group:"Create",description:"Shape a story and imagine its key scenes.",inputs:"Premise, audience, duration and references",output:"A script, scene outline and optional scene illustrations",icon:"film"},
+  {id:"script",name:"Film or video script",group:"Create",description:"Shape a story and imagine its key scenes.",inputs:"Premise, audience, duration and references",output:"A script, timed storyboard, scene illustrations and production notes",icon:"film"},
   {id:"brand",name:"Brand identity",group:"Create",description:"Find a position, a voice, and a visual direction.",inputs:"Business, audience, values and references",output:"Brand board, wordmark direction, imagery and guidelines",icon:"brand"},
   {id:"software",name:"Web app",group:"Create",description:"Choose a plan, build it, and try it.",inputs:"The problem, users and acceptance criteria",output:"HTML, CSS and JavaScript files with a local preview",icon:"code"},
   {id:"campaign",name:"Campaign plan",group:"Business",description:"Connect an audience, a message, and a launch.",inputs:"Offer, audience evidence, budget and timeline",output:"A detailed campaign plan and creative concepts",icon:"campaign"},
@@ -64,6 +66,7 @@ export function builtInPath(kind:string):PathDefinition|null {
   const compare=step("direction","Choose a direction","compare","Offer 2–3 concrete options, each with its basis, tradeoff and what would make it wrong. Respect the person's constraints.","Which option fits, and what tradeoff are you accepting?");
   const write=step("deliverable","Make the result","write",`Create the actual deliverable: ${card.output}. Use specific, editable content. Ground factual claims in supplied source IDs. Mark missing facts; no invented stock, certifications, reviews, conversion rates or bookings.`,"Can someone use this, and are its claims supported?");
   const specialized:Record<string,PathDefinition["steps"]>={
+    script:[brief,compare,step("script","Write the script","write","Write the actual script in the requested language and voice, with scene actions, dialogue or narration, and production notes. Respect the audience and duration in the brief. Documentary facts need supplied sources; fictional scenes must remain clearly imagined.","Does the script say what you want, in your voice?"),step("scenes","Shape the scenes","storyboard","Turn the accepted script into 2–12 ordered scenes with stable IDs, titles, duration in seconds, visual descriptions and exact narration. Use the requested aspect ratio. Keep total timing close to the brief and flag assumptions. Illustrations are optional concept art; this path does not film, synthesize voices or render video.","Check timing, narration and what each scene communicates."),step("production","Plan the production","plan","Create a practical shot list, asset search phrases for each scene, sound and caption notes, and a recording checklist. Match assets to the accepted scene order. Mark source permissions, unknown costs and remaining real-world work.","Could you hand this to someone and begin production?"),review],
     brand:[brief,compare,step("identity","Build the identity","identity","Create a coherent identity: name from the brief, optional tagline, 2–5 hex colors, one of cochineal/erewhon/pagella/schola, and 1–4 voice principles. Explain use and contrast. The wordmark is a typographic direction; do not claim trademark clearance.","Do the colors, typography and voice fit the audience?"),step("imagery","Create brand imagery","image","Create one original editorial image expressing the accepted brand position and palette. No fabricated logo lettering, UI, mock endorsements or trademark claims.","Does this picture communicate the chosen direction?"),write,review],
     scientific_figure:[brief,step("basis","Check the basis","plan","Identify the exact relationship or numerical values to communicate. For measurements identify source IDs, units and missing uncertainty. Choose schematic, bar or line. Never invent points or infer missing values.","Are the relationships or transcribed values correct?"),step("figure","Draw the figure","diagram","Produce exactly one scientific diagram specification. Use a schematic for relationships; bar/line only for explicitly supplied numerical values. Every numerical point needs its real sourceId and unit. Preserve limitations in the caption.","Compare every label, value and unit with the source."),review],
     marketing_page:[brief,compare,step("page","Make one page","one_page","Create exactly six concise panels: Audience, Offer, Message, Channels, Budget & timing, Measure & learn. Each text must be at most 300 characters. Mark unknown costs and do not invent performance evidence.","Is every panel specific enough to act on?"),review],

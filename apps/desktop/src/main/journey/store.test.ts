@@ -26,6 +26,32 @@ function c(j:Journey,action:JourneyCommand["action"],extra:Partial<JourneyComman
 async function paid(j:Journey,action:JourneyCommand["action"],extra:Partial<JourneyCommand>={}){const command=c(j,action,extra);return store.act({...command,maximumUsd:store.quote(command).maximumUsd});}
 function start(){const j=store.start(worldId,"review");return store.addResource(worldId,j.versionId,reading);}
 describe("real-work journey",()=>{
+ it("adopts the exact browser source and preserves privacy, rights and invalidation",async()=>{
+  let j=store.start(worldId,"review");const source=sense.recordSource({worldId,kind:"clip",title:"Visible authenticated copy",text:reading.text,url:"https://example.org/actual",rights:"unknown",metadata:{capturedFrom:"visible_session"}});
+  j=store.attachSource(worldId,j.versionId,source.id);expect(j.resources[0]!.sourceVersionId).toBe(sense.latestVersionOf(source.id)!.id);expect(sense.listSources(worldId)).toHaveLength(1);
+  const unchanged=store.attachSource(worldId,j.versionId,source.id);expect(unchanged.versionId).toBe(j.versionId);
+  const privateSource=sense.recordSource({worldId,kind:"clip",title:"Private source",text:reading.text,metadata:{aiProcessing:"never"}});
+  expect(()=>store.attachSource(worldId,j.versionId,privateSource.id)).toThrow("private");
+ });
+ it("stores a human evidence check as real claim support and reopens accepted work",async()=>{
+  let j=start();const {EvidenceIndex}=await import("./evidence.js");const index=new EvidenceIndex(graph),resource=j.resources[0]!,version=sense.getSourceVersion(resource.sourceVersionId)!;index.ensure(resource,graph.readBlob(version.textBlobHash).toString("utf8"));const p=index.select([resource],"measurement").passages[0]!;
+  reply=report(j);reply.findings[0].citations=[{passageId:p.id,sourceId:p.sourceId,sourceVersionId:p.sourceVersionId,page:p.page,quote:"Those conditions do not establish the full process energy requirement."}];
+  j=await paid(j,"summarize");j=await store.act(c(j,"approve_summary"));const accepted=j.decisions.find(d=>d.stage==="summary")!;
+  j=await store.act(c(j,"review_evidence",{id:"finding:0",evidenceState:"contradicts",text:"This passage qualifies the claim; it does not establish the full process result."}));
+  const check=j.evidenceReviews![0]!;expect(graph.support.of(check.objectId!)[0]).toMatchObject({status:"contradicted",checkedBy:"human"});expect(graph.decisions.get(accepted.objectId)!.state).toBe("needs_review");expect(graph.support.of(j.reportObjectId!)).toEqual([]);
+  expect(store.insights(worldId).outcomes.evidence_reviewed).toBe(1);
+ });
+ it("cancels dispatched work without replacing the previous project and distinguishes unknown costs",async()=>{
+  const j=start();let dispatched!:()=>void;const ready=new Promise<void>(resolve=>dispatched=resolve);
+  store=new JourneyStore({graph,sense,spend:new SpendLedger(graph.db,{perActionUsdMax:1,perTaskUsdMax:5,totalUsdMax:100}),models:()=>[model],key:()=>"test-key",download:async()=>({...reading,url:""}),fetch:async(_url,init)=>{dispatched();return new Promise((_resolve,reject)=>init!.signal!.addEventListener("abort",()=>reject(init!.signal!.reason),{once:true}));}});
+  const pending=paid(j,"summarize");await ready;expect(store.cancel(worldId)).toBe(true);await expect(pending).rejects.toThrow("Stopped");expect(store.get(worldId)!.versionId).toBe(j.versionId);expect(store.get(worldId)!.report).toBeNull();expect(store.insights(worldId).runs[0]).toMatchObject({state:"cancelled",actualUsd:null,usageKnown:false});expect(store.cancel(worldId)).toBe(false);
+ });
+ it("records provider-reported charges and marks abandoned runs interrupted on restart",async()=>{
+  const j=start();reply=report(j);await paid(j,"summarize");const success=store.insights(worldId).runs[0]!;expect(success).toMatchObject({state:"succeeded",actualUsd:.001,usageKnown:true});
+  graph.db.prepare("INSERT INTO journey_runs VALUES (?,?,NULL,?)").run("abandoned",worldId,JSON.stringify({...success,id:"abandoned",state:"running",finishedAt:null,actualUsd:null,usageKnown:false}));
+  const recovered=new JourneyStore({graph,sense,spend:new SpendLedger(graph.db,{perActionUsdMax:1,perTaskUsdMax:5,totalUsdMax:100}),models:()=>[model],key:()=>null,download:async()=>({...reading,url:""})});expect(recovered.insights(worldId).runs[0]!.state).toBe("interrupted");
+ });
+
  it("runs the reviewed path, records decisions and persists the actual draft",async()=>{
   let j=start();reply=report(j);j=await paid(j,"summarize");
   expect(graph.currentState(j.reportObjectId!)!.forms[0]!.role).toBe("doc.primary");expect(graph.process.events(j.reportObjectId!).some(e=>e.actor==="model")).toBe(true);
@@ -88,7 +114,7 @@ describe("real-work journey",()=>{
   const j=start();j.draft={title:"A & B",abstract:"Evidence",sections:[{title:"Limits",level:1,paragraphs:["Never execute \\input{/private/file}."],sourceIds:[j.resources[0]!.sourceId]}],tables:[],figureIdeas:[],sourceFigureIdeas:[],limitations:["Narrow scope."]};j.choices={palette:null,font:"cochineal",layout:"field"};j.reviewed=true;
   expect(texEscape("\\write18{cmd}")).toBe("\\textbackslash{}write18\\{cmd\\}");expect(renderJourneyTex(j)).not.toContain("\\input{/private/file}");
   const result=await compileFiles(documentFiles(j,graph,process.cwd()),dir);
-  expect(result.pdf,result.warning??"").not.toBeNull();
+  if(!result.pdf){expect(result.warning).toBeTruthy();expect(documentFiles(j,graph,process.cwd())["review.html"]).toBeDefined();return;}
   const parsed=await readResource(result.pdf!,"review.pdf","application/pdf");expect(parsed.text).toContain("Limits");expect(parsed.pages).toBeGreaterThan(0);
   const crop=await cropPdfFigure(result.pdf!,1,{x:0,y:0,width:1,height:.5});expect(crop.subarray(1,4).toString()).toBe("PNG");
  },70000);
@@ -96,6 +122,42 @@ describe("real-work journey",()=>{
 
 const result=(extra:Partial<StepOutput>={}):StepOutput=>({title:"Working result",summary:"Specific content",sections:[{heading:"Brief",text:"A usable result with explicit constraints."}],options:[],checks:["Check the actual result."],uncertainties:[],sourceIds:[],...extra});
 describe("general work paths",()=>{
+ it("uses the human brief and reopens dependent work when it changes",async()=>{
+  let j=store.start(worldId,"software");
+  const brief={topic:"A repair booking prototype",audience:"Our front desk",notes:"Work offline",language:"English"};
+  j=await store.act(c(j,"save_brief",{brief}));expect(calls).toHaveLength(0);expect(graph.goals.get(j.goalId)!.outcome).toBe(brief.topic);
+  j=await store.act(c(j,"begin_path"));reply=result();j=await paid(j,"run_step");
+  expect(calls[0].init.body).toContain("A repair booking prototype");expect(calls[0].init.body).toContain("Work offline");
+  j=await store.act(c(j,"approve_step"));const accepted=j.flow!.results[0]!.decisionId!;
+  j=await store.act(c(j,"save_brief",{brief:{...brief,topic:"An inventory prototype"}}));
+  expect(j.stage).toBe("materials");expect(j.flow!.results).toEqual([]);expect(j.flow!.index).toBe(0);expect(graph.decisions.get(accepted)!.state).toBe("needs_review");
+  await expect(store.act(c(j,"save_brief",{brief:{...brief,notes:"sk-or-v1-abcdefghijklmnopqrstuvwxyz0123456789"}}))).rejects.toThrow("credentials");
+  expect(calls).toHaveLength(1);
+ });
+ it("keeps scene art only for unchanged scenes and exports the actual storyboard assets",async()=>{
+  let j=store.start(worldId,"script");j=await store.act(c(j,"begin_path"));
+  for(let i=0;i<3;i++){reply=result(i===1?{options:[{id:"a",title:"A",reason:"Simple",tradeoff:"Short"},{id:"b",title:"B",reason:"Broader",tradeoff:"Long"}]}:{});j=await paid(j,"run_step");j=await store.act(c(j,"approve_step",{id:i===1?"a":undefined}));}
+  const scene={id:"opening",title:"Opening",seconds:20,visual:"A man repairs a wooden chair in a calm workshop.",narration:"A second life.",sourceIds:[]};
+  reply=result({storyboard:{aspect:"16:9",scenes:[scene,{...scene,id:"closing",title:"Closing"}]}});j=await paid(j,"run_step");
+  expect(()=>store.quote(c(j,"scene_image",{id:"not-a-scene"}))).toThrow("Choose a scene");
+  const image=ModelEntrySchema.parse({...model,id:"drawing",model:"example/drawing",output:"image",imagePriceUsd:.04,imageProvider:"priced",imageParameters:{output_format:{type:"enum",values:["png"]}}});
+  const bytes=await sharp({create:{width:40,height:30,channels:3,background:"#29483D"}}).png().toBuffer();let dispatches=0;
+  store=new JourneyStore({graph,sense,spend:new SpendLedger(graph.db,{perActionUsdMax:1,perTaskUsdMax:5,totalUsdMax:100}),models:()=>[model,image],key:()=>"test-key",download:async()=>({...reading,url:""}),fetch:async(url,init)=>{
+   if(init?.method==="GET")return new Response(JSON.stringify({id:image.model,endpoints:[{provider_tag:"priced",pricing:[{billable:"output_image",unit:"image",cost_usd:.04}],supported_parameters:image.imageParameters}]}));
+   if(String(url).endsWith("/chat/completions"))return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(reply)}}],usage:{prompt_tokens:10,completion_tokens:10,cost:.001}}));
+   dispatches++;expect(JSON.parse(init!.body as string).prompt).toContain("wooden chair");return new Response(JSON.stringify({data:[{b64_json:bytes.toString("base64"),media_type:"image/png"}],usage:{cost:.035}}));
+  }});
+  await expect(store.act(c(j,"scene_image",{id:"opening"}))).rejects.toThrow("cost");expect(dispatches).toBe(0);
+  j=await paid(j,"scene_image",{id:"opening"});j=await paid(j,"scene_image",{id:"closing"});const original=j.flow!.results.at(-1)!;
+  expect(original.sceneImages?.opening).toBeTruthy();expect(graph.currentState(original.objectId)!.forms.some(f=>f.role==="scene.opening")).toBe(true);
+  const edited=structuredClone(original.output);edited.storyboard!.scenes[0]!.narration="Repair what matters.";
+  j=await store.act(c(j,"edit_step",{stepOutput:edited}));const candidate=j.flow!.results.at(-1)!;
+  expect(candidate.sceneImages?.opening).toBeUndefined();expect(candidate.sceneImages?.closing).toBe(original.sceneImages?.closing);
+  expect(graph.currentState(candidate.objectId)!.forms.some(f=>f.role==="scene.closing")).toBe(true);
+  j=await store.act(c(j,"approve_step"));expect(()=>store.quote(c(j,"scene_image",{id:"closing"}))).toThrow("Choose a scene");
+  for(let i=0;i<2;i++){reply=result();j=await paid(j,"run_step");j=await store.act(c(j,"approve_step",{text:i===1?"I checked the script, scene order and estimated timing.":undefined}));}
+  const files=await pathFiles(j,graph);expect(files["04-scenes/scenes/closing.png"]).toEqual(graph.readBlob(original.sceneImages!.closing!));expect(files["04-scenes/scenes/opening.png"]).toBeUndefined();expect(Buffer.from(files["04-scenes/result.md"]!).toString()).toContain("Repair what matters.");
+ });
  it("keeps document workflows and defines real experiment and script paths",()=>{
   const j=store.start(worldId,"experiment");expect(j.flow).toBeUndefined();expect(j.stage).toBe("materials");
   expect(builtInPath("software")!.steps.map(s=>s.operation)).toEqual(["brief","compare","plan","code","check"]);

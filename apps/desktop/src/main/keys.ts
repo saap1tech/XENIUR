@@ -27,7 +27,7 @@ export class SafeStorageKeyStore implements KeyStore {
   }
 
   static available(): boolean {
-    try { return safeStorage.isEncryptionAvailable(); } catch { return false; }
+    try { return safeStorage.isEncryptionAvailable() && (process.platform !== "linux" || safeStorage.getSelectedStorageBackend() !== "basic_text"); } catch { return false; }
   }
 
   has(p: ModelProvider): boolean { return this.#load().has(p); }

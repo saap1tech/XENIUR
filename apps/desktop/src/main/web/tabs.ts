@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, statSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync,writeFileSync,rmSync } from "node:fs";
 import { join } from "node:path";
-import { BrowserWindow, WebContentsView, session as electronSession } from "electron";
+import { BrowserWindow, WebContentsView, dialog, session as electronSession } from "electron";
 import type { BrowserProfile, BrowserState, BrowserTab, HeldDownload, ProfileKind, Rect, TabSnapshot, WebRiskResult } from "@xeniur/core";
 import { MAX_DOWNLOAD_BYTES, MAX_SNAPSHOT_CHARS, newId, now } from "@xeniur/core";
 import type { ObjectGraph } from "@xeniur/graph";
@@ -47,6 +47,8 @@ export class TabManager {
   private readonly live = new Map<string, Live>();
   private readonly sessions = new Map<string, { session: Electron.Session; proxy: PublicWebProxy }>();
   private activeTabId: string | null = null;
+  private comparedTabId:string|null=null;
+  private fullscreenChange:Promise<boolean>=Promise.resolve(false);
 
   constructor(
     private readonly window: BrowserWindow,
@@ -73,9 +75,12 @@ export class TabManager {
 
   /** Forgetting a profile closes its tabs and clears its stored session. */
   async removeProfile(profileId: string): Promise<void> {
+    const profile=this.#profile(profileId);
     for (const [id, l] of this.live) if (l.profile.id === profileId) this.closeTab(id);
     const held = this.sessions.get(profileId);
-    if (held) { await held.session.clearStorageData(); held.proxy.close(); this.sessions.delete(profileId); }
+    await (held?.session??electronSession.fromPartition(profile.partition)).clearStorageData();
+    if (held) { held.proxy.close(); this.sessions.delete(profileId); }
+    this.graph.db.prepare("UPDATE browser_tabs SET closed_at=? WHERE profile_id=? AND closed_at IS NULL").run(now(),profileId);
     this.graph.db.prepare(`DELETE FROM browser_profiles WHERE id = ?`).run(profileId);
   }
 
@@ -124,11 +129,11 @@ export class TabManager {
     });
 
     // Held, never taken: the file lands in a scratch folder with its hash, and the person decides.
-    session.on("will-download", (_event, item) => {
-      const tab = [...this.live.values()].find((x) => x.view.webContents.session === session);
+    session.on("will-download", (_event, item, contents) => {
+      const tab = [...this.live.values()].find((x) => x.view.webContents.id === contents?.id);
       const dir = join(this.downloadsDir, tab?.tab.id ?? "unassigned");
       mkdirSync(dir, { recursive: true });
-      const path = join(dir, safeFilename(item.getFilename()));
+      const path = join(dir, `${newId()}-${safeFilename(item.getFilename())}`);
       item.setSavePath(path);
       item.on("updated", () => { if (item.getReceivedBytes() > MAX_DOWNLOAD_BYTES) item.cancel(); });
       item.once("done", (_e, state) => {
@@ -147,18 +152,18 @@ export class TabManager {
 
   /* ---------------------------------------------------------------------- tabs */
 
-  async openTab(input: { profileId: string; url: string; worldId?: string | null; goalId?: string | null; stepId?: string | null }): Promise<BrowserTab> {
+  async openTab(input: { profileId: string; url: string; worldId?: string | null; goalId?: string | null; stepId?: string | null },restore?:BrowserTab): Promise<BrowserTab> {
     const profile = this.#profile(input.profileId);
     const { url } = await checkedDestination(input.url);
     const risk = await this.risk.allow(url.href);
     const session = await this.#sessionFor(profile);
 
     const position = (this.graph.db.prepare(`SELECT COUNT(*) c FROM browser_tabs WHERE closed_at IS NULL`).get() as { c: number }).c;
-    const tab: BrowserTab = {
+    const tab: BrowserTab = restore ?? {
       id: newId(), profileId: profile.id, worldId: input.worldId ?? null, goalId: input.goalId ?? null,
       stepId: input.stepId ?? null, url: url.href, title: "", position, openedAt: now(), closedAt: null,
     };
-    this.graph.db.prepare(
+    if(!restore)this.graph.db.prepare(
       `INSERT INTO browser_tabs (id, profile_id, world_id, goal_id, step_id, url, title, position, opened_at, closed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
     ).run(tab.id, tab.profileId, tab.worldId, tab.goalId, tab.stepId, tab.url, tab.title, tab.position, tab.openedAt);
     this.graph.db.prepare(`UPDATE browser_profiles SET last_used_at = ? WHERE id = ?`).run(now(), profile.id);
@@ -184,6 +189,14 @@ export class TabManager {
     };
     contents.on("will-navigate", guard);
     contents.on("will-redirect", guard);
+    const rememberUrl = (_event: Electron.Event, url: string): void => {
+      const l = this.live.get(tab.id); if (!l) return;
+      l.tab = { ...l.tab, url };
+      this.graph.db.prepare("UPDATE browser_tabs SET url = ? WHERE id = ?").run(url, tab.id);
+      this.onChanged(tab.id);
+    };
+    contents.on("did-navigate", rememberUrl);
+    contents.on("did-navigate-in-page", rememberUrl);
     contents.on("page-title-updated", (_e, title) => {
       const l = this.live.get(tab.id); if (!l) return;
       l.tab = { ...l.tab, title };
@@ -206,7 +219,7 @@ export class TabManager {
     this.live.set(tab.id, { tab, view, profile, risk, error: null, browserState: "person", acting: false, grantOrigins: [] });
     this.window.contentView.addChildView(view);
     view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
-    this.activate(tab.id);
+    void this.activate(tab.id);
     try { await contents.loadURL(url.href); } catch (error) {
       const l = this.live.get(tab.id); if (l) l.error ??= error instanceof Error ? error.message : "The site did not load.";
     }
@@ -232,30 +245,63 @@ export class TabManager {
   stopFind(tabId: string): void { this.#live(tabId).view.webContents.stopFindInPage("clearSelection"); }
 
   /** One tab is visible at a time; the rest sit at zero size, still loaded. */
-  setFullscreen(enabled:boolean):boolean { this.window.setFullScreen(enabled);return enabled; }
+  setFullscreen(enabled:boolean):Promise<boolean> {
+    const change=this.fullscreenChange.catch(()=>false).then(()=>new Promise<boolean>((resolve,reject)=>{
+      if(this.window.isDestroyed()){reject(new Error("The browser window is closed."));return;}
+      if(this.window.isFullScreen()===enabled){resolve(enabled);return;}
+      const remove=()=>{if(enabled)this.window.removeListener("enter-full-screen",done);else this.window.removeListener("leave-full-screen",done);};
+      const done=()=>{clearTimeout(timer);remove();resolve(enabled);};
+      const timer=setTimeout(()=>{remove();reject(new Error("The window could not change full-screen mode. Try again."));},6000);
+      if(enabled)this.window.once("enter-full-screen",done);else this.window.once("leave-full-screen",done);
+      this.window.setFullScreen(enabled);
+    }));
+    this.fullscreenChange=change;return change;
+  }
 
-  activate(tabId: string): void {
-    this.activeTabId = tabId;
-    for (const [id, l] of this.live) if (id !== tabId) l.view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+  /** Restore a persisted tab only when the person opens it; no automatic background browsing. */
+  async activate(tabId: string): Promise<void> {
+    if(!this.live.has(tabId)){
+      const row=this.graph.db.prepare("SELECT * FROM browser_tabs WHERE id=? AND closed_at IS NULL").get(tabId) as TabRow|undefined;
+      if(!row)throw new Error("This tab is closed.");
+      const tab=tabFromRow(row);await this.openTab({profileId:tab.profileId,url:tab.url,worldId:tab.worldId,goalId:tab.goalId,stepId:tab.stepId},tab);
+    }
+    this.activeTabId=tabId;this.comparedTabId=null;
+    for(const [id,l]of this.live)if(id!==tabId)l.view.setBounds({x:0,y:0,width:0,height:0});
+    this.onChanged(tabId);
+  }
+  async compare(tabId:string,otherId:string|null):Promise<void>{
+    const first=this.graph.db.prepare("SELECT * FROM browser_tabs WHERE id=? AND closed_at IS NULL").get(tabId) as TabRow|undefined;
+    const other=otherId?this.graph.db.prepare("SELECT * FROM browser_tabs WHERE id=? AND closed_at IS NULL").get(otherId) as TabRow|undefined:null;
+    if(!first||(otherId&&(!other||other.world_id!==first.world_id||otherId===tabId)))throw new Error("Choose two different tabs in this project.");
+    await this.activate(tabId);if(otherId&&!this.live.has(otherId))await this.activate(otherId);
+    this.activeTabId=tabId;this.comparedTabId=otherId;
+    for(const [id,l]of this.live)if(id!==tabId&&id!==otherId)l.view.setBounds({x:0,y:0,width:0,height:0});
+    this.onChanged(tabId);
+  }
+  setBounds(tabId:string,rect:Rect):void{
+    if((this.activeTabId!==tabId&&this.comparedTabId!==tabId)||!this.live.has(tabId))return;
+    const bounds=this.window.getContentBounds(),x=Math.max(0,Math.min(bounds.width,Math.round(rect.x))),y=Math.max(0,Math.min(bounds.height,Math.round(rect.y)));
+    // Round the edges together so fractional flex widths cannot overlap adjacent views.
+    const right=Math.min(bounds.width,Math.round(rect.x+rect.width)),bottom=Math.min(bounds.height,Math.round(rect.y+rect.height));
+    this.#live(tabId).view.setBounds({x,y,width:Math.max(0,right-x),height:Math.max(0,bottom-y)});
+  }
+  closeTab(tabId:string):void{
+    const l=this.live.get(tabId);if(l){this.window.contentView.removeChildView(l.view);l.view.webContents.close();this.live.delete(tabId);}
+    this.graph.db.prepare("UPDATE browser_tabs SET closed_at=? WHERE id=?").run(now(),tabId);
+    if(this.activeTabId===tabId)this.activeTabId=null;
+    if(this.comparedTabId===tabId)this.comparedTabId=null;
     this.onChanged(tabId);
   }
 
-  setBounds(tabId: string, rect: Rect): void {
-    if (this.activeTabId !== tabId || !this.live.has(tabId)) return;
-    this.#live(tabId).view.setBounds({ x: Math.round(rect.x), y: Math.round(rect.y), width: Math.max(0, Math.round(rect.width)), height: Math.max(0, Math.round(rect.height)) });
+  closeAll(preserveTabs=false): void {
+    for (const [id,l] of this.live) {
+      if(!preserveTabs){this.closeTab(id);continue;}
+      this.window.contentView.removeChildView(l.view);l.view.webContents.close();this.live.delete(id);
+    }
+    this.activeTabId=null;this.comparedTabId=null;
+    for(const held of this.sessions.values())held.proxy.close();
+    this.sessions.clear();
   }
-
-  closeTab(tabId: string): void {
-    const l = this.live.get(tabId); if (!l) return;
-    this.window.contentView.removeChildView(l.view);
-    l.view.webContents.close();
-    this.live.delete(tabId);
-    this.graph.db.prepare(`UPDATE browser_tabs SET closed_at = ? WHERE id = ?`).run(now(), tabId);
-    if (this.activeTabId === tabId) this.activeTabId = [...this.live.keys()][0] ?? null;
-    this.onChanged(tabId);
-  }
-
-  closeAll(): void { for (const id of [...this.live.keys()]) this.closeTab(id); }
 
   /** Open tabs, live first; a project's own, or the unassigned ones when no project is given. */
   tabs(worldId?: string | null): BrowserTab[] {
@@ -314,20 +360,30 @@ export class TabManager {
   webContentsOf(tabId: string): Electron.WebContents | null { return this.live.get(tabId)?.view.webContents ?? null; }
   isVisible(tabId: string): boolean {
     const l = this.live.get(tabId);
-    if (!l || this.activeTabId !== tabId) return false;
+    if (!l || (this.activeTabId !== tabId&&this.comparedTabId!==tabId)) return false;
     const b = l.view.getBounds();
     return b.width > 0 && b.height > 0;
   }
 
   /* -------------------------------------------------------------- downloads */
 
-  downloads(): HeldDownload[] {
-    return (this.graph.db.prepare(`SELECT * FROM held_downloads WHERE decided IS NULL ORDER BY at DESC`).all() as DownloadRow[]).map((r) => ({
+  downloads(worldId?:string|null): HeldDownload[] {
+    const rows=worldId===undefined?this.graph.db.prepare("SELECT * FROM held_downloads WHERE decided IS NULL ORDER BY at DESC").all():this.graph.db.prepare("SELECT d.* FROM held_downloads d JOIN browser_tabs t ON t.id=d.tab_id WHERE d.decided IS NULL AND t.world_id IS ? ORDER BY d.at DESC").all(worldId);
+    return (rows as DownloadRow[]).map((r) => ({
       id: r.id, tabId: r.tab_id, filename: r.filename, mime: r.mime, bytes: r.bytes, sha256: r.sha256, path: r.path, at: r.at,
     }));
   }
-  decideDownload(id: string, decision: "kept" | "discarded"): void {
-    this.graph.db.prepare(`UPDATE held_downloads SET decided = ? WHERE id = ?`).run(decision, id);
+  async decideDownload(id:string,decision:"kept"|"discarded"):Promise<void>{
+    const row=this.graph.db.prepare("SELECT * FROM held_downloads WHERE id=? AND decided IS NULL").get(id) as DownloadRow|undefined;
+    if(!row)throw new Error("This download has already been handled.");
+    if(decision==="kept"){
+      const bytes=readFileSync(row.path);if(bytes.length>MAX_DOWNLOAD_BYTES||createHash("sha256").update(bytes).digest("hex")!==row.sha256)throw new Error("This download changed. Download a fresh copy.");
+      const destination=await dialog.showSaveDialog(this.window,{title:"Save downloaded file",defaultPath:row.filename});
+      if(destination.canceled||!destination.filePath)return;
+      writeFileSync(destination.filePath,bytes);
+    }
+    this.graph.db.prepare("UPDATE held_downloads SET decided=? WHERE id=? AND decided IS NULL").run(decision,id);
+    rmSync(row.path,{force:true});this.onChanged(row.tab_id);
   }
 
   #live(tabId: string): Live {
