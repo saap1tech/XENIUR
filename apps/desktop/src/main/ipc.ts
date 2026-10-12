@@ -40,6 +40,8 @@ const Rect = z.object({
  */
 const SCHEMAS = {
   "journey:get": Uuid,
+  "journey:models": Uuid,
+  "journey:setModels": z.object({ worldId: UuidSchema, text: z.string().min(1).max(200).nullable(), image: z.string().min(1).max(200).nullable() }).strict(),
   "journey:cancel": Uuid,
   "journey:insights": Uuid,
   "journey:passage": z.object({worldId:UuidSchema,versionId:UuidSchema,passageId:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),
@@ -374,6 +376,8 @@ export function registerIpc(services: Services): void {
 
   const handlers: { [K in Channel]: (args: z.infer<(typeof SCHEMAS)[K]>) => unknown } = {
     "journey:get": ({id}) => services.journey.get(id),
+    "journey:models": ({id}) => services.projectModels.view(id),
+    "journey:setModels": ({worldId,text,image}) => services.projectModels.set(worldId,text,image),
     "journey:cancel": ({id}) => services.journey.cancel(id),
     "journey:insights": ({id}) => services.journey.insights(id),
     "journey:passage": ({worldId,versionId,passageId}) => services.journey.passage(worldId,versionId,passageId),
@@ -1233,8 +1237,18 @@ export function registerIpc(services: Services): void {
         // Who is asking, then what are they asking. Both, in that order, every time.
         assertTrustedSender(event);
         const args = SCHEMAS[channel].parse(payload);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- one cast at the boundary
-        return await (handlers[channel] as (a: any) => unknown)(args);
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- one cast at the boundary
+          return await (handlers[channel] as (a: any) => unknown)(args);
+        } catch (inner) {
+          // The request was valid; something the handler read (most often a model's answer) was not.
+          // That is not the person's request being refused, so it is not reported as one.
+          if (inner instanceof z.ZodError) {
+            console.error(`[XENIUR] ${channel}: unexpected result — ${inner.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
+            throw new Error("The AI's answer was incomplete, so nothing from it was kept. You can run the step again.");
+          }
+          throw inner;
+        }
       } catch (err) {
         if (err instanceof UntrustedSenderError) {
           console.error(`[XENIUR] ${channel}: ${err.message} (origin ${err.origin})`);

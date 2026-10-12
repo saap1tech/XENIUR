@@ -17,7 +17,10 @@ export function splitPassages(sourceId:string,sourceVersionId:string,text:string
 }
 const stop=new Set("the a an and or of to in on for with from this that what how is are be as by your our about review recent evidence resources work project".split(" "));
 const terms=(query:string)=>[...new Set(query.toLowerCase().match(/[\p{L}\p{N}]{2,}/gu)??[])].filter(t=>!stop.has(t)).slice(0,24);
-const normalize=(text:string)=>text.replace(/\s+/g," ").trim();
+/** Spacing and typography never decide whether words match: curly and straight quotes, dash kinds
+ *  and non-breaking spaces read the same. The words themselves must still match exactly. */
+const normalize=(text:string)=>text.normalize("NFKC").replace(/[\u2018\u2019\u201A\u2032]/g,"'").replace(/[\u201C\u201D\u201E\u2033]/g,'"')
+  .replace(/[\u2010-\u2015\u2212]/g,"-").replace(/\u2026/g,"...").replace(/\s+/g," ").trim();
 
 /** Local full-text index of immutable source versions. No embedding provider or remote query. */
 export class EvidenceIndex {
@@ -58,10 +61,26 @@ export class EvidenceIndex {
     }
     return {passages,coverage};
   }
+  /**
+   * Every quote must appear, word for word, in a passage that was supplied from an allowed source.
+   * A model that credits a real quote to the neighbouring passage (they overlap) is corrected to the
+   * passage that holds it, with that passage's page; a quote found in no supplied passage is refused.
+   */
   validate(citations:PassageCitation[],offered:EvidencePassage[],allowedSources:string[]){
-    for(const c of citations){const p=offered.find(p=>p.id===c.passageId);
-      if(!p||p.sourceId!==c.sourceId||p.sourceVersionId!==c.sourceVersionId||p.page!==c.page||!allowedSources.includes(c.sourceId)||!normalize(p.text).includes(normalize(c.quote)))
-        throw new Error("A quoted passage did not match the supplied source, version and page. Create a corrected draft.");
+    if(this.verified(citations,offered,allowedSources).removed)throw new Error("A quoted passage did not match the supplied source, version and page. Create a corrected draft.");
+  }
+  /** The citations whose quote is really in the source (re-anchored as above), and how many were not. */
+  verified(citations:PassageCitation[],offered:EvidencePassage[],allowedSources:string[]):{kept:PassageCitation[];removed:number}{
+    const kept:PassageCitation[]=[];
+    for(const c of citations){
+      if(!allowedSources.includes(c.sourceId))continue;
+      const quote=normalize(c.quote??"");
+      const holds=(p:EvidencePassage)=>p.sourceId===c.sourceId&&p.sourceVersionId===c.sourceVersionId&&quote.length>0&&normalize(p.text).includes(quote);
+      const named=offered.find(p=>p.id===c.passageId);
+      const p=named&&holds(named)?named:offered.find(holds);
+      if(!p)continue;
+      c.passageId=p.id;c.page=p.page;kept.push(c);
     }
+    return {kept,removed:citations.length-kept.length};
   }
 }

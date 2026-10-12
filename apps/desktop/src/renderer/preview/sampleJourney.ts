@@ -1,4 +1,4 @@
-import { builtInPath, JOURNEY_FONTS, JOURNEY_LAYOUTS, type StepOutput, type Journey, type JourneyCommand, type JourneyKind, type XeniurBridge } from "@xeniur/core";
+import { builtInPath, JOURNEY_FONTS, JOURNEY_LAYOUTS, type StepOutput, type Journey, type JourneyCommand, type JourneyKind, type ModelChoiceView, type ProjectModelsView, type XeniurBridge } from "@xeniur/core";
 import { renderPathVisual } from "../../main/journey/path-visuals.js";
 const sampleVisuals=new Map<string,string>();
 const uuid=(n:number)=>`44444444-4444-4444-8444-${String(n).padStart(12,"0")}`;
@@ -52,6 +52,19 @@ export function sampleJourneyBridge():XeniurBridge["journey"] {
     }
     return version();
   };
-  return {cancel:async()=>false,insights:async()=>({runs:[],outcomes:{}}),passage:async()=>{throw new Error("Sample preview: no real source passage.");},get:async()=>j?structuredClone(j):null,start:async(worldId,kind)=>{j={id:uuid(90),versionId:uuid(91),worldId,goalId:uuid(92),kind,stage:"materials",resources:[],suggestions:[],report:null,outline:null,draft:null,figureIds:[],reportObjectId:null,outlineObjectId:null,draftObjectId:null,illustration:null,choices:{palette:null,font:null,layout:null},decisions:[],feedbackCount:0,reviewed:false,updatedAt:Date.now()};const definition=builtInPath(kind);if(definition||kind==="custom"){j.flow={definition,approved:!!definition,index:0,results:[],request:""};if(kind==="custom")j.stage="path";}return structuredClone(j);},quote:async(c)=>({action:c.action,maximumUsd:.024,model:"Sample preview · no model call",sends:"Sample data only"}),act,
+  // Sample ratings mirror packages/models/src/ratings.ts.
+  const text:ModelChoiceView[]=[
+    {id:"openrouter:qwen/qwen3-235b-a22b-2507",label:"Qwen3 235B A22B Instruct 2507",model:"qwen/qwen3-235b-a22b-2507",output:"text",fit:"best",note:"Accurate, well-sourced writing. Quotes stay faithful to your sources.",inputPerMTok:.09,outputPerMTok:.55},
+    {id:"openrouter:mistralai/mistral-small-3.2-24b-instruct",label:"Mistral Small 3.2 24B",model:"mistralai/mistral-small-3.2-24b-instruct",output:"text",fit:"untested",note:"",inputPerMTok:.094,outputPerMTok:.25},
+    {id:"openrouter:openai/gpt-4o-mini",label:"OpenAI: GPT-4o-mini",model:"openai/gpt-4o-mini",output:"text",fit:"limited",note:"Fast at finding sources; less precise when quoting them.",inputPerMTok:.15,outputPerMTok:.6},
+    {id:"openrouter:deepseek/deepseek-v4-flash",label:"DeepSeek V4 Flash",model:"deepseek/deepseek-v4-flash",output:"text",fit:"limited",note:"Reasons at length before answering; long steps may not finish.",inputPerMTok:.03,outputPerMTok:1.28},
+  ];
+  const image:ModelChoiceView[]=[
+    {id:"openrouter:image:bytedance-seed/seedream-5-0-flash",label:"Seedream 5.0 Flash",model:"bytedance-seed/seedream-5-0-flash",output:"image",fit:"best",note:"Clean, consistent illustrations at a fixed price.",imagePriceUsd:.018},
+    {id:"openrouter:image:recraft/recraft-v4.1-flash",label:"Recraft V4.1 Flash",model:"recraft/recraft-v4.1-flash",output:"image",fit:"untested",note:"",imagePriceUsd:.007},
+  ];
+  let chosen:{text:string|null;image:string|null}={text:null,image:null};
+  const modelsView=():ProjectModelsView=>({text,image,chosen:{...chosen},current:{text:chosen.text??text[0]!.id,image:chosen.image??image[0]!.id}});
+  return {models:async()=>modelsView(),setModels:async(_w,t,i)=>{chosen={text:t,image:i};return modelsView();},cancel:async()=>false,insights:async()=>({runs:[],outcomes:{}}),passage:async()=>{throw new Error("Sample preview: no real source passage.");},get:async()=>j?structuredClone(j):null,start:async(worldId,kind)=>{j={id:uuid(90),versionId:uuid(91),worldId,goalId:uuid(92),kind,stage:"materials",resources:[],suggestions:[],report:null,outline:null,draft:null,figureIds:[],reportObjectId:null,outlineObjectId:null,draftObjectId:null,illustration:null,choices:{palette:null,font:null,layout:null},decisions:[],feedbackCount:0,reviewed:false,updatedAt:Date.now()};const definition=builtInPath(kind);if(definition||kind==="custom"){j.flow={definition,approved:!!definition,index:0,results:[],request:""};if(kind==="custom")j.stage="path";}return structuredClone(j);},quote:async(c)=>({action:c.action,maximumUsd:.024,model:"Sample preview · no model call",sends:"Sample data only"}),act,
     upload:async()=>{j!.resources.push(resource());return version();},addNote:async(w,v,title,text)=>{const r=resource();r.title=title;r.textLength=text.length;j!.resources.push(r);return version();},addUrl:async()=>{j!.resources.push(resource());return version();},sourcePage:async()=>"sample-topic-illustration",useObject:async()=>{j!.resources.push(resource());return version();},sourceFigure:async()=>version(),export:async()=>({path:"Sample preview — export from the desktop app",pdf:false,warning:"No real file is saved in this web preview."})};
 }

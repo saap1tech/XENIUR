@@ -12,11 +12,18 @@ import { contextBridge, ipcRenderer } from "electron";
  * Remote pages and generated code get no preload at all, so window.xeniur is simply
  * undefined inside them.
  */
+/** Electron wraps every handler failure as "Error invoking remote method '…': Error: …". The person
+ *  should read only the sentence the main process wrote, so the transport's prefix is removed here. */
 const call = <T>(channel: string, payload?: unknown): Promise<T> =>
-  ipcRenderer.invoke(channel, payload) as Promise<T>;
+  (ipcRenderer.invoke(channel, payload) as Promise<T>).catch((cause: unknown) => {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    throw new Error(message.replace(/^Error invoking remote method '[^']*': (?:[A-Za-z]*Error: )?/, ""));
+  });
 
 contextBridge.exposeInMainWorld("xeniur", {
   journey: {
+    models:(worldId:string)=>call("journey:models",{id:worldId}),
+    setModels:(worldId:string,text:string|null,image:string|null)=>call("journey:setModels",{worldId,text,image}),
     cancel:(worldId:string)=>call("journey:cancel",{id:worldId}),
     insights:(worldId:string)=>call("journey:insights",{id:worldId}),
     passage:(worldId:string,versionId:string,passageId:string)=>call("journey:passage",{worldId,versionId,passageId}),

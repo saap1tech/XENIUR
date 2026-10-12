@@ -41,6 +41,8 @@ type View =
 export function App() {
   const [worlds, setWorlds] = useState<WorldRow[]>([]);
   const [view, setView] = useState<View>({ kind: "home" });
+  // A new screen starts at its top; the previous screen's scroll position belongs to that screen.
+  useEffect(() => { window.scrollTo(0, 0); }, [view.kind]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [info, setInfo] = useState<SystemInfo | null>(null);
   const [busy, setBusy] = useState(false);

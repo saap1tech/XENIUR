@@ -95,6 +95,24 @@ export interface SystemInfo {
 }
 
 /** One provider as the first-run scene shows it: what a key would unlock, never the key. */
+/** How well a model suits XENIUR's steps (see packages/models/src/ratings.ts). */
+export type ModelFitView = "best" | "good" | "limited" | "care" | "untested";
+/** One model a project can use, with its rating and price, said for a person choosing. */
+export interface ModelChoiceView {
+  id: string; label: string; model: string; output: "text" | "image";
+  /** How well it suits XENIUR's work, and a short line on what it is good at; empty when nothing is known. */
+  fit: ModelFitView; note: string;
+  inputPerMTok?: number; outputPerMTok?: number; imagePriceUsd?: number;
+}
+/** The models a project may use, what it chose, and what will actually run. */
+export interface ProjectModelsView {
+  text: ModelChoiceView[]; image: ModelChoiceView[];
+  /** The project's own choice; null follows the app-wide setting. */
+  chosen: { text: string | null; image: string | null };
+  /** The model each kind of step will use right now. */
+  current: { text: string | null; image: string | null };
+}
+
 export interface ModelProviderView {
   id: string;
   label: string;
@@ -105,7 +123,7 @@ export interface ModelProviderView {
   verified?: boolean;
   unlocks: { intelligence: string[]; generation: string[] };
   models: Array<{ id: string; label: string; priceVerifiedOn: string | null; callable: boolean; selected?: boolean; accessible?: boolean;
-    inputPerMTok?: number; outputPerMTok?: number; output?: "text" | "image"; imagePriceUsd?: number }>;
+    inputPerMTok?: number; outputPerMTok?: number; output?: "text" | "image"; imagePriceUsd?: number; fit?: ModelFitView; fitNote?: string }>;
 }
 
 export interface IntentResult {
@@ -127,6 +145,10 @@ export interface IntentResult {
  */
 export interface XeniurBridge {
   journey: {
+    /** The models this project may use, rated, with its own choice and what will run. */
+    models(worldId:string):Promise<ProjectModelsView>;
+    /** Choose this project's models; null follows the app-wide setting. */
+    setModels(worldId:string,text:string|null,image:string|null):Promise<ProjectModelsView>;
     cancel(worldId:string):Promise<boolean>;
     insights(worldId:string):Promise<{runs:import("./evidence.js").JourneyRun[];outcomes:Record<string,number>}>;
     passage(worldId:string,versionId:string,passageId:string):Promise<import("./evidence.js").EvidencePassage>;

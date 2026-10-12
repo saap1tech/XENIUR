@@ -1,7 +1,26 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "renderer-preview", "runtimeExecutable": "npx", "runtimeArgs": ["-y", "serve", "-l", "5177", "apps/desktop/out/renderer"], "port": 5177 },
-    { "name": "renderer-dev", "runtimeExecutable": "npm", "runtimeArgs": ["run", "preview:web"], "port": 5180 }
+    {
+      "name": "renderer-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "-y",
+        "serve",
+        "-l",
+        "5177",
+        "apps/desktop/out/renderer"
+      ],
+      "port": 5177
+    },
+    {
+      "name": "renderer-dev",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-lc",
+        "source ~/.nvm/nvm.sh && nvm use 22 >/dev/null && npm run preview:web"
+      ],
+      "port": 5180
+    }
   ]
 }

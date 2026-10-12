@@ -38,7 +38,7 @@ export function todayFor(graph: ObjectGraph, opts: { rhythm?: RhythmStore; at?: 
      WHERE d.state = 'needs_review' ORDER BY d.accepted_at`,
   ).all() as Array<{ object_id: string; question: string; world_id: string }>;
   for (const d of reviews) {
-    push({ id: `decision:${d.object_id}`, kind: "decision_review", text: `Decision "${d.question}" — something it rested on changed`,
+    push({ id: `decision:${d.object_id}`, kind: "decision_review", text: `Check this decision again: ${d.question.replace(/^[“"]|[”"]$/g, "")} — something it rested on changed`,
       worldId: d.world_id, worldTitle: worldTitle(d.world_id), objectId: d.object_id, zone: "decisions", verb: "Review" });
   }
 

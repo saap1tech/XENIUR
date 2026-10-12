@@ -13,7 +13,7 @@ import { readResource,cropPdfFigure } from "./resources.js";
 let graph:ObjectGraph,sense:SensemakingStore,store:JourneyStore,dir:string,worldId:string;
 let reply:any,calls:any[],downloaded:string[];
 const reading={title:"Real notes",text:"The measured cell operated under a stated current and duration. Those conditions do not establish the full process energy requirement.",raw:Buffer.from("notes"),pdf:false,partial:false,pages:0};
-const model=ModelEntrySchema.parse({id:"router",model:"example/llm",provider:"openrouter",label:"LLM",contextWindow:100000,price:{inputPerMTok:.3,outputPerMTok:2.5,verifiedOn:"2026-09-28"},modelVerified:true});
+const model=ModelEntrySchema.parse({id:"router",model:"example/llm",provider:"openrouter",label:"LLM",contextWindow:100000,price:{inputPerMTok:.3,outputPerMTok:2.5,verifiedOn:new Date().toISOString().slice(0,10)},modelVerified:true});
 beforeEach(()=>{
  dir=mkdtempSync(join(tmpdir(),"xeniur-journey-"));graph=ObjectGraph.open({dbPath:join(dir,"work.db"),blobDir:join(dir,"blobs")});sense=new SensemakingStore(graph,{frictionThreshold:5});
  worldId=graph.createWorld({title:"Electrolysis review",emoji:"R"}).id;graph.goals.create(worldId,"Review electrolysis evidence");calls=[];downloaded=[];reply={};
@@ -195,4 +195,77 @@ describe("general work paths",()=>{
   graph.setProperties(code.objectId,{title:"Changed externally"}); // Property edits are not content revisions.
   const state=graph.currentState(code.objectId)!;graph.commitVersion({objectId:code.objectId,forms:state.forms,label:"Changed code"});expect(()=>store.validateExport(worldId,j.versionId)).toThrow("changed");
  });
+});
+
+describe("tidyReport", () => {
+  it("mends shape slips without touching findings or their sources", async () => {
+    const { tidyReport } = await import("./store.js");
+    const finding = (n: number) => ({ text: `f${n}`, sourceIds: [] });
+    const tidy = tidyReport({ title: "t", summary: "s", illustration: "i", findings: [1, 2, 3, 4, 5, 6, 7].map(finding),
+      palettes: [{ id: "sea", name: "Sea", colors: ["#000000", "#111111", "#FFFFFF"] }] }) as { findings: unknown[]; gaps: unknown[]; palettes: { id: string }[] };
+    expect(tidy.findings).toEqual([1, 2, 3, 4, 5].map(finding));
+    expect(tidy.gaps).toEqual([]);
+    expect(tidy.palettes.map((p) => p.id)).toEqual(["sea", "mineral"]);
+    expect(tidyReport("not an object")).toBe("not an object");
+  });
+});
+
+describe("tidyOutline", () => {
+  it("keeps the titles of an over-nested deepest level and leaves the rest as written", async () => {
+    const { tidyOutline } = await import("./store.js");
+    const tidy = tidyOutline({ title: "T", sections: [{ id: "a", title: "A", purpose: "p", children: [{ title: "A1", children: [{ title: "A1a", children: [] }, "A1b"] }, { title: "A2" }] }] }) as
+      { sections: { children: { children: unknown[] }[] }[] };
+    expect(tidy.sections[0]!.children[0]!.children).toEqual(["A1a", "A1b"]);
+    expect(tidy.sections[0]!.children[1]!.children).toEqual([]);
+  });
+});
+
+describe("tidyDraft", () => {
+  it("drops a source figure with no page and keeps every word", async () => {
+    const { tidyDraft } = await import("./store.js");
+    const id = "11111111-1111-4111-8111-111111111111";
+    const sections = [{ title: "S", level: 1, paragraphs: ["kept exactly"], sourceIds: [id] }];
+    const tidy = tidyDraft({ title: "T", abstract: "A", sections, tables: null, figureIdeas: [],
+      sourceFigureIdeas: [{ sourceId: id, page: null, caption: "web" }, { sourceId: id, page: 3, caption: "pdf" }], limitations: ["l"] }) as Record<string, unknown>;
+    expect(tidy.sections).toEqual(sections);
+    expect(tidy.sourceFigureIdeas).toEqual([{ sourceId: id, page: 3, caption: "pdf" }]);
+    expect(tidy.tables).toEqual([]);
+  });
+});
+
+describe("a project's own models", () => {
+  it("quotes and runs with the project's choice, and falls back to the app setting when cleared", async () => {
+    const other = ModelEntrySchema.parse({ ...model, id: "router-2", model: "example/careful", label: "Careful", price: { ...model.price, inputPerMTok: .1, outputPerMTok: .5 } });
+    const own = new JourneyStore({ graph, sense, spend: new SpendLedger(graph.db, { perActionUsdMax: 1, perTaskUsdMax: 5, totalUsdMax: 100 }),
+      models: () => [model], catalog: () => [model, other], key: () => "test-key", download: async (url) => ({ ...reading, url }),
+      fetch: async (url, init) => { calls.push({ url, init }); return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(reply) } }], usage: { cost: .001 } })); } });
+    let j = own.start(worldId, "review"); j = own.addResource(worldId, j.versionId, reading);
+    expect(own.quote(c(j, "summarize")).model).toBe("LLM");
+    own.setProjectModels(worldId, "router-2", null);
+    expect(own.projectModels(worldId)).toEqual({ text: "router-2", image: null });
+    expect(own.quote(c(j, "summarize")).model).toBe("Careful");
+    reply = report(j); await own.act({ ...c(j, "summarize"), maximumUsd: own.quote(c(j, "summarize")).maximumUsd });
+    expect(JSON.parse(calls.at(-1).init.body).model).toBe("example/careful");
+    own.setProjectModels(worldId, null, null);
+    expect(own.currentModel(worldId, false)?.id).toBe("router");
+    expect(() => own.setProjectModels(worldId, "not-callable", null)).toThrow("not available");
+  });
+});
+
+describe("quotes in a paid answer", () => {
+  it("keeps the word-for-word quotes, leaves out a paraphrase and records it, and refuses an answer with no real quote", async () => {
+    let j = start();
+    const { EvidenceIndex } = await import("./evidence.js");
+    const index = new EvidenceIndex(graph), resource = j.resources[0]!, version = sense.getSourceVersion(resource.sourceVersionId)!;
+    index.ensure(resource, graph.readBlob(version.textBlobHash).toString("utf8"));
+    const p = index.select([resource], "measurement").passages[0]!;
+    const cite = (quote: string) => ({ passageId: p.id, sourceId: p.sourceId, sourceVersionId: p.sourceVersionId, page: p.page, quote });
+    reply = report(j);
+    reply.findings[0].citations = [cite("Those conditions do not establish the full process energy requirement."), cite("These conditions prove the whole process is efficient overall.")];
+    j = await paid(j, "summarize");
+    expect(j.report!.findings[0]!.citations).toHaveLength(1);
+    expect(store.insights(worldId).runs[0]!.removedQuotes).toBe(1);
+    reply = report(j); reply.findings[0].citations = [cite("Nothing like this sentence appears in the source text.")];
+    await expect(paid(j, "feedback", { text: "Shorter, please." })).rejects.toThrow("did not match");
+  });
 });

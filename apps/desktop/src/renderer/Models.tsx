@@ -3,6 +3,10 @@ import type { ModelProviderView } from "@xeniur/core";
 import { ArrowLeft, ArrowRight, Check, Image, KeyRound, LockKeyhole, Settings2, Sparkles } from "lucide-react";
 import { BrandMark } from "./BrandMark.js";
 import { ProjectIllustration } from "./ProjectIllustration.js";
+import { FitBadge } from "./ProjectModels.js";
+
+/** Better fits first in the list, as in a project's own model choice. */
+const FIT_ORDER={best:0,good:1,limited:2,untested:3,care:4} as const;
 
 export function Models({ reason, firstRun = false, onBack }: { reason?: string | null; firstRun?: boolean; onBack(): void }) {
   const bridge = window.xeniur!;
@@ -41,7 +45,7 @@ export function Models({ reason, firstRun = false, onBack }: { reason?: string |
           <label>Per month ($)<input type="number" min="0.01" max="10000" step="1" value={caps.monthlyUsdMax} onChange={e=>setCaps({...caps,monthlyUsdMax:Number(e.target.value)})}/></label>
           <button type="button" disabled={busy} onClick={()=>void run(async()=>{setCaps(await bridge.models.setBudget(caps.perActionUsdMax,caps.monthlyUsdMax));setMessage("Limits saved.");})}>Save limits</button></div>
           <small>${caps.monthlySpentUsd.toFixed(2)} this month</small>
-          {provider?.models.length?<details><summary>Choose models</summary>{["text","image"].map(kind=><div key={kind}><h3>{kind==="text"?"Thinking":"Drawing"}</h3>{provider.models.filter(m=>(m.output??"text")===kind).map(m=><label className="xr-connect__model" key={m.id}><input type="checkbox" checked={m.selected??false} disabled={busy||!m.accessible} onChange={e=>void run(async()=>{await bridge.models.select(m.id,e.target.checked);})}/>{m.label}<small>{kind==="image"?`$${m.imagePriceUsd} / image`:`$${m.inputPerMTok} / $${m.outputPerMTok} per million tokens`}</small></label>)}</div>)}</details>:null}
+          {provider?.models.length?<details><summary>Choose models</summary>{["text","image"].map(kind=><div key={kind}><h3>{kind==="text"?"Thinking":"Drawing"}</h3>{provider.models.filter(m=>(m.output??"text")===kind).sort((a,b)=>FIT_ORDER[a.fit??"untested"]-FIT_ORDER[b.fit??"untested"]||Number(!!b.selected)-Number(!!a.selected)).map(m=><label className="xr-connect__model" key={m.id}><input type="checkbox" checked={m.selected??false} disabled={busy||!m.accessible} onChange={e=>void run(async()=>{await bridge.models.select(m.id,e.target.checked);})}/>{m.label}{m.fit&&<FitBadge fit={m.fit}/>}{m.fitNote&&m.fit!=="untested"&&<small>{m.fitNote}</small>}<small>{kind==="image"?`$${m.imagePriceUsd} / image`:`$${m.inputPerMTok} / $${m.outputPerMTok} per million tokens`}</small></label>)}</div>)}</details>:null}
           {provider?.keyPresent&&<button type="button" disabled={busy} onClick={()=>void run(async()=>{await bridge.models.remove("openrouter");setMessage("Key removed.");})}>Remove key</button>}
         </details>
         <button type="button" className="xr-connect__enter xr-button" onClick={onBack}>{textReady?"Start working":"Use without AI"}<ArrowRight size={18}/></button>

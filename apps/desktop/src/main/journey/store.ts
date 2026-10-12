@@ -25,10 +25,68 @@ const PATH_STEPS = [
   {stage:"review",kind:"check",purpose:"Review the document",rule:{kind:"decision_accepted"}},
 ] as const;
 const PAID = new Set(["search","summarize","feedback","outline","edit_outline","draft","illustrate","figure","design_path","run_step","scene_image"]);
+/** Colours a report can always offer, when a model returned fewer than the two a choice needs. */
+const FALLBACK_PALETTES=[{id:"mineral",name:"Mineral",colors:["#1F3A33","#6E8F6A","#F7F5EE"]},{id:"ink",name:"Ink & paper",colors:["#1B1F2A","#7A8597","#F8F6F0"]}];
+/**
+ * Mends only the shape slips that change no claim: a report longer than one page keeps its first
+ * five findings and three gaps, missing gaps are none, and too few palettes are topped up from the
+ * built-in pair. Findings, citations and sources are untouched and are still checked strictly, so a
+ * paid answer is not thrown away for being one finding too generous.
+ */
+export function tidyReport(value:unknown):unknown {
+  if(!value||typeof value!=="object"||Array.isArray(value))return value;
+  const v={...(value as Record<string,unknown>)};
+  if(Array.isArray(v.findings))v.findings=v.findings.slice(0,5);
+  v.gaps=Array.isArray(v.gaps)?v.gaps.slice(0,3):v.gaps===undefined?[]:v.gaps;
+  if(Array.isArray(v.palettes)){const own=v.palettes.slice(0,3);const ids=new Set(own.map(p=>(p as {id?:unknown})?.id));v.palettes=[...own,...FALLBACK_PALETTES.filter(p=>!ids.has(p.id))].slice(0,Math.max(2,own.length));}
+  else if(v.palettes===undefined)v.palettes=FALLBACK_PALETTES;
+  return v;
+}
+/** An outline's deepest level is plain titles; a model that nests one more object there keeps its titles. */
+export function tidyOutline(value:unknown):unknown {
+  if(!value||typeof value!=="object"||Array.isArray(value))return value;
+  const v={...(value as Record<string,unknown>)};
+  const title=(x:unknown)=>typeof x==="string"?x:x&&typeof x==="object"&&typeof (x as {title?:unknown}).title==="string"?(x as {title:string}).title:x;
+  if(Array.isArray(v.sections))v.sections=v.sections.slice(0,12).map((section)=>{
+    if(!section||typeof section!=="object")return section;
+    const s={...(section as Record<string,unknown>)};
+    if(Array.isArray(s.children))s.children=s.children.slice(0,8).map((child)=>{
+      if(!child||typeof child!=="object")return child;
+      const c={...(child as Record<string,unknown>)};
+      c.children=Array.isArray(c.children)?c.children.slice(0,6).map(title):c.children===undefined?[]:c.children;
+      return c;
+    });
+    return s;
+  });
+  return v;
+}
+/**
+ * A draft keeps every word and citation it was written with. Only optional suggestions that cannot
+ * be acted on are dropped (a source figure with no page, which a web page never has), and lists
+ * longer than the page allows are cut at their limit. Evidence is still checked strictly afterwards.
+ */
+export function tidyDraft(value:unknown):unknown {
+  if(!value||typeof value!=="object"||Array.isArray(value))return value;
+  const v={...(value as Record<string,unknown>)};
+  const cut=(key:string,max:number)=>{if(Array.isArray(v[key]))v[key]=(v[key] as unknown[]).slice(0,max);};
+  if(Array.isArray(v.sourceFigureIdeas))v.sourceFigureIdeas=v.sourceFigureIdeas.filter((idea)=>idea&&typeof idea==="object"&&Number.isInteger((idea as {page?:unknown}).page)&&((idea as {page:number}).page>=1));
+  else if(v.sourceFigureIdeas===null)v.sourceFigureIdeas=[];
+  for(const key of ["figureIdeas","sourceFigureIdeas"])if(v[key]===undefined||v[key]===null)v[key]=[];
+  if(v.tables===undefined||v.tables===null)v.tables=[];
+  if(v.limitations===undefined||v.limitations===null)v.limitations=[];
+  cut("sections",40);cut("tables",5);cut("figureIdeas",3);cut("sourceFigureIdeas",3);cut("limitations",8);
+  if(Array.isArray(v.sections))v.sections=v.sections.map((section)=>section&&typeof section==="object"&&Array.isArray((section as {paragraphs?:unknown}).paragraphs)?{...section,paragraphs:(section as {paragraphs:unknown[]}).paragraphs.slice(0,15)}:section);
+  if(Array.isArray(v.tables))v.tables=v.tables.map((table)=>{if(!table||typeof table!=="object")return table;const t={...(table as Record<string,unknown>)};if(Array.isArray(t.columns))t.columns=t.columns.slice(0,6);if(Array.isArray(t.rows))t.rows=t.rows.slice(0,20).map((row)=>Array.isArray(row)?row.slice(0,6):row);return t;});
+  return v;
+}
+/** A model that thinks first spends its reasoning from the same allowance, so it gets three times the room; quotes include it. */
+const outputTokens=(action:string,m:ModelEntry)=>(OUT_TOKENS[action]??2000)*(m.reasoning?3:1);
 const OUT_TOKENS:Record<string,number> = { search:1800,summarize:2300,feedback:2300,outline:3000,edit_outline:3000,draft:11000,design_path:4000,run_step:12000 };
 export interface JourneyDependencies {
   graph:ObjectGraph; sense:SensemakingStore; spend:SpendLedger;
   models():ModelEntry[]; key():string|null;
+  /** Every model this machine can call (verified, freshly priced, keyed), chosen app-wide or not. */
+  catalog?():ModelEntry[];
   download(url:string):Promise<ReadResource & {url:string}>;
   reference?:()=>string; fetch?:typeof fetch; projectRoot?:string;
 }
@@ -39,7 +97,8 @@ export class JourneyStore {
   constructor(private readonly deps:JourneyDependencies) {
     this.evidenceIndex=new EvidenceIndex(deps.graph);
     deps.graph.db.exec(`CREATE TABLE IF NOT EXISTS journey_runs (id TEXT PRIMARY KEY,world_id TEXT NOT NULL,hold_id TEXT,record TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS journey_outcomes (id TEXT PRIMARY KEY,world_id TEXT NOT NULL,kind TEXT NOT NULL,at INTEGER NOT NULL);`);
+      CREATE TABLE IF NOT EXISTS journey_outcomes (id TEXT PRIMARY KEY,world_id TEXT NOT NULL,kind TEXT NOT NULL,at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS journey_models (world_id TEXT PRIMARY KEY,text_model TEXT,image_model TEXT);`);
     for(const row of deps.graph.db.prepare("SELECT * FROM journey_runs").all() as Array<{id:string;hold_id:string;record:string}>){
       const run=JSON.parse(row.record) as JourneyRun;if(run.state!=="running")continue;
       run.state="interrupted";run.finishedAt=Date.now();
@@ -104,8 +163,27 @@ export class JourneyStore {
       properties:{settings:{...current.properties.settings,journey:{...j,updatedAt:Date.now()}}},label:`Work path: ${j.stage}`});
     this.deps.graph.goals.touch(j.worldId);
   }
-  private model(image=false):ModelEntry {
+  /** This project's own model choice; null follows the app-wide setting. */
+  projectModels(worldId:string):{text:string|null;image:string|null} {
+    const row=this.deps.graph.db.prepare("SELECT text_model,image_model FROM journey_models WHERE world_id=?").get(worldId) as {text_model:string|null;image_model:string|null}|undefined;
+    return {text:row?.text_model??null,image:row?.image_model??null};
+  }
+  setProjectModels(worldId:string,text:string|null,image:string|null) {
+    const world=this.deps.graph.getWorld(worldId);if(!world||world.kind!=="work")throw new Error("Open your own project to choose its models.");
+    if(this.active.has(worldId))throw new Error("Wait for the current step to finish before changing models.");
+    const callable=this.deps.catalog?.()??this.deps.models();
+    if(text!==null&&!callable.some(m=>m.id===text&&m.output!=="image"))throw new Error("That writing model is not available. Check your OpenRouter connection.");
+    if(image!==null&&!callable.some(m=>m.id===image&&m.output==="image"))throw new Error("That picture model is not available. Check your OpenRouter connection.");
+    this.deps.graph.db.prepare("INSERT INTO journey_models(world_id,text_model,image_model) VALUES(?,?,?) ON CONFLICT(world_id) DO UPDATE SET text_model=excluded.text_model,image_model=excluded.image_model").run(worldId,text,image);
+  }
+  /** The model a project's next step of this kind will use, or null when none can run. */
+  currentModel(worldId:string,image:boolean):ModelEntry|null {try{return this.model(image,worldId);}catch{return null;}}
+  private model(image=false,worldId?:string):ModelEntry {
     if(!this.deps.key())throw new Error("Connect OpenRouter in Settings first.");
+    const fresh=(m:ModelEntry)=>!!m.price.verifiedOn&&Date.now()-Date.parse(m.price.verifiedOn)<=7*86400_000;
+    const own=worldId?this.projectModels(worldId)[image?"image":"text"]:null;
+    const chosen=own?(this.deps.catalog?.()??this.deps.models()).find(m=>m.id===own&&m.provider==="openrouter"):undefined;
+    if(chosen&&fresh(chosen))return chosen;
     const available=this.deps.models().filter(m=>m.provider==="openrouter" && (image ? m.output==="image" : m.output!=="image"));
     const m=available[0];if(!m || !m.price.verifiedOn || Date.now()-Date.parse(m.price.verifiedOn)>7*86400_000)throw new Error(image ? "Check OpenRouter to enable a priced image model." : "Check your OpenRouter connection first.");
     return m;
@@ -134,8 +212,21 @@ export class JourneyStore {
       coverage:selected.coverage.resources.find(c=>c.sourceId===r.sourceId),
       passages:selected.passages.filter(p=>p.sourceId===r.sourceId).map(p=>({passageId:p.id,sourceId:p.sourceId,sourceVersionId:p.sourceVersionId,page:p.page,text:p.text}))}));
   }
-  private validateEvidence(items:Array<{sourceIds:string[];citations?:import("@xeniur/core").PassageCitation[]}>,offered:EvidencePassage[]){
-    for(const item of items)this.evidenceIndex.validate(item.citations??[],offered,item.sourceIds);
+  /**
+   * A quote is shown only if it is word for word in the source. One the model paraphrased is left out
+   * rather than costing the person the whole paid answer; the count is recorded on the run. If the
+   * answer quoted and none of its quotes hold, it is refused.
+   */
+  private validateEvidence(items:Array<{sourceIds:string[];citations?:import("@xeniur/core").PassageCitation[]}>,offered:EvidencePassage[]):number{
+    let removed=0,kept=0,quoted=0;
+    for(const item of items){
+      if(!item.citations?.length)continue;
+      quoted+=item.citations.length;
+      const result=this.evidenceIndex.verified(item.citations,offered,item.sourceIds);
+      item.citations=result.kept;removed+=result.removed;kept+=result.kept.length;
+    }
+    if(quoted&&!kept)throw new Error("A quoted passage did not match the supplied source, version and page. Create a corrected draft.");
+    return removed;
   }
   private input(j:Journey,c:JourneyCommand):string {
     const goal=this.deps.graph.goals.get(j.goalId);
@@ -143,7 +234,7 @@ export class JourneyStore {
     if(c.action==="design_path")return JSON.stringify({goal:goal?.outcome,request:c.text,brief:j.brief??null,materials:material,previousProposal:j.flow?.definition});
     if(c.action==="scene_image") {const r=j.flow!.results.find(r=>r.stepId===j.flow!.definition!.steps[j.flow!.index]!.id)!;const scene=r.output.storyboard!.scenes.find(s=>s.id===c.id)!;return JSON.stringify({brief:j.brief,scene,style:ILLUSTRATION_STYLE});}
     if(c.action==="run_step")return pathInput(j,goal?.outcome??"",material,c.text);
-    if(c.action==="search")return `Search the web once for recent primary resources for this goal: ${j.brief?.topic??goal?.outcome}. Prefer papers, official data and open full texts. Mention each resource separately with a title and citation. Never suggest a download without a returned web citation. No invented links.`;
+    if(c.action==="search")return `Search the web once for recent primary resources for this goal: ${j.brief?.topic??goal?.outcome}. Prefer papers, official data and open full texts. Mention each resource separately with a title and citation, one short line each, at most six. Never suggest a download without a returned web citation. No invented links.`;
     const base=JSON.stringify({goal:goal?.outcome,result:KIND_PURPOSE[j.kind],brief:j.brief??null,materials:material,
       userEdit:c.text||null,scope:"Only the supplied captured text; do not imply a comprehensive literature search."});
     if(c.action==="summarize"||c.action==="feedback")return `${base}\n${c.action==="feedback"?`Revise this report after the person's edit: ${JSON.stringify(j.report)}. Keep it one short page.`:"Produce a short one-page report, at most 5 findings and 3 gaps. Use strong contrast palettes with a light paper color, connected to this topic."}\nRequired JSON: ${REPORT_SHAPE}`;
@@ -153,17 +244,17 @@ export class JourneyStore {
   quote(command:JourneyCommand):JourneyQuote {
     const j=this.read(command.worldId,command.versionId);this.assertMaterial(j);this.assertAction(j,command);
     const image=this.imageAction(j,command);
-    const m=this.model(image);
+    const m=this.model(image,command.worldId);
     const input=this.input(j,command);
     // One byte per token is conservative for supplied UTF-8 text. Search includes a
     // second model pass, bounded returned snippets and framing, plus the Exa charge.
     const searching=command.action==="search";
     const inputBound=Buffer.byteLength(input+(command.action==="design_path"?PATH_PLANNER_PROMPT:EDITOR_SYSTEM))*(searching?2:1)+(searching?120000:4000);
-    const outputBound=(OUT_TOKENS[command.action]??2000)*(searching?2:1);
+    const outputBound=outputTokens(command.action,m)*(searching?2:1);
     if(!image&&!searching&&inputBound+outputBound>m.contextWindow)throw new Error("This scope exceeds the selected model’s context. Choose a larger-context model or narrow this work path.");
     const cost=image?m.imagePriceUsd!:(inputBound/1_000_000*m.price.inputPerMTok+outputBound/1_000_000*m.price.outputPerMTok+(searching?.007:0));
     return {action:command.action,maximumUsd:Math.ceil(cost*10000)/10000,model:m.label,coverage:this.selection(j,command.text).coverage,
-      sends:command.action==="search"?"Your project goal":image?"Illustration brief and XENIUR style":`${j.resources.length} sources: selected page passages and your instructions`};
+      sends:command.action==="search"?"Your project goal":image?"Illustration brief and XENIUR style":`${j.resources.length} ${j.resources.length===1?"source":"sources"}: selected page passages and your instructions`};
   }
   private imageAction(j:Journey,c:JourneyCommand) {return c.action==="illustrate"||c.action==="figure"||c.action==="scene_image"||(c.action==="run_step"&&j.flow?.definition?.steps[j.flow.index]?.operation==="image");}
   private installPath(j:Journey) {
@@ -345,7 +436,7 @@ export class JourneyStore {
         const quote=this.quote(command);
         if(command.maximumUsd===undefined||quote.maximumUsd>command.maximumUsd+1e-9)throw new Error("Review this step's current cost before running it.");
         const image=this.imageAction(j,command);
-        const m=this.model(image);model=m.model;
+        const m=this.model(image,command.worldId);model=m.model;
         const hold=this.deps.spend.reserve({estimateUsd:quote.maximumUsd,provider:"openrouter",model:m.model,taskId:null,attempt:1});
         let accounted=false;let dispatched=false;
         const run:JourneyRun={id:newId(),action:command.action,state:"running",startedAt:Date.now(),finishedAt:null,maximumUsd:quote.maximumUsd,actualUsd:null,usageKnown:false};
@@ -378,9 +469,9 @@ export class JourneyStore {
             else if(idea)j.figureIds.push({id:newId(),blobHash:hash,caption:idea.caption,origin:"generated",sourceId:null,page:null,objectId:obj.object.id,sourceIds:idea.sourceIds});
             else j.illustration=hash;
           } else {
-            const client=new OpenRouterClient({apiKey:this.deps.key()!,model:m.model,fetch:this.deps.fetch,inputPerMTok:m.price.inputPerMTok,outputPerMTok:m.price.outputPerMTok,signal:controller.signal});
+            const client=new OpenRouterClient({apiKey:this.deps.key()!,model:m.model,fetch:this.deps.fetch,inputPerMTok:m.price.inputPerMTok,outputPerMTok:m.price.outputPerMTok,signal:controller.signal,reasoning:m.reasoning});
             dispatched=true;
-            const result=await client.chat({system:command.action==="design_path"?PATH_PLANNER_PROMPT:EDITOR_SYSTEM,user:this.input(j,command),maxOutputTokens:OUT_TOKENS[command.action]!},command.action==="search");
+            const result=await client.chat({system:command.action==="design_path"?PATH_PLANNER_PROMPT:EDITOR_SYSTEM,user:this.input(j,command),maxOutputTokens:outputTokens(command.action,m)},command.action==="search");
             this.deps.spend.settle(hold.id,{usd:result.cost??quote.maximumUsd,inputTokens:result.inputTokens,outputTokens:result.outputTokens,outcome:"ok"});accounted=true;run.actualUsd=result.cost??null;run.usageKnown=result.cost!==undefined;controller.signal.throwIfAborted();
             this.read(worldId,versionId);this.assertMaterial(j);this.assertAction(j,command);
             if(command.action==="search") {
@@ -388,22 +479,23 @@ export class JourneyStore {
               if(!citations.length)throw new Error("No cited resources were returned. Try a more specific topic or add your own sources.");
               for(const citation of citations)if(!j.suggestions.some(s=>s.url===citation.url))j.suggestions.push({id:newId(),title:citation.title,url:citation.url,excerpt:citation.content.slice(0,600),state:"pending",decisionId:null});
             } else {
-              const value=JSON.parse(result.text.replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"").trim());
+              let value:unknown;try{value=JSON.parse(result.text.replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"").trim());}
+              catch{throw new Error("The AI's answer was not in a form XENIUR can read, so nothing from it was kept. Run the step again, or choose a better-rated model for this project.");}
               const allowed=new Set(j.resources.map(r=>r.sourceId));
               if(command.action==="design_path") {j.flow!.definition=parsePath(value);j.flow!.approved=false;j.flow!.request=command.text!;j.stage="path";}
               else if(command.action==="run_step") {const step=j.flow!.definition!.steps[j.flow!.index]!;const output=validateStep(value,step.operation,allowed);this.pathResult(j,output,model);j.stage="steps";}
               else if(command.action==="summarize"||command.action==="feedback") {
-                const report=ReportSchema.parse(value);this.checkCitations(report.findings.flatMap(f=>f.sourceIds),allowed);this.validateEvidence(report.findings,offered.passages);
+                const report=ReportSchema.parse(tidyReport(value));this.checkCitations(report.findings.flatMap(f=>f.sourceIds),allowed);run.removedQuotes=this.validateEvidence(report.findings,offered.passages)||undefined;
                 if(command.action==="feedback"||j.report) {if(command.action==="feedback")j.feedbackCount++;for(const d of j.decisions)this.deps.graph.decisions.flagForReview(d.objectId);j.decisions=[];j.outline=null;j.draft=null;j.reviewed=false;j.choices={palette:null,font:null,layout:null};}
                 this.completeStage(j,"materials",j.resources.map(r=>r.objectId));
                 for(const r of j.evidenceReviews??[])if(r.objectId)this.deps.sense.sort(r.objectId,"ignore");j.evidenceReviews=[];j.report=report;j.reportObjectId=this.artifact(j,report.title,report,"document",model);j.illustration=null;j.stage="summary";
               } else if(command.action==="outline"||command.action==="edit_outline") {
-                j.outline=OutlineSchema.parse(value);
+                j.outline=OutlineSchema.parse(tidyOutline(value));
                 for(const d of j.decisions.filter(d=>d.stage!=="summary"))this.deps.graph.decisions.flagForReview(d.objectId);
                 j.decisions=j.decisions.filter(d=>d.stage==="summary");j.draft=null;j.reviewed=false;j.choices={palette:null,font:null,layout:null};
                 j.outlineObjectId=this.artifact(j,j.outline.title,j.outline,"document",model);j.stage="outline";
               } else {
-                const draft=DraftSchema.parse(value);this.validateEvidence([...draft.sections,...draft.tables],offered.passages);
+                const draft=DraftSchema.parse(tidyDraft(value));run.removedQuotes=this.validateEvidence([...draft.sections,...draft.tables],offered.passages)||undefined;
                 this.checkCitations([...draft.sections.flatMap(s=>s.sourceIds),...draft.tables.flatMap(t=>t.sourceIds),...draft.figureIdeas.flatMap(f=>f.sourceIds)],allowed);
                 if(draft.tables.some(t=>t.rows.some(r=>r.length!==t.columns.length)))throw new Error("The draft returned an incomplete table. Try again.");
                 if(draft.sourceFigureIdeas.some(f=>!j.resources.some(r=>r.sourceId===f.sourceId&&r.pages>=f.page)))throw new Error("A suggested figure did not identify an available PDF page.");

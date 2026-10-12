@@ -4,7 +4,7 @@ A desktop workspace for turning sources and ideas into work you can use—and ex
 
 Start a project, bring your material, and follow a visual path. Keep the evidence, choices, and reasons alongside what you make, so you can revisit them when something changes.
 
-![XENIUR](docs/screenshots/home-simplified.png)
+![XENIUR home, continuing a real project](docs/screenshots/live/home.png)
 
 ## What it does
 
@@ -15,6 +15,19 @@ Start a project, bring your material, and follow a visual path. Keep the evidenc
 - Evidence inspection and short thinking checks at useful stopping points.
 
 Your projects stay on your computer. AI steps use **one OpenRouter key** for text and images, and show an estimate before running. You can also work with local files without AI.
+
+## A real project, start to finish
+
+Every picture below is from one real project run with an OpenRouter key: *"How much do green roofs cool cities in summer?"*. Nothing is staged. The whole project, from search to the finished document, cost under **$0.05** in AI calls.
+
+| | |
+|---|---|
+| ![Sources found by a web search, each with a link and a reason](docs/screenshots/live/sources.png) | ![The cost of a step, shown before it runs](docs/screenshots/live/cost.png) |
+| **Find sources.** One search returns real papers. You keep the ones you trust; nothing is downloaded until you choose. | **See the price first.** Every AI step shows its maximum cost, what is sent, and to whom, before it runs. |
+| ![An overview where every finding links to its source passage](docs/screenshots/live/overview.png) | ![A full draft, styled with your choices, ready for your review](docs/screenshots/live/draft.png) |
+| **Understand.** A one-page overview where every finding links to the exact passage it rests on. | **Make and review.** A styled draft you edit and check yourself, then save as PDF, HTML and editable LaTeX. |
+| ![Ready-made paths to start a project](docs/screenshots/live/workflows.png) | ![Projects on the home screen](docs/screenshots/live/projects.png) |
+| **Start from a path.** Research, reports, figures, briefs, and more; or describe your own. | **Pick up where you left off.** Projects keep their sources, choices and reasons. |
 
 ## Run it
 

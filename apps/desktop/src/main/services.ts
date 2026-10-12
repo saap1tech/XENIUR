@@ -28,9 +28,9 @@ import {
 import type { ImpactReport, ResolvedPassage } from "@xeniur/core";
 import {
   ModelRegistry, RESTRICTED_CONSTRAINT, STRENGTH_CONSTRAINT, DEFAULT_POLICY, policyFrom, routeModel,
-  routerTextModels, routerImageModel, recommendRouterModels, ModelsConfigSchema, type KeyStore, type ModelEntry, type ModelProvider, type RoutedIntent,
+  routerTextModels, routerImageModel, routerCeiling, recommendRouterModels, rateModel, byFit, ModelsConfigSchema, type KeyStore, type ModelEntry, type ModelProvider, type RoutedIntent,
 } from "@xeniur/models";
-import type { ModelProviderView } from "@xeniur/core";
+import type { ModelChoiceView, ModelProviderView, ProjectModelsView } from "@xeniur/core";
 import { appPaths, BINARIES } from "./paths.js";
 import { SafeStorageKeyStore, SafeStorageRouteTokens, SafeStorageSigningKeyStore } from "./keys.js";
 import { TabManager } from "./web/tabs.js";
@@ -42,6 +42,8 @@ import { PreviewRuntime } from "./preview.js";
 export interface Services {
   graph: ObjectGraph;
   journey: JourneyStore;
+  /** Which models one project uses, each with its standing (Recommended, Strong, Basic, Experimental). */
+  projectModels: { view(worldId: string): ProjectModelsView; set(worldId: string, text: string | null, image: string | null): Promise<ProjectModelsView> };
   /** Your models: registry, keychain-backed keys, verified selection and spend limits. */
   models: {
     registry: ModelRegistry;
@@ -50,7 +52,7 @@ export interface Services {
     add(provider: ModelProvider, key: string): ModelProviderView[];
     remove(provider: ModelProvider): ModelProviderView[];
     verify(provider: ModelProvider): Promise<{ ok: boolean; models: string[]; balanceCredits?: number; reason: string | null }>;
-    select(modelId: string, selected: boolean): ModelProviderView[];
+    select(modelId: string, selected: boolean): Promise<ModelProviderView[]>;
     budget(): { perActionUsdMax: number; monthlyUsdMax: number; monthlySpentUsd: number };
     setBudget(perActionUsdMax: number, monthlyUsdMax: number): { perActionUsdMax: number; monthlyUsdMax: number; monthlySpentUsd: number };
     firstRun(): boolean;
@@ -157,7 +159,7 @@ function makeResolver(graph: ObjectGraph, registry: ModelRegistry, keys: KeyStor
   const clientFor = (m: ModelEntry): LlmClient | null => {
     if (m.provider === "openrouter" && m.output !== "image") return new OpenRouterClient({
       apiKey: keys.read("openrouter") ?? undefined, model: m.model,
-      inputPerMTok: m.price.inputPerMTok, outputPerMTok: m.price.outputPerMTok,
+      inputPerMTok: m.price.inputPerMTok, outputPerMTok: m.price.outputPerMTok, reasoning: m.reasoning,
     });
     return null;
   };
@@ -253,10 +255,22 @@ export function createServices(window: BrowserWindow): Services {
   const accessConfirmed = (m: ModelEntry) => Boolean(modelRegistry.provider(m.provider)?.local || keyStore.has(m.provider)) &&
     (choices.verified[m.provider] ?? []).some((id) =>
     id === m.model || id === `models/${m.model}` || (m.provider === "ollama" && id.startsWith(`${m.model}:`)));
-  const modelUsable = (m: ModelEntry) => choices.selected.includes(m.id) &&
-    accessConfirmed(m) &&
+  /** Reads one text model's providers (a free call) and widens its price ceiling to two of them. */
+  const widenCeiling = async (key: string | undefined, id: string): Promise<boolean> => {
+    const m = modelRegistry.model(id);
+    if (!m || m.provider !== "openrouter" || m.output === "image" || !/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._:-]+$/.test(m.model)) return false;
+    try {
+      const widened = routerCeiling(m, await routerRequest(key, `/models/${m.model}/endpoints`));
+      if (widened === m) return false;
+      modelRegistry.config.models = modelRegistry.config.models.map((entry) => entry.id === id ? widened : entry);
+      return true;
+    } catch { return false; /* The listed price still bounds the call; only the fallback is lost. */ }
+  };
+  /** Callable here: verified for this key, freshly priced and wired, whether or not chosen app-wide. */
+  const modelCallable = (m: ModelEntry) => accessConfirmed(m) &&
     WIRED_PROVIDERS.has(m.provider) && m.modelVerified && freshPrice(m) &&
     (m.output === "image" ? m.imagePriceUsd !== undefined && !!m.imageProvider : modelRegistry.callable((p) => p === m.provider && keyStore.has(p)).some((candidate) => candidate.id === m.id));
+  const modelUsable = (m: ModelEntry) => choices.selected.includes(m.id) && modelCallable(m);
 
   const providerView = (): ModelProviderView[] => modelRegistry.providers().map((p) => {
     const keyPresent = p.local || keyStore.has(p.id);
@@ -270,6 +284,7 @@ export function createServices(window: BrowserWindow): Services {
         inputPerMTok: m.price.inputPerMTok, outputPerMTok: m.price.outputPerMTok,
         callable: modelUsable(m), selected: choices.selected.includes(m.id),
         accessible: accessConfirmed(m), output: m.output, imagePriceUsd: m.imagePriceUsd,
+        fit: rateModel(m).fit, fitNote: rateModel(m).note,
       })),
     };
   });
@@ -303,6 +318,7 @@ export function createServices(window: BrowserWindow): Services {
         choices.verified.openrouter = modelRegistry.models().map(m=>m.model);
         choices.selected = choices.selected.filter(id=>modelRegistry.models().some(m=>m.id === id));
         if (!choices.selected.some(id=>modelRegistry.model(id)?.output !== "image")) choices.selected.push(...recommendRouterModels(modelRegistry.models()).filter(id=>!choices.selected.includes(id)));
+        for (const id of choices.selected) await widenCeiling(key, id);
         writeFileSync(catalogFile, JSON.stringify(modelRegistry.config));
         saveChoices();
         return { ok: true, models: choices.verified.openrouter, reason: images.length ? null : "Text is ready. No image endpoint with a fixed, verified price was available." };
@@ -311,13 +327,14 @@ export function createServices(window: BrowserWindow): Services {
         return { ok: false, models: [], reason: error instanceof Error ? error.message : "Could not check OpenRouter." };
       }
     },
-    select: (modelId, selected) => {
+    select: async (modelId, selected) => {
       const m = modelRegistry.model(modelId);
       if (!m || !WIRED_PROVIDERS.has(m.provider) || !m.modelVerified || (!m.price.verifiedOn && !m.tags.includes("local"))) throw new Error("This model cannot run here yet.");
       if (selected && !accessConfirmed(m)) throw new Error("Verify access to this model first.");
       choices.selected = choices.selected.filter((id) => id !== modelId);
       if (selected) choices.selected.push(modelId);
       saveChoices();
+      if (selected && await widenCeiling(keyStore.read("openrouter") ?? undefined, modelId)) writeFileSync(catalogFile, JSON.stringify(modelRegistry.config));
       return providerView();
     },
     budget: () => ({ perActionUsdMax: spend.limits().perActionUsdMax,
@@ -553,11 +570,36 @@ export function createServices(window: BrowserWindow): Services {
 
   const journey = new JourneyStore({ graph, sense, spend, projectRoot:paths.projectRoot,
     models: () => modelRegistry.models().filter(modelUsable), key: () => keyStore.read("openrouter"),
+    catalog: () => modelRegistry.models().filter(modelCallable),
     download: (url) => downloadResource(url, webRisk),
     reference: () => `data:image/png;base64,${readFileSync(join(paths.projectRoot,"brand/illustrations/research-path.png")).toString("base64")}`,
   });
+  /** A model as a person choosing it sees it: its rating, why, and what it costs. */
+  const choiceView = (m: ModelEntry): ModelChoiceView => {
+    const rating = rateModel(m);
+    return { id: m.id, label: m.label, model: m.model, output: m.output, fit: rating.fit, note: rating.note,
+      inputPerMTok: m.price.inputPerMTok, outputPerMTok: m.price.outputPerMTok,
+      ...(m.imagePriceUsd !== undefined ? { imagePriceUsd: m.imagePriceUsd } : {}) };
+  };
+  // A typical step reads far more than it writes, so text models are compared at ten parts input to two output.
+  const typicalPrice = (c: ModelChoiceView) => c.output === "image" ? c.imagePriceUsd ?? 0 : (c.inputPerMTok ?? 0) * 10 + (c.outputPerMTok ?? 0) * 2;
+  const projectModels: Services["projectModels"] = {
+    view(worldId) {
+      const all = modelRegistry.models().filter(modelCallable).map(choiceView)
+        .sort((a, b) => byFit({ fit: a.fit, price: typicalPrice(a) }, { fit: b.fit, price: typicalPrice(b) }));
+      return { text: all.filter((c) => c.output !== "image"), image: all.filter((c) => c.output === "image"),
+        chosen: journey.projectModels(worldId),
+        current: { text: journey.currentModel(worldId, false)?.id ?? null, image: journey.currentModel(worldId, true)?.id ?? null } };
+    },
+    async set(worldId, text, image) {
+      // The chosen writing model gets the same two-provider price ceiling as an app-wide choice.
+      if (text && await widenCeiling(keyStore.read("openrouter") ?? undefined, text)) writeFileSync(catalogFile, JSON.stringify(modelRegistry.config));
+      journey.setProjectModels(worldId, text, image);
+      return projectModels.view(worldId);
+    },
+  };
   return {
-    graph, journey, models, queue, broker, sessions, metrics, compute, workflows, webRisk, arena,
+    graph, journey, projectModels, models, queue, broker, sessions, metrics, compute, workflows, webRisk, arena,
     routes: { adapter: httpsJson, endpoints: routeEndpoints, tokens: routeTokens }, mail: new DisabledTransport(), router, brain, gatedBrain, spend, config, env, browser, preview,
     rebuild, validation, readiness, rhythm, sense,
     detailOf, historyOf, thinkingMap,

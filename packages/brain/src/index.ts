@@ -23,5 +23,5 @@ export { GATED_SYSTEM_PROMPT } from "./prompt.js";
 
 export { resolveAsk, intentWord } from "./resolve.js";
 export type { ResolvedAsk, AskSelection } from "./resolve.js";
-export { OpenRouterClient, routerRequest, generateRouterImage } from "./openrouter.js";
+export { OpenRouterClient, RouterHttpError, forgetRefusedProviders, routerRequest, generateRouterImage } from "./openrouter.js";
 export type { RouterCitation, RouterResult } from "./openrouter.js";

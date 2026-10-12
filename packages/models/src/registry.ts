@@ -45,6 +45,8 @@ export const ModelEntrySchema = z.object({
   imagePriceUsd: z.number().nonnegative().optional(),
   imageProvider: z.string().optional(),
   imageParameters: z.record(z.unknown()).optional(),
+  /** The model thinks before it answers; its reasoning shares the output budget and must be kept short. */
+  reasoning: z.boolean().optional(),
 });
 export type ModelEntry = z.infer<typeof ModelEntrySchema>;
 
