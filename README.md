@@ -1,6 +1,6 @@
 # XENIUR
 
-A desktop workspace for turning sources and ideas into work you can use—and explain.
+A desktop workspace for turning sources and ideas into work you can use and explain.
 
 Start a project, bring your material, and follow a visual path. Keep the evidence, choices, and reasons alongside what you make, so you can revisit them when something changes.
 
